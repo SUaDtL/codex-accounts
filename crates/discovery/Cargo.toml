@@ -1,0 +1,23 @@
+[package]
+name = "codex-accounts-discovery"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+codex-accounts-core = { path = "../core" }
+codex-accounts-platform = { path = "../platform" }
+serde_json = "=1.0.145"
+toml = { version = "=0.8.23", default-features = false, features = ["parse"] }
+
+[target.'cfg(windows)'.dependencies]
+windows = { version = "=0.62.2", features = ["ApplicationModel", "Management_Deployment", "Storage", "Data_Xml_Dom", "Security_Cryptography", "Security_Cryptography_Core"] }
+windows-sys = { version = "=0.61.2", features = ["Win32_Foundation", "Win32_Security", "Win32_Security_Authorization", "Win32_Security_Cryptography", "Win32_Security_WinTrust", "Win32_Storage_FileSystem", "Win32_System_Com", "Win32_System_Threading", "Win32_System_WinRT"] }
+
+[lints.rust]
+unsafe_code = "deny"
+unsafe_op_in_unsafe_fn = "deny"
+
+[lints.clippy]
+all = "deny"

@@ -203,3 +203,5 @@ mod tests {
         assert_eq!(status.desktop_identity(), DesktopIdentity::Unknown);
     }
 }
+
+pub mod compatibility;
