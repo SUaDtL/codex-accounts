@@ -128,6 +128,8 @@ impl ObservationStatus {
     }
 }
 
+pub mod compatibility;
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -203,5 +205,3 @@ mod tests {
         assert_eq!(status.desktop_identity(), DesktopIdentity::Unknown);
     }
 }
-
-pub mod compatibility;

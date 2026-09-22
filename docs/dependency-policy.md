@@ -1,34 +1,53 @@
 # Dependency and build boundary
 
-Rust is pinned to 1.90.0, an existing upstream release verified against the Rust
-project's release announcement. This is a deliberate initial toolchain pin, not a
-claim that it is the latest version. The initial workspace uses only std and has
-no build.rs, third-party crates, npm packages or product network clients.
+Rust remains pinned to 1.90.0. Core, platform classification and runtime framing
+remain dependency-free and forbid unsafe code. CA-02 adds one discovery-only crate:
+`serde_json = 1.0.145`, `toml = 0.8.23`, `windows = 0.62.2` and
+`windows-sys = 0.61.2`, with exact direct pins and a Cargo-generated lockfile.
+No Tauri/npm dependency or product network client is added.
 
-Cargo.lock lists only the three local workspace packages. Its content was assembled
-for this dependency-free bootstrap; Cargo was not available in the creation
-runtime, so lockfile/compiler acceptance remains NOT RUN until CI or owner testing.
+## CA-02 review
 
-Python developer tools use the standard library, require 3.11+ for tomllib, and were
-executed under Python 3.13.5. They are not a second product runtime.
+`ca-02-dependencies.json` records all 32 resolved external packages, registry
+checksums, licenses, minimum Rust versions, upstream repositories and the five
+build-script hashes. Package/file checksums were compared with the acquired vendor
+sources. The selected graph supports the pinned compiler. This is a scoped review,
+not a claim that every dependency was comprehensively audited.
 
-CI pins actions/checkout v4.2.2 to
-`11bd71901bbe5b1630ceea73d27597364c9af683`, verified through its upstream tag ref.
-That verifies tag identity only, not a complete action supply-chain audit. Hosted
-runner images remain external dependencies and are not reproducible OS images.
-Toolchain acquisition precedes offline workspace checks. Workflow permissions are
-contents:read; no deploy, publish, release, credential or secret access is needed.
+The five build scripts were read in full. serde/serde_core generate private modules
+inside Cargo OUT_DIR and query the compiler. quote queries the compiler version.
+proc-macro2 compiles static feature probes using Cargo's compiler/wrappers and
+cleans its own OUT_DIR/probe. serde_json emits target-width configuration. None of
+these inspected scripts downloads executable code or reads application accounts.
+The build environment and configured compiler/wrappers remain trusted inputs.
 
-Q4 must add exact reviewed Rust/Tauri/npm pins and generated lockfiles. Native
-libraries, transitive dependencies, licensing and advisories must then be reviewed.
-S-015/S-016 and T-34 remain open: no native package, SBOM, two-build reproducibility,
-code signing, offline toolchain cache or complete dependency audit is claimed.
+At RustSec advisory database commit
+`f7dc4b2860b29978f400fda0aab31cc4dbd21134`, package-name matching found historical
+RUSTSEC-2024-0402 for hashbrown and RUSTSEC-2022-0008 for windows. Selected versions
+0.17.1 and 0.62.2 respectively are in their patched ranges. No other matching
+package advisory was found at that snapshot. This does not promise future freedom
+from vulnerabilities; review the database again before distribution.
 
-Sources used for this implementation decision (separate from the supplied spec):
-- https://blog.rust-lang.org/2025/09/18/Rust-1.90.0/
-- https://api.github.com/repos/actions/checkout/git/ref/tags/v4.2.2
+Run `python tools/check_dependencies.py` before dependency acquisition. Changes to
+any resolved package/version/checksum require another scoped review. Acquisition
+uses `cargo fetch --locked`; subsequent compilation/tests/Clippy use
+`--locked --offline`. The temporary source-preparation workflow is removed before
+handoff. Its prior runs prepared artifacts, not passing product validation.
 
-The inventory's `cli_auth_credentials_store` classification key was verified against
-the official configuration reference on 2026-09-22. This is a declared top-level
-setting only, never evidence of effective configuration precedence:
-https://developers.openai.com/codex/config-reference/
+## Native boundary
+
+Only `crates/discovery/src/native.rs` permits application-authored unsafe code.
+Its neighboring code denies unsafe and the existing safe crates retain forbid.
+See `ca-02-native-boundary.md`. There is no blanket safety-lint exception.
+No owner project license is selected by recording dependency licenses.
+
+CI retains the existing checkout commit pin and read-only repository permissions.
+Hosted runner images and compiler downloads remain external dependencies. A clean
+source build is not T-34 reproducibility or Desktop qualification. Python developer
+tools remain standard-library-only and require Python 3.11 or newer.
+
+Sources: acquired Cargo registry source/checksum manifests; the recorded RustSec
+snapshot; https://blog.rust-lang.org/2025/09/18/Rust-1.90.0/ ;
+https://github.com/microsoft/windows-rs ; https://github.com/RustSec/advisory-db .
+The current official configuration reference is a key-name reference only, not an
+installed-build precedence rule: https://developers.openai.com/codex/config-reference/ .
