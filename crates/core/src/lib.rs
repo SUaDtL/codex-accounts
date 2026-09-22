@@ -176,7 +176,10 @@ mod tests {
     fn offline_is_not_rejected() {
         let mut status = ObservationStatus::default();
         status.observe_credentials(CredentialAcceptance::ObservationUnavailable);
-        assert_ne!(status.credential_acceptance(), CredentialAcceptance::Rejected);
+        assert_ne!(
+            status.credential_acceptance(),
+            CredentialAcceptance::Rejected
+        );
     }
 
     #[test]
