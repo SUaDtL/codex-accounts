@@ -1,0 +1,14 @@
+# Dependency-free bootstrap lock; Cargo validation is not yet run.
+version = 4
+
+[[package]]
+name = "codex-accounts-core"
+version = "0.1.0"
+
+[[package]]
+name = "codex-accounts-platform"
+version = "0.1.0"
+
+[[package]]
+name = "codex-accounts-runtime"
+version = "0.1.0"
