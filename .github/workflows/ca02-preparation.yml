@@ -19,11 +19,16 @@ jobs:
           cargo generate-lockfile
           cargo fmt --all
           git diff --no-ext-diff -- crates > rustfmt.patch
+          cargo vendor --locked --versioned-dirs .ca02-vendor
+          git clone --depth 1 https://github.com/RustSec/advisory-db.git .ca02-advisories
+          git -C .ca02-advisories rev-parse HEAD > advisory-db-commit.txt
+          tar -czf dependency-review.tar.gz .ca02-vendor .ca02-advisories/crates advisory-db-commit.txt
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: ca02-source-preparation
           path: |
             Cargo.lock
             rustfmt.patch
+            dependency-review.tar.gz
           if-no-files-found: error
           retention-days: 1
