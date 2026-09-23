@@ -407,3 +407,98 @@ fn native_restart_at_each_durable_commit_boundary() {
         }
     }
 }
+
+#[test]
+fn native_preflight_reports_only_sanitized_security_conditions() {
+    let dir = Sandbox::new();
+    validate_path(&dir.0).expect("path syntax");
+    let security = Security::new().expect("current token and creation descriptor");
+    let mut paths: Vec<_> = dir.0.ancestors().skip(1).collect();
+    paths.reverse();
+    let mut held = vec![];
+    for (index, path) in paths.iter().enumerate() {
+        let f = open_file(
+            path,
+            FILE_READ_ATTRIBUTES | READ_CONTROL,
+            FILE_SHARE_READ,
+            OPEN_EXISTING,
+            None,
+        )
+        .unwrap_or_else(|e| panic!("ancestor-open {index}: {e:?}"));
+        check_object(&f, true).unwrap_or_else(|e| panic!("ancestor-shape {index}: {e:?}"));
+        if let Err(e) = security.check(&f, false) {
+            let mut owner = null_mut();
+            let mut acl = null_mut();
+            let mut descriptor = null_mut();
+            assert_eq!(
+                unsafe {
+                    GetSecurityInfo(
+                        f.as_raw_handle(),
+                        SE_FILE_OBJECT,
+                        OWNER_SECURITY_INFORMATION | DACL_SECURITY_INFORMATION,
+                        &mut owner,
+                        null_mut(),
+                        &mut acl,
+                        null_mut(),
+                        &mut descriptor,
+                    )
+                },
+                0
+            );
+            let _descriptor = Allocation(descriptor);
+            let classify = |s: &[u8]| {
+                if s == security.user {
+                    "current"
+                } else if s == security.system {
+                    "system"
+                } else if s == security.admins {
+                    "administrators"
+                } else {
+                    "other"
+                }
+            };
+            let owner = sid_copy(owner).unwrap();
+            let mut facts = vec![];
+            if !acl.is_null() && unsafe { IsValidAcl(acl) } != 0 {
+                for i in 0..unsafe { (*acl).AceCount }.min(32) {
+                    let mut ace = null_mut();
+                    assert_ne!(unsafe { GetAce(acl, u32::from(i), &mut ace) }, 0);
+                    assert!(!ace.is_null());
+                    let header = unsafe { &*ace.cast::<ACE_HEADER>() };
+                    if u32::from(header.AceType) == ACCESS_ALLOWED_ACE_TYPE
+                        && usize::from(header.AceSize) >= std::mem::size_of::<ACCESS_ALLOWED_ACE>()
+                    {
+                        let a = unsafe { &*ace.cast::<ACCESS_ALLOWED_ACE>() };
+                        let offset = std::mem::offset_of!(ACCESS_ALLOWED_ACE, SidStart);
+                        assert!(usize::from(header.AceSize) >= offset + 8);
+                        let ptr = (&a.SidStart as *const u32).cast::<u8>();
+                        let size = 8 + 4 * usize::from(unsafe { *ptr.add(1) });
+                        assert!(size <= 68 && offset + size <= usize::from(header.AceSize));
+                        let sid = sid_copy(ptr.cast_mut().cast()).unwrap();
+                        facts.push((classify(&sid), header.AceFlags, a.Mask));
+                    }
+                }
+            }
+            panic!("ancestor-security {index}: {e:?}; owner_class={}; access_classes_flags_masks={facts:?}", classify(&owner));
+        }
+        held.push(f);
+    }
+    let parent = held.last().unwrap();
+    if let Err(e) = cloud_check(parent) {
+        let mut buffer = [0u64; 256];
+        let mut size = 0;
+        let code = unsafe {
+            CfGetSyncRootInfoByHandle(
+                parent.as_raw_handle(),
+                CF_SYNC_ROOT_INFO_BASIC,
+                buffer.as_mut_ptr().cast(),
+                std::mem::size_of_val(&buffer) as u32,
+                &mut size,
+            )
+        };
+        panic!("cloud-query: {e:?}; hresult={code:08x}; required_bytes={size}");
+    }
+    drop(held);
+    let d = Disk::at(&dir.0, true).expect("root creation after passing ancestor preflight");
+    drop(d);
+}
