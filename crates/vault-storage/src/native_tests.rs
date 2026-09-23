@@ -3,27 +3,63 @@ use crate::{Capture, ProfileText};
 use codex_accounts_vault::{Identity, Resource, ResourceId, ResourceShape};
 use std::process::{Command, Stdio};
 
-struct Sandbox(PathBuf);
+// The hosted runner's LocalAppData may be administrator-owned. Create only a
+// fresh protected test parent; never change that existing directory's owner/ACL.
+pub(super) struct Sandbox(pub(super) PathBuf, PathBuf);
 impl Sandbox {
-    fn new() -> Self {
-        let parent = local_root()
-            .expect("known folder")
-            .parent()
-            .unwrap()
-            .to_owned();
+    pub(super) fn new() -> Self {
+        let base = local_root().expect("known folder");
         let suffix: String = random_id()
             .unwrap()
             .iter()
             .map(|b| format!("{b:02x}"))
             .collect();
-        Self(parent.join(format!("ca03c-test-{suffix}")))
+        let parent = base.parent().unwrap().join(format!("ca03c-test-{suffix}"));
+        validate_path(&parent).expect("synthetic parent path");
+        let security = Security::new().expect("synthetic parent security");
+        let mut ancestors: Vec<_> = parent.ancestors().skip(1).collect();
+        ancestors.reverse();
+        let mut held = Vec::new();
+        for path in ancestors {
+            let f = open_file(
+                path,
+                FILE_READ_ATTRIBUTES | READ_CONTROL,
+                FILE_SHARE_READ,
+                OPEN_EXISTING,
+                None,
+            )
+            .expect("synthetic parent ancestor handle");
+            check_object(&f, true).expect("synthetic parent ancestor shape");
+            security
+                .check(&f, false)
+                .expect("synthetic parent ancestor security");
+            held.push(f);
+        }
+        cloud_check(held.last().unwrap(), &held).expect("synthetic parent location");
+        assert_ne!(
+            unsafe { CreateDirectoryW(wide(&parent).unwrap().as_ptr(), &security.attrs()) },
+            0,
+            "create only a new protected synthetic parent"
+        );
+        let f = open_file(
+            &parent,
+            FILE_READ_ATTRIBUTES | READ_CONTROL,
+            FILE_SHARE_READ,
+            OPEN_EXISTING,
+            None,
+        )
+        .expect("synthetic parent handle");
+        security
+            .check(&f, true)
+            .expect("synthetic parent must be current-user owned and protected");
+        Self(parent.join("ca03c-test-vault"), parent)
     }
 }
 impl Drop for Sandbox {
     fn drop(&mut self) {
-        if self.0.exists() {
-            std::fs::remove_dir_all(&self.0).expect("remove only owned synthetic test directory");
-        }
+        // Every object here was created under this random, exclusively-created
+        // synthetic parent. This is test cleanup, never a product cleanup path.
+        std::fs::remove_dir_all(&self.1).expect("remove only owned synthetic test directory");
     }
 }
 fn cap() -> Capture {
@@ -184,11 +220,8 @@ fn native_network_sync_traversal_and_device_paths_rejected() {
     ] {
         assert_eq!(validate_path(Path::new(p)), Err(StorageError::UnsafePath));
     }
-    let dir = Sandbox::new();
-    let unicode = Sandbox(dir.0.with_file_name(format!(
-        "{}-Ω",
-        dir.0.file_name().unwrap().to_str().unwrap()
-    )));
+    let mut unicode = Sandbox::new();
+    unicode.0 = unicode.0.with_file_name("ca03c-test-vault-Ω");
     let d = Disk::at(&unicode.0, true).unwrap();
     drop(d);
 }

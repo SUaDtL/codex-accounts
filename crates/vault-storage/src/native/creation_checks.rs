@@ -1,19 +1,9 @@
 //! Native creation contract with fixed, non-sensitive failure stages.
 use super::super::*;
 
-struct Fixture(PathBuf);
-impl Drop for Fixture {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.0);
-    }
-}
-
 #[test]
 fn native_creation_checks_parent_volume_descriptor_and_lock_separately() {
-    let id = random_id().unwrap();
-    let suffix: String = id.iter().map(|b| format!("{b:02x}")).collect();
-    let base = local_root().expect("known-folder observation");
-    let fixture = Fixture(base.parent().unwrap().join(format!("ca03c-test-{suffix}")));
+    let fixture = super::super::tests::Sandbox::new();
     validate_path(&fixture.0).expect("path syntax");
     let security = Security::new().expect("creation security descriptor");
     let mut paths: Vec<_> = fixture.0.ancestors().skip(1).collect();
