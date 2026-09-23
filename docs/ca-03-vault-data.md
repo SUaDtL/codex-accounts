@@ -35,17 +35,18 @@ supplied every durable journal reference.
 
 ## Deliberate limits
 
-There is no filesystem, native key store, subprocess, network, UI, CLI, live capture,
+This data crate has no filesystem, native key store, subprocess, network, UI, CLI, live capture,
 login, refresh, encryption, storage migration or credential replacement. Structural
 rules are not qualified auth-mode/schema rules. All production gates and the empty
 compatibility catalog are untouched. No selected Desktop build is qualified.
 
 Secret-containing types have fixed redacted Debug output and no Clone/Serialize
 implementation. Errors are fixed categories without input or parser messages.
-Owned resource buffers are filled before release as best effort only. Compiler
-elimination, borrowed caller input, Serde scratch/key allocations, identities,
-allocator copies, swap and crash dumps are not covered by a secure-erasure claim.
-Vetted zeroization and secret lifetime review are required before production use.
+CA-03B replaces ordinary buffer filling with `zeroize` for owned resource buffers,
+identity strings and decoded object-key owners, including rejection paths. Borrowed
+caller input, Serde private scratch, copies from moves/allocators, registers, swap
+and crash dumps remain outside an erasure guarantee. See ca-03b-crypto.md for the
+scoped secret-lifetime review; zeroization is not whole-memory protection.
 
 In-memory parent checks are not durable atomicity or cross-process locking. A
 future storage/journal transaction must make encrypted generation persistence and
@@ -53,9 +54,10 @@ registry advancement recoverable together. Do not wire this slice to live accoun
 
 ## Dependencies and validation
 
-Direct pins reuse `serde = 1.0.229` and `serde_json = 1.0.145` from the existing
-reviewed lock. No registry package, version, checksum, native binding or build
-script is added. The 32-entry external dependency review remains unchanged.
+CA-03A reused `serde = 1.0.229` and `serde_json = 1.0.145` without adding an
+external package. CA-03B adds `zeroize = 1.8.2` to this data crate; its separate
+crypto crate and transitive graph are recorded in ca-03b-dependencies.json.
+The original 32 entries remain unchanged within the now 58-package review.
 Review and acquisition are separate blocking CI steps, including on Windows;
 formatting, tests and Clippy remain blocking. Rust is executed on hosted runners,
 not claimed as locally executed when the preparation host lacks the toolchain.
@@ -77,8 +79,9 @@ Compilation/model tests do not close full T-08/T-11/T-12/T-13/T-18/T-31 scenario
 
 ## Remaining CA-03
 
-CA-03B: reviewed AEAD/KDF, context-bound envelopes, OS-random root/nonce generation,
-vetted zeroization, current-user DPAPI and separate macOS Keychain policy.
+CA-03B is implemented for review in PR #5: context-bound envelopes, separated keys,
+OS randomness, zeroization and Windows x64 DPAPI. Native two-user/unavailable-store
+qualification remains pending; macOS Keychain is not implemented.
 CA-03C: protected local storage, encrypted registry/generations, durable commits,
 retention/deletion and native permission/key-access tests. Real resource-specific
 integration waits for Q0 identity/resource/policy evidence. No CA-04 advancement

@@ -1,6 +1,7 @@
 use crate::{validate_json_object, DataError, MAX_RESOURCES, MAX_RESOURCE_BYTES, MAX_SET_BYTES};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
+use zeroize::Zeroize;
 
 /// A schema-local slot, never a filename or a qualified resource identifier.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -21,7 +22,7 @@ pub enum ResourceShape {
 }
 
 /// Exact in-memory input with explicit absence. Deliberately not Clone/Serialize.
-/// The fill on drop is best effort, not a verified secure-erasure primitive.
+/// Owned bytes use vetted zeroization; caller/parser copies remain outside this owner.
 pub struct Resource {
     id: ResourceId,
     bytes: Option<Vec<u8>>,
@@ -34,7 +35,7 @@ impl fmt::Debug for Resource {
 impl Drop for Resource {
     fn drop(&mut self) {
         if let Some(bytes) = &mut self.bytes {
-            bytes.fill(0);
+            bytes.zeroize();
         }
     }
 }
@@ -44,7 +45,7 @@ impl Resource {
     }
     pub fn present(id: ResourceId, mut bytes: Vec<u8>) -> Result<Self, DataError> {
         if bytes.len() > MAX_RESOURCE_BYTES {
-            bytes.fill(0);
+            bytes.zeroize();
             return Err(DataError::InputLimit);
         }
         Ok(Self {

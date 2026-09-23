@@ -34,11 +34,39 @@ uses `cargo fetch --locked`; subsequent compilation/tests/Clippy use
 `--locked --offline`. The temporary source-preparation workflow is removed before
 handoff. Its prior runs prepared artifacts, not passing product validation.
 
+## CA-03B additive review
+
+`ca-03b-dependencies.json` supplements the unchanged 32-entry CA-02 record with
+26 checksum-bound packages. Direct pins are chacha20poly1305 0.10.1, hkdf 0.12.4,
+sha2 0.10.9, getrandom 0.3.4 and zeroize 1.8.2; windows-sys 0.61.2 is reused for
+the narrow root-key API. Exact manifests/features, workspace membership and full
+Cargo.lock bytes are checked before acquisition. No reduced-round cipher feature,
+custom random backend, Tauri/npm package or network client is added.
+
+The supplemental record binds source-preparation run 35861770176 to its source
+commit and artifact digest, and records all four new build scripts: compiler/target
+probes in generic-array/getrandom/libc and a WASI-only bundled archive in wit-bindgen.
+The libc script may query emcc on PATH; compiler wrappers, PATH and the controlled
+build host remain trusted inputs. Target-only WASI/UEFI entries are not product
+support. The bundled WASI archive is not claimed independently audited.
+
+At the recorded RustSec commit `6477ec04375b913e13f38d966dc49eba9d178cb8`, the
+source review matched all 58 locked names and inspected five advisory ranges;
+the selected versions are in their patched ranges. This is the recorded source
+review, not a claim that cargo-audit or a full independent security audit ran.
+The exact advisory IDs, archive digest and limitations remain in the JSON record.
+No new dependency or manifest change is introduced by the formatting/closeout fix.
+Recheck advisories before distribution and review any future lock/feature change.
+
 ## Native boundary
 
-Only `crates/discovery/src/native.rs` permits application-authored unsafe code.
-Its neighboring code denies unsafe and the existing safe crates retain forbid.
-See `ca-02-native-boundary.md`. There is no blanket safety-lint exception.
+Application-authored unsafe is limited to `crates/discovery/src/native.rs` and
+`crates/vault-crypto/src/dpapi.rs`. The crypto exception is Windows x64-only for
+CryptProtectData, CryptUnprotectData and LocalFree from the inherited windows-sys
+pin. Neighboring crypto modules forbid unsafe; the crypto crate otherwise denies
+it. Existing safe crates retain forbid. See ca-02-native-boundary.md and
+ca-03b-crypto.md for pointer lifetime, output ownership and zeroization review.
+There is no blanket safety-lint exception.
 No owner project license is selected by recording dependency licenses.
 
 CI retains the existing checkout commit pin and read-only repository permissions.
