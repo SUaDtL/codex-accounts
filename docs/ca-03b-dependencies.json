@@ -1,0 +1,98 @@
+{
+  "schema": "codex-accounts/dependency-review/v1",
+  "packet": "CA-03B",
+  "status": "source_reviewed",
+  "review_date": "2026-09-23",
+  "inherited_review": "docs/ca-02-dependencies.json",
+  "source_preparation": {
+    "commit": "4ac492b40144f35f0c8b5534b2e0bdbe56d97764",
+    "run": 35861770176,
+    "artifact_sha256": "028bed5edfda4b776c76072218ae90c31a21eb85c5300e937998229445debf3a",
+    "method": "Exact registry source archives checked against resolved checksums; selected manifests, licenses, native bindings and all four new build scripts inspected before build acquisition. No dependency source executed by preparation."
+  },
+  "lock_sha256": "fb272c5d9e2147b2c3fa4dd8741f276af1dd86772c007cca29da8d369c402767",
+  "manifest_sha256": {
+    "Cargo.toml": "573dadc5c53203ca656f647630fc0235cfc9a5f2f9780cf92a31eea0f3047c07",
+    "crates/core/Cargo.toml": "209eb46bb52c2f4fb11dcd931e4274927be939318b5e3f5fdbe881de96b8788e",
+    "crates/platform/Cargo.toml": "1e17352db76845b523486cf2cd6c844e7fb06582e25a2df8f437f7b5675f3846",
+    "crates/runtime/Cargo.toml": "d8a1fac06ff9db18903e3ccb238ab2a1028e7dd3f10bd09e0227e17dd88f0f41",
+    "crates/discovery/Cargo.toml": "79841e868232a145681c654a4d4cf5c8f8269daf0e5c3e52a5d4ca554381d01a",
+    "crates/vault/Cargo.toml": "dc5ac46edfd6dbea78ad8588cf124cbd602958d49537624cccbf207ef4cd1229",
+    "crates/vault-crypto/Cargo.toml": "d48fbb2861c50086613bbde5caa9d6971385a3a8c1664d45e9b2a4426ccc4e8f"
+  },
+  "native_binding": "Reuses windows-sys 0.61.2 from inherited review; CryptProtectData, CryptUnprotectData and LocalFree declarations inspected from checksum-bound packaged source.",
+  "build_review": {
+    "generic-array": "version_check queries the configured Rust compiler; emits a coherence cfg only.",
+    "getrandom": "Checks build target/sanitizer environment and compiler version, honoring RUSTC_WRAPPER. No network; pinned Rust Windows lane selects ProcessPrng.",
+    "libc": "Queries configured compiler/wrapper and attempts emcc -dumpversion on PATH; optional FreeBSD probe when LIBC_CI is set; emits target cfgs. Build environment/PATH remain trusted. No source download.",
+    "wit-bindgen": "Wasm-only build script copies bundled static archive to OUT_DIR and declares static linkage. WASI is a lockfile-only target, not compiled or qualified by the supported lanes; embedded archive not independently audited."
+  },
+  "advisories": {
+    "commit": "6477ec04375b913e13f38d966dc49eba9d178cb8",
+    "archive_sha256": "00f30dcd2c187092fdc907b236bfd791cf8e9f29bc1d2df4212d32dda3c924c8",
+    "method": "Matched all 58 locked package names and inspected each matching advisory version range; not cargo-audit execution.",
+    "matches": [
+      {
+        "id": "RUSTSEC-2019-0029",
+        "selected": "chacha20 0.9.1",
+        "disposition": "selected version is in the patched range"
+      },
+      {
+        "id": "RUSTSEC-2020-0146",
+        "selected": "generic-array 0.14.7",
+        "disposition": "selected version is in the patched range"
+      },
+      {
+        "id": "RUSTSEC-2024-0402",
+        "selected": "hashbrown 0.17.1",
+        "disposition": "selected version is in the patched range"
+      },
+      {
+        "id": "RUSTSEC-2021-0100",
+        "selected": "sha2 0.10.9",
+        "disposition": "selected version is in the patched range"
+      },
+      {
+        "id": "RUSTSEC-2022-0008",
+        "selected": "windows 0.62.2",
+        "disposition": "selected version is in the patched range"
+      }
+    ]
+  },
+  "limitations": [
+    "Scoped source/supply-chain review, not a full independent cryptographic audit.",
+    "RustCrypto AEAD exposes the full-round extended-nonce construction; no reduced-round feature or custom randomness backend is enabled.",
+    "No crypto implementation is authored locally; wrapper wire format and context binding require the tests in this packet.",
+    "Only application-owned buffers and reviewed AEAD key state are zeroized. HKDF/HMAC internals, Serde private scratch, caller copies, registers, allocator copies, swap and crash dumps remain outside an erasure claim.",
+    "Target-only WASI/UEFI entries do not imply supported product targets.",
+    "Recheck advisories before distribution; this review does not select the owner project license."
+  ],
+  "packages": [
+    {"name":"aead","version":"0.5.2","source":"registry+https://github.com/rust-lang/crates.io-index","checksum":"d122413f284cf2d62fb1b7db97e02edb8cda96d769b16e443a4f6195e35662b0","license":"MIT OR Apache-2.0","rust_version":"1.56","repository":"https://github.com/RustCrypto/traits","build":null,"build_files":{}},
+    {"name":"block-buffer","version":"0.10.4","source":"registry+https://github.com/rust-lang/crates.io-index","checksum":"3078c7629b62d3f0439517fa394996acacc5cbc91c5a20d8c658e77abd503a71","license":"MIT OR Apache-2.0","rust_version":null,"repository":"https://github.com/RustCrypto/utils","build":null,"build_files":{}},
+    {"name":"cfg-if","version":"1.0.5","source":"registry+https://github.com/rust-lang/crates.io-index","checksum":"4e7648175b45a9a48536d676f68d918270699102aa8dab5496df06904c914600","license":"MIT OR Apache-2.0","rust_version":"1.32","repository":"https://github.com/rust-lang/cfg-if","build":false,"build_files":{}},
+    {"name":"chacha20","version":"0.9.1","source":"registry+https://github.com/rust-lang/crates.io-index","checksum":"c3613f74bd2eac03dad61bd53dbe620703d4371614fe0bc3b9f04dd36fe4e818","license":"Apache-2.0 OR MIT","rust_version":"1.56","repository":"https://github.com/RustCrypto/stream-ciphers","build":null,"build_files":{}},
+    {"name":"chacha20poly1305","version":"0.10.1","source":"registry+https://github.com/rust-lang/crates.io-index","checksum":"10cd79432192d1c0f4e1a0fef9527696cc039165d729fb41b3f4f4f354c2dc35","license":"Apache-2.0 OR MIT","rust_version":null,"repository":"https://github.com/RustCrypto/AEADs/tree/master/chacha20poly1305","build":null,"build_files":{}},
+    {"name":"cipher","version":"0.4.4","source":"registry+https://github.com/rust-lang/crates.io-index","checksum":"773f3b9af64447d2ce9850330c473515014aa235e6a783b02db81ff39e4a3dad","license":"MIT OR Apache-2.0","rust_version":"1.56","repository":"https://github.com/RustCrypto/traits","build":null,"build_files":{}},
+    {"name":"cpufeatures","version":"0.2.17","source":"registry+https://github.com/rust-lang/crates.io-index","checksum":"59ed5838eebb26a2bb2e58f6d5b5316989ae9d08bab10e0e6d103e656d1b0280","license":"MIT OR Apache-2.0","rust_version":null,"repository":"https://github.com/RustCrypto/utils","build":false,"build_files":{}},
+    {"name":"crypto-common","version":"0.1.7","source":"registry+https://github.com/rust-lang/crates.io-index","checksum":"78c8292055d1c1df0cce5d180393dc8cce0abec0a7102adb6c7b1eef6016d60a","license":"MIT OR Apache-2.0","rust_version":null,"repository":"https://github.com/RustCrypto/traits","build":false,"build_files":{}},
+    {"name":"digest","version":"0.10.7","source":"registry+https://github.com/rust-lang/crates.io-index","checksum":"9ed9a281f7bc9b7576e61468ba615a66a5c8cfdff42420a70aa82701a3b1e292","license":"MIT OR Apache-2.0","rust_version":null,"repository":"https://github.com/RustCrypto/traits","build":null,"build_files":{}},
+    {"name":"generic-array","version":"0.14.7","source":"registry+https://github.com/rust-lang/crates.io-index","checksum":"85649ca51fd72272d7821adaf274ad91c288277713d9c18820d8499a7ff69e9a","license":"MIT","rust_version":null,"repository":"https://github.com/fizyk20/generic-array.git","build":null,"build_files":{"build.rs":"08fa30c4a2c1ad24fe5f987e721dfb20131f45ea5b5dc3e836dcf88a8e33248c"}},
+    {"name":"getrandom","version":"0.3.4","source":"registry+https://github.com/rust-lang/crates.io-index","checksum":"899def5c37c4fd7b2664648c28120ecec138e4d395b459e5ca34f9cce2dd77fd","license":"MIT OR Apache-2.0","rust_version":"1.63","repository":"https://github.com/rust-random/getrandom","build":"build.rs","build_files":{"build.rs":"d542c9c3bbc2f64a26c758eac8af16178aab52464bdd8bf0b9a767ba87665021"}},
+    {"name":"hkdf","version":"0.12.4","source":"registry+https://github.com/rust-lang/crates.io-index","checksum":"7b5f8eb2ad728638ea2c7d47a21db23b7b58a72ed6a38256b8a1849f15fbbdf7","license":"MIT OR Apache-2.0","rust_version":null,"repository":"https://github.com/RustCrypto/KDFs/","build":null,"build_files":{}},
+    {"name":"hmac","version":"0.12.1","source":"registry+https://github.com/rust-lang/crates.io-index","checksum":"6c49c37c09c17a53d937dfbb742eb3a961d65a994e6bcdcf37e7399d0cc8ab5e","license":"MIT OR Apache-2.0","rust_version":null,"repository":"https://github.com/RustCrypto/MACs","build":null,"build_files":{}},
+    {"name":"inout","version":"0.1.4","source":"registry+https://github.com/rust-lang/crates.io-index","checksum":"879f10e63c20629ecabbb64a8010319738c66a5cd0c29b02d63d272b03751d01","license":"MIT OR Apache-2.0","rust_version":"1.56","repository":"https://github.com/RustCrypto/utils","build":false,"build_files":{}},
+    {"name":"libc","version":"0.2.189","source":"registry+https://github.com/rust-lang/crates.io-index","checksum":"3eaf3ede3fee6db1a4c2ee091bf8a8b4dccdc6d17f656fb07896ee72867612f2","license":"MIT OR Apache-2.0","rust_version":"1.65","repository":"https://github.com/rust-lang/libc","build":"build.rs","build_files":{"build.rs":"e47f4a6762799b6e69cefc7acdb3291df828010e4de20609f7378f9c94ea29e6"}},
+    {"name":"opaque-debug","version":"0.3.1","source":"registry+https://github.com/rust-lang/crates.io-index","checksum":"c08d65885ee38876c4f86fa503fb49d7b507c2b62552df7c70b2fce627e06381","license":"MIT OR Apache-2.0","rust_version":null,"repository":"https://github.com/RustCrypto/utils","build":null,"build_files":{}},
+    {"name":"poly1305","version":"0.8.0","source":"registry+https://github.com/rust-lang/crates.io-index","checksum":"8159bd90725d2df49889a078b54f4f79e87f1f8a8444194cdca81d38f5393abf","license":"Apache-2.0 OR MIT","rust_version":"1.56","repository":"https://github.com/RustCrypto/universal-hashes","build":null,"build_files":{}},
+    {"name":"r-efi","version":"5.3.0","source":"registry+https://github.com/rust-lang/crates.io-index","checksum":"69cdb34c158ceb288df11e18b4bd39de994f6657d83847bdffdbd7f346754b0f","license":"MIT OR Apache-2.0 OR LGPL-2.1-or-later","rust_version":"1.68","repository":"https://github.com/r-efi/r-efi","build":false,"build_files":{}},
+    {"name":"sha2","version":"0.10.9","source":"registry+https://github.com/rust-lang/crates.io-index","checksum":"a7507d819769d01a365ab707794a4084392c824f54a7a6a7862f8c3d0892b283","license":"MIT OR Apache-2.0","rust_version":null,"repository":"https://github.com/RustCrypto/hashes","build":false,"build_files":{}},
+    {"name":"subtle","version":"2.6.1","source":"registry+https://github.com/rust-lang/crates.io-index","checksum":"13c2bddecc57b384dee18652358fb23172facb8a2c51ccc10d74c157bdea3292","license":"BSD-3-Clause","rust_version":null,"repository":"https://github.com/dalek-cryptography/subtle","build":false,"build_files":{}},
+    {"name":"typenum","version":"1.20.1","source":"registry+https://github.com/rust-lang/crates.io-index","checksum":"b6f5e870be6c3b371b77fe0ee0bafb859fa4964b4404c27de1d380043c4dda20","license":"MIT OR Apache-2.0","rust_version":"1.41.0","repository":"https://github.com/paholg/typenum","build":false,"build_files":{}},
+    {"name":"universal-hash","version":"0.5.1","source":"registry+https://github.com/rust-lang/crates.io-index","checksum":"fc1de2c688dc15305988b563c3854064043356019f97a4b46276fe734c4f07ea","license":"MIT OR Apache-2.0","rust_version":"1.56","repository":"https://github.com/RustCrypto/traits","build":null,"build_files":{}},
+    {"name":"version_check","version":"0.9.5","source":"registry+https://github.com/rust-lang/crates.io-index","checksum":"0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a","license":"MIT/Apache-2.0","rust_version":null,"repository":"https://github.com/SergioBenitez/version_check","build":false,"build_files":{}},
+    {"name":"wasip2","version":"1.0.4+wasi-0.2.12","source":"registry+https://github.com/rust-lang/crates.io-index","checksum":"b67efb37e106e55ce722a510d6b5f9c17f083e5fc79afc2badeb12cc313d9487","license":"Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT","rust_version":"1.87.0","repository":"https://github.com/bytecodealliance/wasi-rs","build":false,"build_files":{}},
+    {"name":"wit-bindgen","version":"0.57.1","source":"registry+https://github.com/rust-lang/crates.io-index","checksum":"1ebf944e87a7c253233ad6766e082e3cd714b5d03812acc24c318f549614536e","license":"Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT","rust_version":"1.85.0","repository":"https://github.com/bytecodealliance/wit-bindgen","build":"build.rs","build_files":{"build.rs":"99b4276049457d3ea1d304277d66b0ff1abba0b9b1f5d60a5e25bdd3fd897a91"}},
+    {"name":"zeroize","version":"1.8.2","source":"registry+https://github.com/rust-lang/crates.io-index","checksum":"b97154e67e32c85465826e8bcc1c59429aaaf107c1e4a9e53c8d8ccd5eff88d0","license":"Apache-2.0 OR MIT","rust_version":"1.60","repository":"https://github.com/RustCrypto/utils","build":false,"build_files":{}}
+  ]
+}

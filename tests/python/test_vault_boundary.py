@@ -11,7 +11,9 @@ class VaultBoundary(unittest.TestCase):
         root = ROOT / 'crates/vault'
         manifest = tomllib.loads((root / 'Cargo.toml').read_text())
         self.assertEqual(manifest['dependencies'],
-                         {'serde': '=1.0.229', 'serde_json': '=1.0.145'})
+                         {'serde': '=1.0.229', 'serde_json': '=1.0.145',
+                          'zeroize': {'version': '=1.8.2', 'default-features': False,
+                                      'features': ['alloc']}})
         self.assertTrue(manifest['lints']['workspace'])
         self.assertFalse((root / 'build.rs').exists())
         self.assertFalse((root / 'src/main.rs').exists())

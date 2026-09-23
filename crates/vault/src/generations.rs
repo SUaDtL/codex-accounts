@@ -1,6 +1,7 @@
 use crate::{DataError, MAX_GENERATIONS};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
+use zeroize::Zeroize;
 
 /// Composite principal/workspace identity. This is a comparison model only:
 /// constructing one does not verify token claims, an issuer, or Desktop identity.
@@ -15,9 +16,17 @@ impl fmt::Debug for Identity {
         f.write_str("Identity([REDACTED])")
     }
 }
+impl Drop for Identity {
+    fn drop(&mut self) {
+        self.issuer.zeroize();
+        self.subject.zeroize();
+        self.workspace.zeroize();
+    }
+}
 impl Identity {
     pub fn new(issuer: String, subject: String, workspace: String) -> Result<Self, DataError> {
-        for value in [&issuer, &subject, &workspace] {
+        let identity = Self { issuer, subject, workspace };
+        for value in [&identity.issuer, &identity.subject, &identity.workspace] {
             if value.is_empty()
                 || value.len() > 2048
                 || value.trim() != value
@@ -26,11 +35,7 @@ impl Identity {
                 return Err(DataError::InvalidIdentity);
             }
         }
-        Ok(Self {
-            issuer,
-            subject,
-            workspace,
-        })
+        Ok(identity)
     }
 }
 

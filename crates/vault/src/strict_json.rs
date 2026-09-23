@@ -3,6 +3,13 @@ use serde::de::{self, DeserializeSeed, MapAccess, SeqAccess, Visitor};
 use std::cell::Cell;
 use std::collections::BTreeSet;
 use std::fmt;
+use zeroize::Zeroize;
+
+#[derive(PartialEq, Eq, PartialOrd, Ord)]
+struct DecodedKey(String);
+impl Drop for DecodedKey {
+    fn drop(&mut self) { self.0.zeroize(); }
+}
 
 struct Check<'a> {
     containers: usize,
@@ -52,6 +59,10 @@ impl<'de> Visitor<'de> for Check<'_> {
     fn visit_str<E: de::Error>(self, _: &str) -> Result<(), E> {
         Ok(())
     }
+    fn visit_string<E: de::Error>(self, mut value: String) -> Result<(), E> {
+        value.zeroize();
+        Ok(())
+    }
     fn visit_unit<E: de::Error>(self) -> Result<(), E> {
         Ok(())
     }
@@ -63,10 +74,11 @@ impl<'de> Visitor<'de> for Check<'_> {
     fn visit_map<A: MapAccess<'de>>(self, mut map: A) -> Result<(), A::Error> {
         self.container()?;
         // Compare decoded keys, so "a" and "\u0061" are duplicates too.
-        // This temporary parser allocation is not guaranteed to be zeroized.
+        // Application-owned decoded keys are wiped, including rejected duplicates.
+        // Serde's internal scratch remains outside this wrapper's zeroization scope.
         let mut keys = BTreeSet::new();
         while let Some(key) = map.next_key::<String>()? {
-            if !keys.insert(key) {
+            if !keys.insert(DecodedKey(key)) {
                 self.reason.set(DataError::DuplicateKey);
                 return Err(de::Error::custom("duplicate key"));
             }
