@@ -449,37 +449,21 @@ fn every_append_crash_preserves_prior_generation_or_valid_committed_generation()
                 .is_err());
             drop(s);
             d.heal();
-            // The old registry/generation is physically intact even when a partial
-            // control write deliberately requires manual recovery instead of guessing.
+            // The old registry/generation remains physically intact. Every
+            // injected failure now must reach a verified terminal recovery state.
             let old = Storage::<Memory>::load_registry(&d, &root, &previous).unwrap();
             assert_eq!(old.profiles[0].latest, a.to_bytes());
-            match Storage::open(d.clone(), &root) {
-                Ok(mut reopened) => match reopened.recovery() {
-                    Recovery::Clean => {
-                        assert!([A, B].contains(&bytes(&reopened, &root, p).as_slice()))
-                    }
-                    Recovery::CommitPending => {
-                        if reopened.reconcile(&root).is_ok() {
-                            assert_eq!(bytes(&reopened, &root, p), B);
-                        } else {
-                            drop(reopened);
-                            let mut r = Storage::open(d.clone(), &root).unwrap();
-                            if r.restore_previous(&root).is_ok() {
-                                assert_eq!(bytes(&r, &root, p), A);
-                            } else {
-                                assert!(r.state.current.is_some());
-                            }
-                        }
-                    }
-                    other => panic!("unexpected recovery {other:?}"),
-                },
-                Err(e) => assert!(matches!(
-                    e,
-                    StorageError::RecoveryRequired
-                        | StorageError::ExternalChange
-                        | StorageError::Corrupt
-                )),
+            let mut reopened = Storage::open(d.clone(), &root).unwrap();
+            if reopened.recovery() == Recovery::ControlRepairRequired {
+                reopened.recover_control(&root).unwrap();
             }
+            if reopened.reconcile(&root).is_err() {
+                drop(reopened);
+                reopened = Storage::open(d.clone(), &root).unwrap();
+                reopened.restore_previous(&root).unwrap();
+            }
+            assert_eq!(reopened.recovery(), Recovery::Clean);
+            assert!([A, B].contains(&bytes(&reopened, &root, p).as_slice()));
         }
     }
 }
@@ -494,12 +478,14 @@ fn bootstrap_failures_never_claim_clean_without_reachable_registry() {
         d.fail(fail, StorageError::Io);
         assert!(Storage::create(d.clone(), &root).is_err());
         d.heal();
-        if let Ok(mut s) = Storage::open(d.clone(), &root) {
-            s.reconcile(&root).unwrap();
-            assert_eq!(s.recovery(), Recovery::Clean);
-            assert!(s.registry.profiles.is_empty());
-            assert!(s.state.current.is_some());
+        let mut s = Storage::open(d.clone(), &root).unwrap();
+        if s.recovery() == Recovery::ControlRepairRequired {
+            s.recover_control(&root).unwrap();
         }
+        s.reconcile(&root).unwrap();
+        assert_eq!(s.recovery(), Recovery::Clean);
+        assert!(s.registry.profiles.is_empty());
+        assert!(s.state.current.is_some());
     }
 }
 #[test]
@@ -530,7 +516,11 @@ fn recovery_writes_are_crash_injected_and_reopen_idempotently() {
         assert!(s.restore_previous(&root).is_err());
         drop(s);
         d.heal();
-        if let Ok(mut s) = Storage::open(d, &root) {
+        {
+            let mut s = Storage::open(d, &root).unwrap();
+            if s.recovery() == Recovery::ControlRepairRequired {
+                s.recover_control(&root).unwrap();
+            }
             if s.recovery() == Recovery::CommitPending {
                 s.restore_previous(&root).unwrap();
             }
@@ -558,7 +548,11 @@ fn cleanup_crash_preserves_latest_and_resumes_without_pruning_held_bytes() {
         assert!(s.prune(&root).is_err());
         drop(s);
         d.heal();
-        if let Ok(mut s) = Storage::open(d, &root) {
+        {
+            let mut s = Storage::open(d, &root).unwrap();
+            if s.recovery() == Recovery::ControlRepairRequired {
+                s.recover_control(&root).unwrap();
+            }
             s.reconcile(&root).unwrap();
             assert_eq!(bytes(&s, &root, p), B);
             s.verify_registry(&root, &s.registry).unwrap();
@@ -615,27 +609,14 @@ fn reconstructable_metadata_recovery_is_fault_injected_at_every_effect() {
         assert!(s.reconcile(&root).is_err());
         drop(s);
         d.heal();
-        match Storage::open(d.clone(), &root) {
-            Ok(mut s) => {
-                s.reconcile(&root).unwrap();
-                assert_eq!(bytes(&s, &root, p), B)
-            }
-            Err(e) => {
-                assert!(matches!(
-                    e,
-                    StorageError::RecoveryRequired | StorageError::ExternalChange
-                ));
-                let old = Storage::<Memory>::load_registry(
-                    &d,
-                    &root,
-                    &open_state(&root, &disk.read("state.bin").unwrap().unwrap())
-                        .unwrap()
-                        .current
-                        .unwrap(),
-                )
-                .unwrap();
-                assert_ne!(old.profiles[0].latest, a.to_bytes());
-            }
+        let mut s = Storage::open(d.clone(), &root).unwrap();
+        if s.recovery() == Recovery::ControlRepairRequired {
+            s.recover_control(&root).unwrap();
         }
+        s.reconcile(&root).unwrap();
+        assert_eq!(bytes(&s, &root, p), B);
     }
 }
+
+#[path = "repair_tests.rs"]
+mod repair_tests;

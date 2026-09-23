@@ -154,6 +154,11 @@ impl Vault {
     pub fn recovery(&self) -> Recovery {
         self.storage.recovery()
     }
+    /// Explicitly preserve a torn unpublished control stage under encryption,
+    /// then retain the last authenticated state. Never adopts the torn record.
+    pub fn recover_control(&mut self) -> Result<(), StorageError> {
+        self.storage.recover_control(&self.root)
+    }
     pub fn restore_previous(&mut self) -> Result<(), StorageError> {
         self.storage.restore_previous(&self.root)
     }

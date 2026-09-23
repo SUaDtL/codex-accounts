@@ -8,6 +8,8 @@ use std::collections::BTreeSet;
 /// stage creates without overwriting; publish compares both expected old and new
 /// bytes; erase uses a pinned, validated object, never an unchecked name deletion.
 type EncryptedWrites = Vec<(Blob, Vec<u8>)>;
+#[path = "control_repair.rs"]
+mod control_repair;
 
 pub(crate) trait Files {
     fn read(&self, name: &str) -> Result<Option<Vec<u8>>, StorageError>;
@@ -44,10 +46,16 @@ pub(crate) struct Storage<D: Files> {
     registry: Registry,
     later_startup: bool,
     blocked: bool,
+    control_repair: bool,
+    torn_control: Option<zeroize::Zeroizing<Vec<u8>>>,
 }
 impl<D: Files> Storage<D> {
     pub fn create(disk: D, root: &RootKey) -> Result<Self, StorageError> {
-        if disk.list()?.iter().any(|n| n != "key.cakp" && n != "lock") {
+        if disk
+            .list()?
+            .iter()
+            .any(|n| n != "key.cakp" && n != "lock" && !control_repair::evidence_name(n))
+        {
             return Err(StorageError::AlreadyExists);
         }
         let mut store = Self {
@@ -57,6 +65,8 @@ impl<D: Files> Storage<D> {
             registry: Registry::empty(),
             later_startup: false,
             blocked: false,
+            control_repair: false,
+            torn_control: None,
         };
         store.commit(root, Registry::empty(), vec![], vec![])?;
         Ok(store)
@@ -64,7 +74,10 @@ impl<D: Files> Storage<D> {
     pub fn open(mut disk: D, root: &RootKey) -> Result<Self, StorageError> {
         let mut current = disk.read("state.bin")?;
         if let Some(stage) = disk.read("state.bin.stage")? {
-            let next = open_state(root, &stage).map_err(|_| StorageError::RecoveryRequired)?;
+            let next = match open_state(root, &stage) {
+                Ok(next) => next,
+                Err(_) => return Self::interrupted_control(disk, root, current, Some(stage)),
+            };
             let previous = current
                 .as_deref()
                 .map(|b| open_state(root, b))
@@ -82,10 +95,16 @@ impl<D: Files> Storage<D> {
                 let selected = Self::load_registry(&disk, root, reference)?;
                 Self::verify_registry_on(&disk, root, &selected)?;
             }
+            // Check the predecessor's complete inventory BEFORE any publication.
+            // A valid encrypted next record never licenses ignoring foreign files.
+            disk =
+                Self::interrupted_control(disk, root, current.clone(), Some(stage.clone()))?.disk;
             disk.publish("state.bin", current.as_deref(), &stage)?;
             current = Some(stage);
         }
-        let bytes = current.ok_or(StorageError::RecoveryRequired)?;
+        let Some(bytes) = current else {
+            return Self::interrupted_control(disk, root, None, None);
+        };
         let state = open_state(root, &bytes)?;
         let registry = match &state.current {
             Some(b) => Self::load_registry(&disk, root, b)?,
@@ -99,13 +118,15 @@ impl<D: Files> Storage<D> {
             registry,
             later_startup: true,
             blocked: false,
+            control_repair: false,
+            torn_control: None,
         };
         store.verify_registry(root, &store.registry)?;
         store.inventory()?;
         Ok(store)
     }
     fn fresh(&self) -> Result<(), StorageError> {
-        if self.blocked {
+        if self.blocked || self.control_repair {
             return Err(StorageError::RecoveryRequired);
         }
         if self.disk.read("state.bin")? != self.state_bytes
@@ -123,7 +144,9 @@ impl<D: Files> Storage<D> {
         Ok(())
     }
     pub fn recovery(&self) -> Recovery {
-        if self.blocked {
+        if self.control_repair {
+            Recovery::ControlRepairRequired
+        } else if self.blocked {
             Recovery::Blocked
         } else if self.state.next.is_some() {
             Recovery::CommitPending
@@ -149,8 +172,16 @@ impl<D: Files> Storage<D> {
             allowed.insert(b.key.name());
             allowed.insert(format!("{}.stage", b.key.name()));
         }
+        if self.control_repair {
+            allowed.insert("state.bin.stage".into());
+        }
         let actual = self.disk.list()?;
-        if actual.len() > MAX_BLOBS * 2 + 3 || actual.iter().any(|n| !allowed.contains(n)) {
+        control_repair::check_evidence(&self.disk, &actual)?;
+        if actual.len() > MAX_BLOBS * 2 + 3
+            || actual
+                .iter()
+                .any(|n| !allowed.contains(n) && !control_repair::evidence_name(n))
+        {
             return Err(StorageError::ExternalChange);
         }
         Ok(())
@@ -356,8 +387,9 @@ impl<D: Files> Storage<D> {
         self.blocked = false;
         self.finish(root, registry)
     }
-    /// Explicit storage-only rollback. Partial/foreign/corrupt staged bytes are
-    /// preserved and block this operation, rather than silently deleting evidence.
+    /// Explicit storage-only rollback. An incomplete uncommitted stage is
+    /// archived under authenticated encryption before exact-byte removal. A changed
+    /// published file or a reachable generation is never removed as a stage.
     pub fn restore_previous(&mut self, root: &RootKey) -> Result<(), StorageError> {
         self.fresh()?;
         if self.state.next.is_none() || self.state.current.is_none() {
@@ -373,10 +405,17 @@ impl<D: Files> Storage<D> {
             .collect();
         let mut clean = self.state.clone();
         clean.garbage.retain(|b| !reachable.contains(&b.key));
-        for b in &self.state.writes {
+        for b in &self.state.writes.clone() {
             for n in [b.key.name(), format!("{}.stage", b.key.name())] {
                 if let Some(bytes) = self.disk.read(&n)? {
-                    b.check(&bytes)?;
+                    if b.check(&bytes).is_err() {
+                        if !n.ends_with(".stage") || reachable.contains(&b.key) {
+                            return Err(StorageError::ExternalChange);
+                        }
+                        self.blocked = true;
+                        self.archive_unpublished(root, &n, &bytes)?;
+                        self.blocked = false;
+                    }
                 }
             }
             if !reachable.contains(&b.key) {

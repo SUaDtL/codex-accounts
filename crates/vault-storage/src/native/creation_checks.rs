@@ -111,3 +111,63 @@ fn native_creation_checks_parent_volume_descriptor_and_lock_separately() {
     let disk = Disk::at(&fixture.0, false).expect("reopen full native storage contract");
     drop(disk);
 }
+
+#[test]
+fn native_torn_control_preserves_encrypted_evidence_and_current_generation() {
+    use crate::{Capture, ProfileText, Recovery};
+    use codex_accounts_vault::{Identity, Resource, ResourceId, ResourceShape};
+    let fixture = super::super::tests::Sandbox::new();
+    let mut disk = Disk::at(&fixture.0, true).unwrap();
+    let root = bootstrap(&mut disk, true).unwrap();
+    let mut store = Storage::create(disk, &root).unwrap();
+    let rid = ResourceId::new(0).unwrap();
+    let bytes = b"{ \"SYNTHETIC\": \"NOT_REAL\" }\r\n";
+    let capture = Capture::new(
+        Identity::new(
+            "SYNTHETIC_ISSUER".into(),
+            "SYNTHETIC_SUBJECT".into(),
+            "SYNTHETIC_WORKSPACE".into(),
+        )
+        .unwrap(),
+        1,
+        vec![(rid, ResourceShape::JsonObject, true)],
+        vec![Resource::present(rid, bytes.to_vec()).unwrap()],
+    )
+    .unwrap();
+    let text = || ProfileText::new("SYNTHETIC".into()).unwrap();
+    let (profile, generation) = store.add(&root, text(), text(), capture).unwrap();
+    drop(store);
+    let mut disk = Disk::at(&fixture.0, false).unwrap();
+    disk.stage("state.bin", b"SYNTHETIC_TORN_STAGE").unwrap();
+    drop(disk);
+    let disk = Disk::at(&fixture.0, false).unwrap();
+    let mut store = Storage::open(disk, &root).unwrap();
+    assert_eq!(store.recovery(), Recovery::ControlRepairRequired);
+    store.recover_control(&root).unwrap();
+    assert_eq!(store.latest(profile).unwrap(), generation);
+    assert!(
+        store
+            .read_latest(&root, profile)
+            .unwrap()
+            .resource(rid)
+            .unwrap()
+            .as_bytes()
+            == Some(bytes.as_slice())
+    );
+    assert!(store
+        .disk
+        .list()
+        .unwrap()
+        .iter()
+        .any(|name| name.starts_with("recovery-")));
+    assert!(store.disk.read("state.bin.stage").unwrap().is_none());
+    drop(store);
+    let disk = Disk::at(&fixture.0, false).unwrap();
+    assert_eq!(
+        Storage::open(disk, &root).unwrap().recovery(),
+        Recovery::Clean
+    );
+}
+
+#[path = "hazard_tests.rs"]
+mod hazards;

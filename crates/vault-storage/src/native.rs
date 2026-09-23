@@ -31,6 +31,7 @@ use windows_sys::Win32::{
             SECURITY_TRUSTED_INSTALLER_RID5,
         },
         Threading::{GetCurrentProcess, OpenProcessToken},
+        WindowsProgramming::DRIVE_FIXED,
     },
     UI::Shell::{FOLDERID_LocalAppData, SHGetKnownFolderPath},
 };
@@ -68,6 +69,18 @@ impl Drop for TaskString {
     }
 }
 fn wide(p: &Path) -> Result<Vec<u16>, StorageError> {
+    // Reject mapped network/removable/unknown drives before opening any object.
+    let Some(Component::Prefix(prefix)) = p.components().next() else {
+        return Err(StorageError::UnsafePath);
+    };
+    let Prefix::Disk(letter) = prefix.kind() else {
+        return Err(StorageError::UnsafePath);
+    };
+    let drive = [u16::from(letter), u16::from(b':'), u16::from(b'\\'), 0];
+    // SAFETY: fixed NUL-terminated drive-root string, no implicit current drive.
+    if unsafe { GetDriveTypeW(drive.as_ptr()) } != DRIVE_FIXED {
+        return Err(StorageError::UnsafePath);
+    }
     let mut w: Vec<_> = p.as_os_str().encode_wide().collect();
     if w.is_empty() || w.len() > 240 || w.contains(&0) {
         return Err(StorageError::UnsafePath);
@@ -260,12 +273,13 @@ impl Security {
         {
             return Err(last());
         }
+        let descriptor = Allocation(descriptor);
         Ok(Self {
             user,
             system: known_sid(WinLocalSystemSid)?,
             admins: known_sid(WinBuiltinAdministratorsSid)?,
             installer: installer_sid()?,
-            descriptor: Allocation(descriptor),
+            descriptor,
         })
     }
     fn attrs(&self) -> SECURITY_ATTRIBUTES {
@@ -498,9 +512,9 @@ impl Disk {
         for c in root.components().take(2) {
             drive.push(c.as_os_str());
         }
-        if unsafe { GetDriveTypeW(wide(&drive)?.as_ptr()) } != 3 {
+        if unsafe { GetDriveTypeW(wide(&drive)?.as_ptr()) } != DRIVE_FIXED {
             return Err(StorageError::UnsafePath);
-        } // SDK DRIVE_FIXED
+        }
         let mut paths: Vec<_> = root.ancestors().skip(1).collect();
         paths.reverse();
         let mut dirs = vec![];

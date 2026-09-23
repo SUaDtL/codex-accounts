@@ -16,7 +16,7 @@ class StorageBoundary(unittest.TestCase):
         self.assertEqual(lib.count('allow(unsafe_code)'), 1)
         self.assertIn('#![deny(unsafe_code)]', lib)
         self.assertIn('mod native;', lib)
-        for name in ['codec.rs', 'engine.rs', 'records.rs']:
+        for name in ['codec.rs', 'engine.rs', 'records.rs', 'control_repair.rs']:
             text = (CRATE/'src'/name).read_text()
             self.assertIn('#![forbid(unsafe_code)]', text)
             self.assertNotIn('unsafe {', text)

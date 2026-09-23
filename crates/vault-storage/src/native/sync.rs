@@ -75,16 +75,23 @@ pub(super) fn registered_sync_check(ancestors: &[File]) -> Result<(), StorageErr
         {
             return Err(StorageError::UnsafePath);
         }
-        // Metadata only, no recall or provider hydration. Inaccessible, remote,
-        // ambiguous and reparse-root observations refuse, not silently disappear.
-        let file = open_file(
-            &path,
-            FILE_READ_ATTRIBUTES,
-            FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
-            OPEN_EXISTING,
-            None,
-        )?;
-        let observed = check_object(&file, true)?;
+        // Inspect every ancestor without following a link, before the next
+        // component is opened. No secret reads, remote drive open or hydration.
+        let mut paths: Vec<_> = path.ancestors().collect();
+        paths.reverse();
+        let mut held = Vec::new();
+        for part in paths {
+            let file = open_file(
+                part,
+                FILE_READ_ATTRIBUTES,
+                FILE_SHARE_READ | FILE_SHARE_WRITE,
+                OPEN_EXISTING,
+                None,
+            )?;
+            check_object(&file, true)?;
+            held.push(file);
+        }
+        let observed = stamp(held.last().ok_or(StorageError::UnsafePath)?)?;
         if ids
             .iter()
             .any(|s| (s.volume, s.id) == (observed.volume, observed.id))

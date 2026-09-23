@@ -284,6 +284,7 @@ impl Registry {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Recovery {
     Clean,
+    ControlRepairRequired,
     CommitPending,
     CleanupPending,
     Blocked,
