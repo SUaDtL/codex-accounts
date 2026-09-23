@@ -1,0 +1,79 @@
+# CA-03A: bounded in-memory vault data
+
+This is the first CA-03/Q1 sub-packet. It is a library-only implementation, not
+an encrypted vault, persistent credential store, or authorized account operation.
+It depends on the CA-02 review branch until that work is merged by the owner.
+
+## Implemented
+
+`crates/vault` keeps exact owned resource bytes and explicit absence. Structural
+set rules reject duplicate/missing/extra slots and required absence. JSON-object
+resources are parsed through Serde visitors, not a last-key-wins map: decoded
+object keys must be unique at every depth, including escaped equivalents.
+UTF-8, JSON syntax, trailing content and the root object shape are validated.
+The original bytes are never normalized or re-serialized.
+
+Limits are 1 MiB per resource, 4 MiB per set and 64 object/array containers of
+nesting, including the root. The generic slice additionally caps 16 resource
+slots and 128 in-memory generation-index entries; exhaustion refuses growth,
+never evicts recovery state. These are conservative implementation bounds, not
+claims that the normative spec names these additional counts.
+
+Composite identity compares issuer, subject and workspace. Email and labels are
+not identity keys. Identity input is bounded and rejects empty/control/ambiguous
+surrounding whitespace; it is not cryptographic verification or a Codex extractor.
+Distinct profile/generation IDs are opaque nonzero inputs, not self-generated
+UUIDs or filesystem names. A reviewed random UUID provider remains future work.
+
+The generation index accepts a new immutable ID only for its current parent and
+matching profile/composite identity. Stale parent, reused ID and mismatches leave
+the latest pointer unchanged. Retention computes unreferenced candidates while
+protecting the latest and every supplied unresolved reference; an unknown reference
+rejects the whole decision. It does not prune files or prove that the caller has
+supplied every durable journal reference.
+
+## Deliberate limits
+
+There is no filesystem, native key store, subprocess, network, UI, CLI, live capture,
+login, refresh, encryption, storage migration or credential replacement. Structural
+rules are not qualified auth-mode/schema rules. All production gates and the empty
+compatibility catalog are untouched. No selected Desktop build is qualified.
+
+Secret-containing types have fixed redacted Debug output and no Clone/Serialize
+implementation. Errors are fixed categories without input or parser messages.
+Owned resource buffers are filled before release as best effort only. Compiler
+elimination, borrowed caller input, Serde scratch/key allocations, identities,
+allocator copies, swap and crash dumps are not covered by a secure-erasure claim.
+Vetted zeroization and secret lifetime review are required before production use.
+
+In-memory parent checks are not durable atomicity or cross-process locking. A
+future storage/journal transaction must make encrypted generation persistence and
+registry advancement recoverable together. Do not wire this slice to live accounts.
+
+## Dependencies and validation
+
+Direct pins reuse `serde = 1.0.229` and `serde_json = 1.0.145` from the existing
+reviewed lock. No registry package, version, checksum, native binding or build script
+is added. The internal vault lock entry is checked by locked hosted Cargo runs;
+the completion environment has no Rust toolchain. The existing dependency review
+checker remains unchanged and still compares all 32 external packages.
+
+Primary API basis: https://serde.rs/impl-deserializer.html and
+https://docs.rs/serde/latest/serde/de/trait.MapAccess.html. These document the
+visitor/seed interface, not application security. The wrapper implements the
+application's depth and duplicate-key policy and keeps Serde's own limit enabled.
+
+The Rust suite in `crates/vault/tests/data.rs` covers boundaries, malformed input,
+decoded duplicate keys, nested objects, byte/absence preservation, identity and
+stale-generation rejection, retention and debug/error canaries. Hosted final-head
+formatting, tests and Clippy must pass before this slice is ready for review.
+Compilation/model tests do not close full T-08/T-11/T-12/T-13/T-18/T-31 scenarios.
+
+## Remaining CA-03
+
+CA-03B: reviewed AEAD/KDF, context-bound envelopes, OS-random root/nonce generation,
+vetted zeroization, current-user DPAPI and separate macOS Keychain policy.
+CA-03C: protected local storage, encrypted registry/generations, durable commits,
+retention/deletion and native permission/key-access tests. Real resource-specific
+integration waits for Q0 identity/resource/policy evidence. No CA-04 advancement
+is implied by passing this generic first slice.
