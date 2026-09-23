@@ -2,20 +2,31 @@
 
 ## CA-02 discovery increment
 
-Source inspected: `39a74ab8f4f31e6b7d3c1fde4fe21d74850449d4`, PR #2.
-The completion commit adds deterministic specification/provenance checks, roadmap
-adoption, native boundary/procedure documentation and terminal-only local display.
-These changes do not enable credentials or qualify an installation.
+Read-only discovery implementation is ready for code review. Q0 native contract
+qualification is not complete. P02-A08's in-place T-07/provenance adoption is also
+still pending: the deterministic review candidate is implemented and tested, but
+the normative file remains unchanged. Do not mark the original checklist wholly
+closed or treat a discovery report as account-operation permission.
+
+The resumption review found a Windows CI acquisition-boundary defect: dependency
+review and Cargo fetch shared one PowerShell step. A later successful native
+command could mask the review exit code and acquisition could run after failure.
+They now have separate blocking steps; independent tests and Clippy explicitly
+require successful review and acquisition. Five regression tests reject combining
+those commands, ignoring review failure, dropping the review prerequisite, or
+making failures nonblocking. All five passed locally; full-suite results for the
+published repair head must be taken from that head's completed CI, not an older run.
 
 | Evidence | Observed result and scope |
 | --- | --- |
-| Prior CA-02 CI | Run [35794749871](https://github.com/SUaDtL/codex-accounts/actions/runs/35794749871), head `39a74ab...`: all four jobs succeeded. |
-| Windows job log | Job 106971327239: 42 Rust tests passed, no ignored/filtered tests; 13 core, 16 discovery, one CLI, three platform, nine runtime. Nine discovery tests exercised actual Windows API/native-reader behavior. |
+| Reviewed CA-02 head | `6ee778e9592d46132f253e2bee836b2650a44bd0`, PR #2, before the acquisition-boundary repair. |
+| Completed head-bound CI | Run [35808957582](https://github.com/SUaDtL/codex-accounts/actions/runs/35808957582): all four jobs succeeded on that head. |
+| Windows job log | Job 107015928251: 43 Rust tests passed, none ignored/filtered; 13 core, 16 discovery, two CLI, three platform, nine runtime. Nine discovery tests exercised actual Windows API/native-reader behavior. Formatting and Clippy with `-D warnings` also passed. |
 | Actual hosted OS | Windows Server 2025 x64 build 26100, not a Windows 11 Desktop qualification. |
-| Dependency review | Existing 32-package locked review remains unchanged; no new dependency in CA-02 closeout. See dependency-policy.md and ca-02-dependencies.json. |
-| Local completion checks | 48 Python tests passed, including 13 projection/provenance/plan tests. Spec check passed 43 requirements, 34 acceptance IDs and zero qualified records. |
-| Local Rust toolchain | NOT AVAILABLE in this completion environment; do not claim local compilation or native execution. The changed CLI test needs the final-head hosted run. |
-| Final-head CI | Inspect the completed checks linked from PR #2; results for the earlier head above must not be transferred to a later commit. The PR handoff records the actual final SHA and run IDs. |
+| Dependency review | Existing 32-package locked review is unchanged; no new dependency in this repair. See dependency-policy.md and ca-02-dependencies.json. |
+| Earlier local completion checks | 48 Python tests passed, including 13 projection/provenance/plan tests. Spec check passed 43 requirements, 34 acceptance IDs and zero qualified records. These are recorded earlier results, not new local execution. |
+| Local resumption checks | Five new dependency-acquisition contract tests passed. Local Rust tools remain unavailable; no local compilation or native execution is claimed. |
+| Final-head CI | The PR handoff records the actual repair SHA and completed run IDs after publication. Earlier green heads are not transferred to later commits. |
 | Real installation / Q0 contract | NOT RUN; official publisher/runtime role, effective home/policy, auth-resource/identity and lifecycle contracts remain unresolved. |
 | Full product/release acceptance | NOT COMPLETE. No OAuth, account handoff, encrypted vault, Tauri UI, release package, signing or reproducibility qualification. |
 
@@ -28,10 +39,10 @@ These changes do not enable credentials or qualify an installation.
 | P02-A03 / A04 | Distinct declared/configuration observations and always-conservative effective context. Missing layer/default/policy evidence remains unknown, never inferred from the diagnostic shell. |
 | P02-A05 | Native synthetic ACL, junction, hardlink, sharing and replacement tests ran on hosted Windows. Complete later vault/write-path protection remains out of scope. |
 | P02-A06 | Native open-path instrumentation and exclusive synthetic auth fixture prove the selected read scope; source review confirms no production subprocess/store/control API. Real installation actor-attributed network/filesystem tracing remains a named native gate, not falsely closed by these tests. |
-| P02-A07 | Default/debug/error canaries; completion adds redirected-local-display refusal and a subprocess regression test. |
-| P02-A08 | T-07 review candidate changes canonical and visible rows together, and its proposed provenance migration is tested. Adoption into the normative file remains pending; original full source can be reconstructed byte-for-byte; every modeled section and source note is projection-checked. Product version and 43/34 topology retained. |
+| P02-A07 | Default/debug/error canaries; redirected local-display refusal and subprocess regression tests. |
+| P02-A08 | PARTIAL: deterministic T-07 canonical/projection candidate and provenance migration have regression checks. In-place adoption remains pending; the original normative source is unchanged. The proposal-only delivery variation is documented in spec-amendments/ca-02-t07.md. |
 | P02-A09 | Product mutation gates remain disabled; all-positive synthetic inputs and catalog files cannot enable them. Real catalog is empty. |
-| P02-A10 | Prior hosted logs inspected; final-head checks must be completed before handoff. Safe owner collection and exact pending observations are in q0-qualification.md. |
+| P02-A10 | Head-bound hosted logs inspected as recorded above; every later repair needs its own completed checks. Safe owner collection and exact pending observations are in q0-qualification.md. |
 | P02-A11 / A12 | Declared read-only code/test/doc scope only; no main write, force push, merge or release. One working roadmap and a separately bounded CA-03A next packet. |
 
 The review milestone is discovery code with ordinary/native API tests, not Q0

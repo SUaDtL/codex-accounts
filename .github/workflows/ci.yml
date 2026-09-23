@@ -45,11 +45,14 @@ jobs:
       - name: Acquire pinned development toolchain
         id: toolchain
         run: rustup toolchain install 1.90.0 --profile minimal --component rustfmt --component clippy
+      # Separate steps preserve the review failure on Windows PowerShell too.
+      # Dependency acquisition must not run after a failed lock review.
+      - name: Validate reviewed dependency lock
+        id: dependency_review
+        run: python tools/check_dependencies.py
       - name: Acquire reviewed dependencies
         id: dependencies
-        run: |
-          python tools/check_dependencies.py
-          cargo fetch --locked
+        run: cargo fetch --locked
       - name: Record compiler
         run: rustc --version --verbose
       - name: Check formatting
@@ -57,10 +60,10 @@ jobs:
       # Keep independent checks visible after a formatting/test failure.
       # Their failures still fail the job; do not use continue-on-error.
       - name: Test models without network
-        if: ${{ !cancelled() && steps.toolchain.outcome == 'success' && steps.dependencies.outcome == 'success' }}
+        if: ${{ !cancelled() && steps.toolchain.outcome == 'success' && steps.dependency_review.outcome == 'success' && steps.dependencies.outcome == 'success' }}
         run: cargo test --workspace --all-targets --locked --offline
       - name: Lint models without network
-        if: ${{ !cancelled() && steps.toolchain.outcome == 'success' && steps.dependencies.outcome == 'success' }}
+        if: ${{ !cancelled() && steps.toolchain.outcome == 'success' && steps.dependency_review.outcome == 'success' && steps.dependencies.outcome == 'success' }}
         run: cargo clippy --workspace --all-targets --locked --offline -- -D warnings
       - name: Native qualification boundary
         run: echo "Model checks only. No Desktop installation qualified; no OAuth, vault, or account mutation tested."
