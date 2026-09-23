@@ -1,24 +1,23 @@
 # Next safe slice: CA-03B
 
-Parent packet: CA-03 / Q1. CA-02's read-only code was merged by the owner in
-PR #2 as `7773d3472d13b7087179c0819a37fd5030a8f1c9`. CA-03A is implemented
-in PR #3, now targeting main, and remains subject to its own review. Read live
-refs, PR state, AGENTS.md and the working roadmap before choosing a new base.
-Do not recreate the old stack, reset a branch or merge automatically.
+Parent packet: CA-03 / Q1. The owner merged CA-02 read-only discovery in PR #2 as
+`7773d3472d13b7087179c0819a37fd5030a8f1c9`. PR #3 targets main and delivers
+CA-03A data/generation rules, the CI acquisition fix and the remaining in-place
+T-07/provenance closeout. Read its actual head, review and merge state before
+choosing a new base. Do not recreate an old stack, reset or merge automatically.
 
-## Pending CA-02 qualification and amendment
+## CA-02 closeout and pending native evidence
 
-The merged discovery head `6ee778e9592d46132f253e2bee836b2650a44bd0` passed
-run 35808957582. The reviewed correction to dependency acquisition is carried
-forward in PR #3; it was not part of that CA-02 merge.
+T-07 and its v2 source manifest are now changed together in PR #3, with canonical/
+visible agreement and exact original-source reconstruction. See
+`spec-amendments/ca-02-t07.md`. The in-place amendment is submitted for owner review;
+its metadata is not evidence of approval, Desktop compatibility or a valid account.
+No future source-edit task is needed merely to apply this already checked-in
+candidate. Do not waive the review or silently change the original provenance.
 
-P02-A08's in-place T-07/provenance adoption remains open. The deterministic
-renderer produces a candidate, but the normative source remains unchanged.
-A review of the proposal-delivery PR is not silent adoption of a future source
-edit. Apply the candidate and provenance migration in a clearly reviewed change
-before claiming this checklist item closed. Current restrictive backend behavior
-and all product operation gates remain unchanged. Actual Q0 resource, identity,
-policy and lifecycle evidence is independently pending.
+Q0's real publisher/runtime binding, effective home/policy, auth-resource/identity
+and lifecycle contracts remain pending. All account-operation gates remain disabled.
+Safe generic CA-03 development can proceed; real installation integration cannot.
 
 ## CA-03B implementation scope
 

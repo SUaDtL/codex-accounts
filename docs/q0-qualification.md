@@ -14,12 +14,17 @@ Do not send real authentication files, raw paths or local-only output to an agen
 
 ## Read-only collection
 
-From the reviewed checkout, in PowerShell:
+From the reviewed checkout, in PowerShell. Stop on a failed review, acquisition
+or build; do not continue with an older binary after a build failure.
 
 ```powershell
+$ErrorActionPreference = 'Stop'
 python tools/check_dependencies.py
+if ($LASTEXITCODE -ne 0) { throw 'Dependency review failed; nothing will be acquired.' }
 cargo fetch --locked
+if ($LASTEXITCODE -ne 0) { throw 'Dependency acquisition failed; stop here.' }
 cargo build -p codex-accounts-discovery --locked --offline
+if ($LASTEXITCODE -ne 0) { throw 'Discovery build failed; do not run an older binary.' }
 .\target\debug\codex-accounts-discovery.exe
 ```
 
@@ -89,9 +94,9 @@ to report a failed observation; do not change security settings to make it pass.
    isolated A->B->A, newest-generation and failure/recovery trials. No trial is
    authorized by this read-only collection procedure.
 
-CA-02's T-07 wording is a visible proposal in `spec-amendments/ca-02-t07.md`, not a
-qualification record. Both source-level mutation gates and the empty catalog stay
-in force while review and native evidence are pending.
+CA-02's in-place T-07 amendment and source provenance are submitted in PR #3 for
+owner review; see `spec-amendments/ca-02-t07.md`. They are not qualification records.
+Both source-level mutation gates and the empty catalog remain in force.
 
 ## Verification and rollback
 
