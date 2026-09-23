@@ -20,6 +20,7 @@ jobs:
           mkdir ca03b-format
           git diff --binary > ca03b-format/fmt.patch
           git rev-parse HEAD > ca03b-format/source-commit.txt
+          git archive --format=zip HEAD -o ca03b-format/source.zip
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: ca03b-format
