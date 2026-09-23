@@ -116,6 +116,7 @@ dependencies = [
  "getrandom",
  "sha2",
  "windows",
+ "windows-collections",
  "windows-sys",
  "zeroize",
 ]

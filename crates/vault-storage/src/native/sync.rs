@@ -23,13 +23,31 @@ impl Drop for Apartment {
     }
 }
 pub(super) fn registered_sync_check(ancestors: &[File]) -> Result<(), StorageError> {
-    use windows::core::Interface;
-    use windows::Storage::{IStorageItem, Provider::StorageProviderSyncRootManager};
+    use windows::core::{Interface, HSTRING};
+    use windows::Storage::{IStorageItem, Provider::IStorageProviderSyncRootManagerStatics};
     let _apartment = Apartment::enter()?;
     // This must succeed positively. A failed enumeration is NEVER no registered roots.
     // Microsoft documents both legacy and modern registrations in this inventory.
-    let roots = StorageProviderSyncRootManager::GetCurrentSyncRoots()
-        .map_err(|_| StorageError::UnsafePath)?;
+    // Request the registered factory directly: the generated static helper caches
+    // an agile factory across apartment teardown. This scoped factory and every
+    // derived interface must be released BEFORE RoUninitialize. There is no
+    // generated helper's DLL-search fallback for a missing registered class.
+    let factory: IStorageProviderSyncRootManagerStatics = unsafe {
+        windows::Win32::System::WinRT::RoGetActivationFactory(&HSTRING::from(
+            "Windows.Storage.Provider.StorageProviderSyncRootManager",
+        ))
+    }
+    .map_err(|_| StorageError::UnsafePath)?;
+    // SAFETY: use the generated SDK vtable and output type. The live factory
+    // owns the call; null-initialized output is converted only after success.
+    let roots: windows_collections::IVectorView<
+        windows::Storage::Provider::StorageProviderSyncRootInfo,
+    > = unsafe {
+        let mut output = null_mut();
+        (factory.vtable().GetCurrentSyncRoots)(factory.as_raw(), &mut output)
+            .and_then(|| windows::core::Type::from_abi(output))
+    }
+    .map_err(|_| StorageError::UnsafePath)?;
     let count = roots.Size().map_err(|_| StorageError::UnsafePath)?;
     if count > 128 {
         return Err(StorageError::InputLimit);
@@ -102,3 +120,13 @@ pub(super) fn cloud_check(f: &File, ancestors: &[File]) -> Result<(), StorageErr
 #[cfg(test)]
 #[path = "creation_checks.rs"]
 mod creation_checks;
+
+#[cfg(test)]
+#[test]
+fn native_repeated_inventory_does_not_reuse_a_torn_down_apartment_factory() {
+    // Each query fully opens and closes its own apartment. No factory survives
+    // across calls; successful inventory is still required on every iteration.
+    for _ in 0..100 {
+        registered_sync_check(&[]).expect("independent registered-root inventory");
+    }
+}
