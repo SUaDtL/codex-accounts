@@ -1,0 +1,70 @@
+name: CA-03B dependency metadata (not validation)
+on:
+  push:
+    branches: [feat/ca-03b-vault-crypto]
+    paths: [.github/workflows/ca03b-prepare.yml]
+permissions:
+  contents: read
+jobs:
+  metadata:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - run: rustup toolchain install 1.90.0 --profile minimal --component rustfmt
+      - name: Resolve index metadata only; do not acquire or compile crates
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import subprocess
+          root = Path('crates/vault-crypto')
+          root.mkdir(exist_ok=True)
+          (root / 'src').mkdir(exist_ok=True)
+          (root / 'src/lib.rs').write_text('// Temporary resolver input; not an implementation.\n')
+          (root / 'Cargo.toml').write_text('''[package]
+          name = "codex-accounts-vault-crypto"
+          version.workspace = true
+          edition.workspace = true
+          rust-version.workspace = true
+          publish.workspace = true
+          [dependencies]
+          chacha20poly1305 = { version = "=0.10.1", default-features = false }
+          hkdf = { version = "=0.12.4", default-features = false }
+          sha2 = { version = "=0.10.9", default-features = false }
+          getrandom = "=0.3.4"
+          zeroize = { version = "=1.8.2", default-features = false, features = ["alloc"] }
+          [target.'cfg(all(windows, target_arch = "x86_64"))'.dependencies]
+          windows-sys = { version = "=0.61.2", features = ["Win32_Foundation", "Win32_Security_Cryptography"] }
+          ''')
+          p = Path('Cargo.toml')
+          p.write_text(p.read_text().replace('"crates/vault"]', '"crates/vault", "crates/vault-crypto"]'))
+          p = Path('crates/vault/Cargo.toml')
+          p.write_text(p.read_text().replace('[dependencies]', '[dependencies]\nzeroize = { version = "=1.8.2", default-features = false, features = ["alloc"] }'))
+          subprocess.run(['cargo', 'update', '--workspace'], check=True)
+          PY
+      - name: Emit exact lock candidate and newly resolved registry metadata
+        run: |
+          python3 - <<'PY'
+          import json, subprocess, tomllib, urllib.request
+          from pathlib import Path
+          lock = tomllib.loads(Path('Cargo.lock').read_text())
+          old = tomllib.loads(subprocess.check_output(['git', 'show', 'HEAD:Cargo.lock'], text=True))
+          keyed = lambda x: {(p['name'], p['version']): p for p in x['package'] if 'source' in p}
+          current, original = keyed(lock), keyed(old)
+          assert all(current.get(k) == v for k, v in original.items()), 'Existing dependency moved'
+          print('LOCK_CANDIDATE_BEGIN')
+          print(Path('Cargo.lock').read_text())
+          print('LOCK_CANDIDATE_END')
+          for key, package in sorted(current.items()):
+              if key in original:
+                  continue
+              name, version = key
+              req = urllib.request.Request(f'https://crates.io/api/v1/crates/{name}/{version}', headers={'User-Agent': 'codex-accounts-dependency-review'})
+              with urllib.request.urlopen(req, timeout=30) as response:
+                  value = json.load(response)['version']
+              assert value['checksum'] == package['checksum'] and not value['yanked']
+              print('NEW_PACKAGE ' + json.dumps({**package, 'license': value['license'], 'rust_version': value.get('rust_version'), 'repository': value.get('repository')}, sort_keys=True))
+          print('SOURCE PREPARATION ONLY. No crate archives acquired, build scripts run, or product tests executed.')
+          PY
