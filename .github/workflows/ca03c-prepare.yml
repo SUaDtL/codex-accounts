@@ -14,20 +14,20 @@ jobs:
         with:
           persist-credentials: false
       - run: rustup toolchain install 1.90.0 --profile minimal --component rustfmt --component clippy
+      - run: rustup target add x86_64-pc-windows-msvc --toolchain 1.90.0
       - run: python3 tools/check_dependencies.py
-      - run: cargo fetch --locked --target x86_64-unknown-linux-gnu
+      - run: cargo fetch --locked
       - name: Package exact public development inputs
         run: |
           mkdir -p prepared
-          git archive --format=zip HEAD -o prepared/source.zip
           git rev-parse HEAD > prepared/source-commit.txt
-          tar -czf prepared/rust-tools.tar.gz -C "$HOME/.rustup/toolchains/1.90.0-x86_64-unknown-linux-gnu" bin lib libexec
+          tar -czf prepared/windows-std.tar.gz -C "$HOME/.rustup/toolchains/1.90.0-x86_64-unknown-linux-gnu" lib/rustlib/x86_64-pc-windows-msvc
           tar -czf prepared/cargo-cache.tar.gz -C "$HOME/.cargo" registry
           cd prepared
-          sha256sum source.zip rust-tools.tar.gz cargo-cache.tar.gz > SHA256SUMS.txt
+          sha256sum windows-std.tar.gz cargo-cache.tar.gz > SHA256SUMS.txt
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: ca03c-development-inputs
+          name: ca03c-windows-development-inputs
           path: prepared/
           retention-days: 1
           if-no-files-found: error
