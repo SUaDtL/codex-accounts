@@ -25,7 +25,11 @@ impl Drop for Identity {
 }
 impl Identity {
     pub fn new(issuer: String, subject: String, workspace: String) -> Result<Self, DataError> {
-        let identity = Self { issuer, subject, workspace };
+        let identity = Self {
+            issuer,
+            subject,
+            workspace,
+        };
         for value in [&identity.issuer, &identity.subject, &identity.workspace] {
             if value.is_empty()
                 || value.len() > 2048

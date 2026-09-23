@@ -34,7 +34,10 @@ mod tests {
     #[test]
     fn partial_randomness_failure_clears_destination() {
         let mut bytes = [0x41; 32];
-        assert_eq!(fill(&mut FailingEntropy, &mut bytes), Err(CryptoError::RandomnessUnavailable));
+        assert_eq!(
+            fill(&mut FailingEntropy, &mut bytes),
+            Err(CryptoError::RandomnessUnavailable)
+        );
         assert!(bytes.iter().all(|b| *b == 0));
     }
 }

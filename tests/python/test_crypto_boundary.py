@@ -63,6 +63,9 @@ class CryptoBoundary(unittest.TestCase):
         self.assertIn('create_new(true)', source)
         self.assertIn('Err(CryptoError::KeyProtectionUnavailable)', source)
         self.assertIn('CA03B-SYNTHETIC-FIXTURE', source)
+        self.assertIn('/crates/vault-crypto/ca03b-synthetic.dpapi',
+                      (ROOT / '.gitignore').read_text())
+        self.assertFalse((CRATE / 'ca03b-synthetic.dpapi').exists())
 
 
 class DependencyReviewTests(unittest.TestCase):

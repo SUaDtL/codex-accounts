@@ -8,7 +8,9 @@ use zeroize::Zeroize;
 #[derive(PartialEq, Eq, PartialOrd, Ord)]
 struct DecodedKey(String);
 impl Drop for DecodedKey {
-    fn drop(&mut self) { self.0.zeroize(); }
+    fn drop(&mut self) {
+        self.0.zeroize();
+    }
 }
 
 struct Check<'a> {

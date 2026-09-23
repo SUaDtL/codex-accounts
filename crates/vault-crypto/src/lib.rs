@@ -2,12 +2,12 @@
 //! No key import/export, credential CLI, filesystem, network or runtime dispatch.
 #![deny(unsafe_code)]
 
-mod envelope;
-mod keys;
-mod random;
 #[cfg(all(windows, target_arch = "x86_64"))]
 #[allow(unsafe_code)]
 mod dpapi;
+mod envelope;
+mod keys;
+mod random;
 
 pub use envelope::{Envelope, EnvelopeContext, Purpose, MAX_ENVELOPE_BYTES, MAX_PLAINTEXT_BYTES};
 pub use keys::{Fingerprint, ProtectedRootKey, RootKey, SecretBytes};
