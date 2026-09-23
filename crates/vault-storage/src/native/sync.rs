@@ -22,15 +22,22 @@ impl Drop for Apartment {
         unsafe { windows::Win32::System::WinRT::RoUninitialize() };
     }
 }
+thread_local! {
+    // Keep the owning thread's MTA alive across an entire storage session.
+    // Nested queries must not repeatedly tear down process COM infrastructure.
+    // The same-thread TLS destructor balances the one successful initialization.
+    static APARTMENT: Result<Apartment, StorageError> = Apartment::enter();
+}
+
 pub(super) fn registered_sync_check(ancestors: &[File]) -> Result<(), StorageError> {
     use windows::core::{Interface, HSTRING};
     use windows::Storage::{IStorageItem, Provider::IStorageProviderSyncRootManagerStatics};
-    let _apartment = Apartment::enter()?;
+    APARTMENT.with(|value| value.as_ref().map(|_| ()).map_err(|e| *e))?;
     // This must succeed positively. A failed enumeration is NEVER no registered roots.
     // Microsoft documents both legacy and modern registrations in this inventory.
     // Request the registered factory directly: the generated static helper caches
     // an agile factory across apartment teardown. This scoped factory and every
-    // derived interface must be released BEFORE RoUninitialize. There is no
+    // derived interface are released before the thread-owned apartment. There is no
     // generated helper's DLL-search fallback for a missing registered class.
     let factory: IStorageProviderSyncRootManagerStatics = unsafe {
         windows::Win32::System::WinRT::RoGetActivationFactory(&HSTRING::from(
@@ -123,9 +130,9 @@ mod creation_checks;
 
 #[cfg(test)]
 #[test]
-fn native_repeated_inventory_does_not_reuse_a_torn_down_apartment_factory() {
-    // Each query fully opens and closes its own apartment. No factory survives
-    // across calls; successful inventory is still required on every iteration.
+fn native_repeated_inventory_retains_the_owned_thread_apartment() {
+    // Every query gets an uncached factory and a fresh successful inventory.
+    // The thread retains its apartment until all queries and interfaces end.
     for _ in 0..100 {
         registered_sync_check(&[]).expect("independent registered-root inventory");
     }
