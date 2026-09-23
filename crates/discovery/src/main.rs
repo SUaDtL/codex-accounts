@@ -1,6 +1,6 @@
 #![forbid(unsafe_code)]
 use codex_accounts_discovery::{encode, error_report, inspect, options, ReadError};
-use std::io::{self, Write};
+use std::io::{self, IsTerminal, Write};
 
 fn main() {
     let args: Result<Vec<String>, ReadError> = std::env::args_os()
@@ -14,13 +14,18 @@ fn main() {
             --candidate ID             Inspect a selected opaque package ID\n\
             --runtime-relative PATH    Optional .exe inside that same package (role unqualified)\n\
             --candidate-home PATH      Optional nominated home; config.toml declaration only\n\
-            --show-local-paths         LOCAL DISPLAY ONLY, not an upload-ready report\n\
+            --show-local-paths         TERMINAL ONLY; refuses redirected output\n\
             No credential files, credential stores, subprocesses or network requests.\n\
             Exit 0 means inventory/evaluation completed, not qualified. Exit 2 means refused."
         );
         return;
     }
-    let result = args.and_then(options).and_then(|opts| inspect(&opts));
+    let result = args.and_then(|args| {
+        if args.iter().any(|arg| arg == "--show-local-paths") && !io::stdout().is_terminal() {
+            return Err(ReadError::Usage);
+        }
+        options(args).and_then(|opts| inspect(&opts))
+    });
     let (report, failed) = match result {
         Ok(report) => (report, false),
         Err(error) => (error_report(error), true),
