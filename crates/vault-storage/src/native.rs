@@ -24,7 +24,12 @@ use windows_sys::Win32::{
     Storage::{CloudFilters::*, FileSystem::*},
     System::{
         Com::CoTaskMemFree,
-        SystemServices::{ACCESS_ALLOWED_ACE_TYPE, ACCESS_DENIED_ACE_TYPE},
+        SystemServices::{
+            ACCESS_ALLOWED_ACE_TYPE, ACCESS_DENIED_ACE_TYPE, SECURITY_SERVICE_ID_BASE_RID,
+            SECURITY_TRUSTED_INSTALLER_RID1, SECURITY_TRUSTED_INSTALLER_RID2,
+            SECURITY_TRUSTED_INSTALLER_RID3, SECURITY_TRUSTED_INSTALLER_RID4,
+            SECURITY_TRUSTED_INSTALLER_RID5,
+        },
         Threading::{GetCurrentProcess, OpenProcessToken},
     },
     UI::Shell::{FOLDERID_LocalAppData, SHGetKnownFolderPath},
@@ -144,6 +149,7 @@ struct Security {
     user: Vec<u8>,
     system: Vec<u8>,
     admins: Vec<u8>,
+    installer: Vec<u8>,
     descriptor: Allocation,
 }
 fn sid_copy(sid: *mut c_void) -> Result<Vec<u8>, StorageError> {
@@ -166,7 +172,42 @@ fn known_sid(kind: WELL_KNOWN_SID_TYPE) -> Result<Vec<u8>, StorageError> {
     }
     sid_copy(b.as_mut_ptr().cast())
 }
+// Exact Windows servicing principal from SDK SID constants, never a localized
+// account-name lookup or an arbitrary service-account whitelist. Ancestors only.
+fn installer_sid() -> Result<Vec<u8>, StorageError> {
+    let authority = SECURITY_NT_AUTHORITY;
+    let mut storage = [0u64; 16];
+    let ptr = storage.as_mut_ptr().cast();
+    // SAFETY: aligned SID_MAX_SUB_AUTHORITIES-capable buffer, six subauthorities.
+    if unsafe { InitializeSid(ptr, &authority, 6) } == 0 {
+        return Err(last());
+    }
+    for (i, value) in [
+        SECURITY_SERVICE_ID_BASE_RID as u32,
+        SECURITY_TRUSTED_INSTALLER_RID1,
+        SECURITY_TRUSTED_INSTALLER_RID2,
+        SECURITY_TRUSTED_INSTALLER_RID3,
+        SECURITY_TRUSTED_INSTALLER_RID4,
+        SECURITY_TRUSTED_INSTALLER_RID5,
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        // SAFETY: initialized SID has exactly six writable subauthority entries.
+        unsafe {
+            *GetSidSubAuthority(ptr, i as u32) = value;
+        }
+    }
+    sid_copy(ptr)
+}
 impl Security {
+    fn ancestor_owner_allowed(&self, owner: &[u8]) -> bool {
+        owner == self.user
+            || owner == self.system
+            || owner == self.admins
+            || owner == self.installer
+    }
+
     fn new() -> Result<Self, StorageError> {
         let mut t = null_mut();
         if unsafe { OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &mut t) } == 0 {
@@ -223,6 +264,7 @@ impl Security {
             user,
             system: known_sid(WinLocalSystemSid)?,
             admins: known_sid(WinBuiltinAdministratorsSid)?,
+            installer: installer_sid()?,
             descriptor: Allocation(descriptor),
         })
     }
@@ -255,7 +297,7 @@ impl Security {
         }
         let sd = Allocation(sd);
         let owner = sid_copy(owner)?;
-        if owner != self.user && (strict || (owner != self.system && owner != self.admins)) {
+        if (strict && owner != self.user) || (!strict && !self.ancestor_owner_allowed(&owner)) {
             return Err(StorageError::UnsafePath);
         }
         if dacl.is_null() || unsafe { IsValidAcl(dacl) } == 0 {
@@ -325,7 +367,7 @@ impl Security {
                 } else {
                     return Err(StorageError::UnsafePath);
                 }
-            } else if sid != self.user && sid != self.system && sid != self.admins {
+            } else if !self.ancestor_owner_allowed(&sid) {
                 // Broad sibling creation alone cannot replace our pinned path.
                 // Actual object delete/control/reparse writes remain prohibited.
                 let dangerous = DELETE
