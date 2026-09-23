@@ -3,7 +3,8 @@
 Manual, owner-controlled account handoff for the official Codex Desktop application.
 
 **Development only. No Desktop build is qualified. Capture, login, live account
-switching, persistent credential storage and Desktop process control are not enabled.**
+switching and Desktop process control are not enabled. Persistent storage is a
+development library, not an integrated account manager.**
 
 ## Current implementation
 
@@ -20,16 +21,20 @@ absence, strict bounded JSON, composite identity and immutable-generation metada
 It does not persist, capture or install credentials. See
 [the data-slice contract](docs/ca-03-vault-data.md) for its structural limits.
 
-CA-03B adds authenticated XChaCha20-Poly1305 envelopes, HKDF-SHA256-separated keys,
-OS-random roots and nonces, and current-user Windows x64 DPAPI root-key protection.
-Application-owned resource, identity and decoded-key buffers use reviewed
-zeroization. This is a library, not a persistent account vault or an authorized
-capture/switch path. Two-user native evidence and independent macOS Keychain remain
-pending. See [the crypto contract and safe native checks](docs/ca-03b-crypto.md).
+CA-03B adds authenticated envelopes, context-separated keys, OS randomness,
+owned-buffer zeroization and current-user Windows x64 DPAPI root-key protection.
+CA-03C adds a protected persistent registry and immutable generations, exact-byte
+resource storage, write-ahead commits, startup reconciliation, deferred retention
+and explicit encrypted-evidence recovery for torn unpublished control writes.
+See [the crypto contract](docs/ca-03b-crypto.md) and
+[the storage contract and native checks](docs/ca-03c-storage.md).
 
-PR #5 is a dependent review on PR #3. Do not merge it into the dependency branch;
-after the owner merges #3, reconcile and retarget through normal reviewed
-operations. Next implementation: CA-03C protected persistence and registry commits.
+These are libraries, not an enabled capture/switch path. Structural identity is not
+verified Desktop identity. Full Q0, two-user/unavailable-store and physical-power-loss
+qualification remain open; macOS persistence is unsupported. PR #6 carries CA-03C
+on the CA-03A dependency branch, after the owner's PR #5 merge there. Review PR #3
+before reconciling/retargeting #6 to main; do not merge #6 into its dependency branch.
+Next bounded work: CA-04A storage-backed switch journal/coordinator. It has not run.
 
 The product direction is Rust core plus a thin Tauri 2 shell. No inference proxy,
 credential-management CLI/MCP/HTTP interface, background rotation, host patch,
@@ -95,6 +100,7 @@ writes the nominated home or creates a qualification receipt.
 | `crates/runtime` | Bounded untrusted byte framing and method-name allowlist, not live RPC |
 | `crates/vault` | Exact-byte in-memory resource/identity/generation rules |
 | `crates/vault-crypto` | Authenticated envelopes and Windows root-key protection; no disk storage |
+| `crates/vault-storage` | Protected Windows persistence and recoverable encrypted registry/generation commits |
 | `app` | Future Tauri shell; no consumer application yet |
 | `compatibility` | Empty catalog; no record or boolean can open production authority |
 | `docs` / `tools` | Specification, roadmap, scoped validation and developer checks |
