@@ -432,28 +432,9 @@ fn check_object(f: &File, directory: bool) -> Result<Stamp, StorageError> {
     }
     Ok(s)
 }
-fn cloud_check(f: &File) -> Result<(), StorageError> {
-    let mut info = [0u64; 256];
-    let mut size = 0;
-    // SAFETY: read-only query on held metadata handle; all returned data stays local.
-    let result = unsafe {
-        CfGetSyncRootInfoByHandle(
-            f.as_raw_handle(),
-            CF_SYNC_ROOT_INFO_BASIC,
-            info.as_mut_ptr().cast(),
-            std::mem::size_of_val(&info) as u32,
-            &mut size,
-        )
-    };
-    let hresult = |code: u32| (0x80070000u32 | code) as i32;
-    if result == hresult(ERROR_NOT_A_CLOUD_FILE)
-        || result == hresult(ERROR_CLOUD_FILE_NOT_UNDER_SYNC_ROOT)
-    {
-        Ok(())
-    } else {
-        Err(StorageError::UnsafePath)
-    }
-}
+mod sync;
+use sync::cloud_check;
+
 fn open_file(
     path: &Path,
     access: u32,
@@ -558,7 +539,7 @@ impl Disk {
         if sid_copy(owner)? != security.user {
             return Err(StorageError::UnsafePath);
         }
-        cloud_check(parent)?;
+        cloud_check(parent, &dirs)?;
         let mut fs = [0u16; 32];
         let mut flags = 0;
         if unsafe {
@@ -599,8 +580,8 @@ impl Disk {
         )?;
         check_object(&f, true)?;
         security.check(&f, true)?;
-        cloud_check(&f)?;
         dirs.push(f);
+        cloud_check(dirs.last().ok_or(StorageError::UnsafePath)?, &dirs)?;
         let identities = dirs
             .iter()
             .map(|f| stamp(f).map(|s| (s.volume, s.id)))
@@ -635,9 +616,9 @@ impl Disk {
                 return Err(StorageError::ExternalChange);
             }
         }
-        self.security
-            .check(self.dirs.last().ok_or(StorageError::UnsafePath)?, true)?;
-        Ok(())
+        let root = self.dirs.last().ok_or(StorageError::UnsafePath)?;
+        self.security.check(root, true)?;
+        cloud_check(root, &self.dirs)
     }
     fn path(&self, name: &str) -> Result<PathBuf, StorageError> {
         // Private trait still rechecks the path grammar at the native boundary.

@@ -7,7 +7,7 @@
     "docs/ca-02-dependencies.json": "ceaffa36b058d90fef01df21634610938aa47755edd8b6a15f7adc7257f6cc5f",
     "docs/ca-03b-dependencies.json": "0071f27fcdd6dd9aba04aee06e9cb75b2177be7fae7999980f05a19c31563c7d"
   },
-  "lock_sha256": "bbe7f8496f3d0249a25b0e27f108585e63f7d6d091125ffee8e8a42d1bee4476",
+  "lock_sha256": "660d75594f213b3bef29e12ec689b53c365940d63c808b4a7c87b660120c7f43",
   "manifest_sha256": {
     "Cargo.toml": "c009495e6fa55854b3befc954791c171e3ce971341afaa45a4d50086ea3f1478",
     "crates/core/Cargo.toml": "209eb46bb52c2f4fb11dcd931e4274927be939318b5e3f5fdbe881de96b8788e",
@@ -16,15 +16,16 @@
     "crates/discovery/Cargo.toml": "79841e868232a145681c654a4d4cf5c8f8269daf0e5c3e52a5d4ca554381d01a",
     "crates/vault/Cargo.toml": "dc5ac46edfd6dbea78ad8588cf124cbd602958d49537624cccbf207ef4cd1229",
     "crates/vault-crypto/Cargo.toml": "d48fbb2861c50086613bbde5caa9d6971385a3a8c1664d45e9b2a4426ccc4e8f",
-    "crates/vault-storage/Cargo.toml": "200df66ca44d2a83f6e5e283920d64fc351163b6c57fb31660f78ad8a9c6dbb0"
+    "crates/vault-storage/Cargo.toml": "7e8fbf850ea5d9b8539b034026b4e369f340dd04d0ea27d0632c323652f821aa"
   },
   "packages": [],
-  "scope": "No new external package/version/checksum or build script. Prior 58 exact records retained. Adds local vault-storage and borrowed non-secret ID/identity accessors. Windows-sys features enable documented current-user security, native handle/filesystem, CloudFilter and known-folder APIs. All application-authored native effects are isolated in vault-storage/src/native.rs. Linux/macOS remain unsupported for persistent storage.",
+  "scope": "No new external package/version/checksum or build script. Prior 58 exact records retained. Adds local vault-storage and borrowed non-secret ID/identity accessors. Windows-sys features enable documented current-user security, native handle/filesystem, CloudFilter and known-folder APIs. All application-authored native effects are isolated in vault-storage/src/native.rs. Linux/macOS remain unsupported for persistent storage. Reuses windows 0.62.2 with Storage_Provider and Win32_System_WinRT for independent read-only registered-sync-root enumeration; no registration, new package or version.",
   "source_review": {
     "windows-sys": "0.61.2 archive verified against existing Cargo checksum. Inspected generated FILE_RENAME_INFO/FILE_DISPOSITION_INFO, security/token/ACL, known-folder, CloudFilter and file API declarations; no new native library beyond OS DLLs; no package build script.",
     "uuid": "OS randomness already reviewed in CA-03B; random UUID version/variant bits per RFC 9562. No new random generator.",
     "advisories": "Inherited CA-03B RustSec snapshot and affected-range review apply to identical versions. No new cargo-audit execution or full audit claimed.",
     "preparation_run": 35912987673,
-    "preparation_artifact_sha256": "19bdcc18b72f45b4401b6de38cabe2cd5df3a1198b22680b1098b777e3eef691"
+    "preparation_artifact_sha256": "19bdcc18b72f45b4401b6de38cabe2cd5df3a1198b22680b1098b777e3eef691",
+    "windows": "0.62.2 exact cached archive and generated StorageProviderSyncRootManager::GetCurrentSyncRoots, SyncRootInfo::Path, IStorageItem::Path, IVectorView::Size/GetAt and RoInitialize/RoUninitialize declarations inspected. Microsoft documents successful inventory including legacy and modern registered roots. Errors do not count as absence. Folder identity is compared via metadata handles; unavailable/remote/reparse-root observations refuse. WinRT apartment is same-thread balanced; no package registration or service mutation."
   }
 }

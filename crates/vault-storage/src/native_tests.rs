@@ -453,6 +453,8 @@ fn native_preflight_reports_only_sanitized_security_conditions() {
                     "system"
                 } else if s == security.admins {
                     "administrators"
+                } else if s == security.installer {
+                    "windows_servicing"
                 } else {
                     "other"
                 }
@@ -484,7 +486,8 @@ fn native_preflight_reports_only_sanitized_security_conditions() {
         held.push(f);
     }
     let parent = held.last().unwrap();
-    if let Err(e) = cloud_check(parent) {
+    sync::registered_sync_check(&held).expect("complete registered sync-root inventory");
+    if let Err(e) = cloud_check(parent, &held) {
         let mut buffer = [0u64; 256];
         let mut size = 0;
         let code = unsafe {
@@ -501,4 +504,25 @@ fn native_preflight_reports_only_sanitized_security_conditions() {
     drop(held);
     let d = Disk::at(&dir.0, true).expect("root creation after passing ancestor preflight");
     drop(d);
+}
+
+#[test]
+fn native_ancestor_owner_allowlist_is_exact_not_any_service_or_user() {
+    let s = Security::new().unwrap();
+    for sid in [&s.user, &s.system, &s.admins, &s.installer] {
+        assert!(s.ancestor_owner_allowed(sid));
+    }
+    for kind in [
+        WinWorldSid,
+        WinAuthenticatedUserSid,
+        WinBuiltinUsersSid,
+        WinLocalServiceSid,
+        WinNetworkServiceSid,
+    ] {
+        assert!(!s.ancestor_owner_allowed(&known_sid(kind).unwrap()));
+    }
+    let mut unrelated = s.installer.clone();
+    let last = unrelated.len() - 1;
+    unrelated[last] ^= 1;
+    assert!(!s.ancestor_owner_allowed(&unrelated));
 }

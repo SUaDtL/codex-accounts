@@ -115,6 +115,7 @@ dependencies = [
  "codex-accounts-vault-crypto",
  "getrandom",
  "sha2",
+ "windows",
  "windows-sys",
  "zeroize",
 ]

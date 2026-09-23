@@ -25,15 +25,20 @@ class StorageBoundary(unittest.TestCase):
         self.assertEqual(tomllib.loads((CRATE/'Cargo.toml').read_text())['lints']['rust']['unsafe_code'], 'deny')
 
     def test_no_live_credential_or_network_dispatch(self):
-        for p in (CRATE/'src').glob('*.rs'):
+        for p in (CRATE/'src').rglob('*.rs'):
             if p.name.endswith('tests.rs'):
                 continue
             text = p.read_text()
             for word in ['std::net', 'std::process', 'Command::', 'auth.json', 'cap_sid', 'println!', 'eprintln!', 'SetNamedSecurityInfoW', 'SetSecurityInfo(']:
                 self.assertNotIn(word,text,(p.name,word))
         native = (CRATE/'src/native.rs').read_text()
-        for required in ['FILE_FLAG_OPEN_REPARSE_POINT', 'FILE_FLAG_WRITE_THROUGH', 'SE_DACL_PROTECTED', 'CREATE_NEW', 'GetSecurityInfo(', 'CF_SYNC_ROOT_INFO_BASIC']:
+        for required in ['FILE_FLAG_OPEN_REPARSE_POINT', 'FILE_FLAG_WRITE_THROUGH', 'SE_DACL_PROTECTED', 'CREATE_NEW', 'GetSecurityInfo(']:
             self.assertIn(required,native)
+        sync=(CRATE/'src/native/sync.rs').read_text()
+        self.assertIn('CF_SYNC_ROOT_INFO_BASIC',sync)
+        self.assertIn('GetCurrentSyncRoots()',sync)
+        self.assertIn('registered_sync_check(ancestors)',sync)
+        self.assertNotIn('Register(',sync)
         self.assertNotIn('pub fn at(',native)
         self.assertNotIn('env::var',native)
         self.assertIn('No public', (CRATE/'src/lib.rs').read_text())
