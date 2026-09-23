@@ -2,82 +2,83 @@
 
 Manual, owner-controlled account handoff for the official Codex Desktop application.
 
-**Development state: Q0 foundations. No installation is qualified. Account capture,
-login, switching, vault storage and Desktop process control are not implemented or enabled.**
-This is the first source increment, not an installable account switcher.
+**Development only. No Desktop build is qualified. Capture, login, live account
+switching, credential storage and Desktop process control are not enabled.**
+
+## Current implementation
+
+CA-02 provides a concrete read-only Windows x64 registered-package reader,
+bounded executable/configuration observations, conservative compatibility results
+and native/synthetic tests. The source-level mutation gates always refuse and the
+compatibility catalog remains empty. Unknown publisher, runtime role, effective
+configuration or policy remains unknown; finding `auth.json` cannot establish a
+file backend. macOS qualification remains independent; Linux/WSL are not supported
+product targets.
+
+The product direction is Rust core plus a thin Tauri 2 shell. No inference proxy,
+credential-management CLI/MCP/HTTP interface, background rotation, host patch,
+self-updater or broad history migration is part of the product.
 
 ## Start here
 
-The [product specification](docs/local-codex-switcher-spec.html) is the normative
-contract. Its embedded `artifact-model` is the canonical structured model. The
-[comparison](docs/codex-switchers-comparison.html) is supporting research, not
-permission to expand the product. Both documents are preserved byte-for-byte from
-the supplied project sources. Open the HTML files locally for their navigable views.
+The normative [specification](docs/local-codex-switcher-spec.html) owns product
+behavior through its embedded `artifact-model`; its visible text is checked against
+that model. The [implementation plan](docs/implementation-plan.html) is the single
+working roadmap, adopted from the Project packet. The [next-packet brief](docs/next-pr.md)
+defines the bounded next increment. [Validation](docs/validation.md) separates source,
+CI/native API tests and real Desktop qualification.
 
-The first increment provides a read-only candidate-inventory tool, Rust safety
-and status models, bounded transport primitives, tests, and the Q0 qualification
-procedure. The core has no third-party crate dependencies. There is no credential
-writer, OAuth client, inference proxy, HTTP server, background agent, updater or
-GUI. The planned product remains Rust + Tauri 2; the Q4 shell is not fabricated here.
+CA-02 proposes a T-07 clarification, described in
+[the scoped amendment](docs/spec-amendments/ca-02-t07.md). Original source provenance
+is retained. A passing document check or merge never qualifies an installation.
+The [comparison](docs/codex-switchers-comparison.html) remains supporting research,
+not authority to expand the product. Open HTML files locally for their views.
 
-## Validate the bootstrap
+## Build and validate
 
-Prerequisites: Python 3.11+ and Rust 1.90.0 with rustfmt and clippy. Use the pinned
-`rust-toolchain.toml`. On an owner-reviewed machine with the toolchain acquired:
+Use Python 3.11+ and the pinned Rust 1.90.0 toolchain with rustfmt and Clippy.
+Review the dependency record before acquisition. Do not weaken `--locked`.
 
 ```console
+python tools/check_dependencies.py
+cargo fetch --locked
 python -m unittest discover -s tests/python -v
 python tools/spec_index.py check
+cargo fmt --all -- --check
 cargo test --workspace --all-targets --locked --offline
 cargo clippy --workspace --all-targets --locked --offline -- -D warnings
-cargo fmt --all -- --check
 ```
 
-Python checks do not execute Rust. CI compilation does not qualify a real Desktop
-installation. See [validation](docs/validation.md) for exactly what was and was not
-executed for this source increment.
+Hosted Windows tests exercise real OS APIs using synthetic objects. They are not
+installed-Codex or consumer-release evidence. No real authentication fixtures belong
+in Git, logs or support reports.
 
-## Read-only Q0 inventory
+## Read-only discovery
 
-```console
-python tools/q0_inventory.py --desktop-file "/absolute/path/to/desktop/executable" --runtime-file "/absolute/path/to/bundled/runtime" --codex-home "/absolute/path/to/candidate/home"
-```
+Build `codex-accounts-discovery` and run it without arguments to list current-user
+registered candidates. See the complete [Q0 procedure](docs/q0-qualification.md) for
+safe selection, expected refusals and redactions. `--help` describes the developer
+entry point. `--show-local-paths` is terminal-only and must not be shared.
 
-On Windows, use the full Windows paths discovered for the selected installation.
-The tool never invokes either nominated executable, never reads `auth.json`, and
-never writes to the nominated home. It reads executable metadata/content for
-hashing and an optional bounded `config.toml` to classify the declared backend.
-It does not establish effective configuration, signature trust, package identity,
-process quiescence or policy. Those remain explicit Q0 evidence gaps.
+The original `tools/q0_inventory.py` is retained as a legacy synthetic developer
+aid. It does not replace native discovery or resolve effective Desktop configuration.
+Neither inventory opens live authentication files, executes nominated binaries,
+writes the nominated home or creates a qualification receipt.
 
-Default output omits local paths and all arbitrary config/environment values.
-`--show-local-paths` is an explicit local-display mode; do not upload that output.
-Exit 0 means inventory collected, **not** qualified or switch-ready. Every report
-has `qualified: false` and `credential_mutation_enabled: false`.
-
-Follow [the Q0 procedure](docs/q0-qualification.md), not a copy-and-replace script.
-The compatibility catalog is deliberately empty.
-
-## Source layout
+## Source layout and authority
 
 | Path | Purpose |
 | --- | --- |
-| `crates/core` | Fail-closed availability and separate verification statuses |
-| `crates/platform` | Platform classification only; no native mutation adapter |
-| `crates/runtime` | Method allowlist and bounded byte framing; no subprocess or JSON-RPC session |
-| `tools` | Developer-only inventory and symbol-scoped spec retrieval |
-| `tests/python` | Executed bootstrap/inventory/spec tests |
-| `compatibility` | Empty catalog and evidence boundaries |
-| `app` | Q4 boundary, not an implemented Tauri application |
-| `docs/implementation-plan.html` | Source-scoped work packages and acceptance status |
+| `crates/core` | Refusal, compatibility observations and separate result vocabulary |
+| `crates/platform` | Platform classification; no native credential writer |
+| `crates/discovery` | Read-only native inventory with a narrow documented unsafe boundary |
+| `crates/runtime` | Bounded untrusted byte framing and method-name allowlist, not live RPC |
+| `app` | Future Tauri shell; no consumer application yet |
+| `compatibility` | Empty catalog; no record or boolean can open production authority |
+| `docs` / `tools` | Specification, roadmap, scoped validation and developer checks |
 
-## Safety and ownership
-
-Changing accounts will not isolate history or workspace data. The specification
-requires encrypted inactive credentials, preservation of refreshed generations,
-normal app shutdown and recoverable writes before enabling any live handoff.
-None of those future capabilities is simulated as a successful production action.
-
-No release license has been selected. `publish = false` prevents accidental crate
-publication; repository visibility is not a license grant. See `SECURITY.md` before
-sharing reports. No real credentials or machine-specific evidence belong in Git.
+Changing accounts does not isolate local history or workspaces. The later product
+must protect inactive credentials, preserve newest generations and recover from
+interrupted writes before live handoff exists. Signing, packaging, reproducibility,
+license selection and real Desktop qualification remain separate release work.
+No owner license has been selected; crates retain `publish = false`.

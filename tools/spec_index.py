@@ -61,6 +61,15 @@ def symbols(data: dict[str, Any]) -> dict[str, Any]:
 
 def check(root: Path = ROOT) -> dict[str, Any]:
     data, ids = model(root / "docs/local-codex-switcher-spec.html")
+    if __package__:
+        from . import spec_projection, spec_proposal, plan_projection
+    else:
+        import spec_projection
+        import spec_proposal
+        import plan_projection
+    spec_projection.check((root / "docs/local-codex-switcher-spec.html").read_text(encoding="utf-8"), data)
+    spec_proposal.check_candidate(root)
+    plan_projection.check(root)
     table = symbols(data)
     requirements = {key for key in table if re.fullmatch(r"[FS]-\d{3}", key)}
     tests = {key for key in table if re.fullmatch(r"T-\d{2}", key)}
