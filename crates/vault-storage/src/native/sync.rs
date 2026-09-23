@@ -1,11 +1,12 @@
-//! Read-only registered cloud-root evidence; no registration or service mutation.
+//! Read-only sync-location evidence. API failure is not evidence of absence.
 use super::*;
 
+// A thread-affine guard: never uninitialize COM on a different thread.
 struct Apartment(std::marker::PhantomData<std::rc::Rc<()>>);
 impl Apartment {
     fn enter() -> Result<Self, StorageError> {
-        // SAFETY: a same-thread, non-Send guard balances a successful WinRT init.
-        // Changed apartment/unavailable WinRT is a refusal, not an empty inventory.
+        // SAFETY: each successful call is balanced on this same thread. An
+        // incompatible existing apartment is refused, never reconfigured.
         unsafe {
             windows::Win32::System::WinRT::RoInitialize(
                 windows::Win32::System::WinRT::RO_INIT_MULTITHREADED,
@@ -97,3 +98,7 @@ pub(super) fn cloud_check(f: &File, ancestors: &[File]) -> Result<(), StorageErr
         Err(StorageError::UnsafePath)
     }
 }
+
+#[cfg(test)]
+#[path = "creation_checks.rs"]
+mod creation_checks;
