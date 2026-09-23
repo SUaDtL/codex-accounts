@@ -30,6 +30,12 @@ pub struct RootKey {
     pub(crate) id: [u8; 16],
 }
 impl RootKey {
+    /// Non-secret random identifier recovered from native-protected root material.
+    /// Storage may use it to select context independently of untrusted envelopes.
+    pub fn identifier(&self) -> [u8; 16] {
+        self.id
+    }
+
     pub fn generate() -> Result<Self, CryptoError> {
         Self::generate_using(&mut SystemEntropy)
     }
