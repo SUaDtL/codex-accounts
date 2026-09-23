@@ -44,19 +44,20 @@ jobs:
           p.write_text(p.read_text().replace('[dependencies]', '[dependencies]\nzeroize = { version = "=1.8.2", default-features = false, features = ["alloc"] }'))
           subprocess.run(['cargo', 'update', '--workspace'], check=True)
           PY
-      - name: Emit exact lock candidate and newly resolved registry metadata
+      - name: Preserve lock candidate, registry metadata and exact source snapshot
         run: |
           python3 - <<'PY'
           import json, subprocess, tomllib, urllib.request
           from pathlib import Path
-          lock = tomllib.loads(Path('Cargo.lock').read_text())
+          out = Path('ca03b-review-artifacts')
+          out.mkdir()
+          lock_text = Path('Cargo.lock').read_text()
+          lock = tomllib.loads(lock_text)
           old = tomllib.loads(subprocess.check_output(['git', 'show', 'HEAD:Cargo.lock'], text=True))
           keyed = lambda x: {(p['name'], p['version']): p for p in x['package'] if 'source' in p}
           current, original = keyed(lock), keyed(old)
           assert all(current.get(k) == v for k, v in original.items()), 'Existing dependency moved'
-          print('LOCK_CANDIDATE_BEGIN')
-          print(Path('Cargo.lock').read_text())
-          print('LOCK_CANDIDATE_END')
+          packages = []
           for key, package in sorted(current.items()):
               if key in original:
                   continue
@@ -65,6 +66,18 @@ jobs:
               with urllib.request.urlopen(req, timeout=30) as response:
                   value = json.load(response)['version']
               assert value['checksum'] == package['checksum'] and not value['yanked']
-              print('NEW_PACKAGE ' + json.dumps({**package, 'license': value['license'], 'rust_version': value.get('rust_version'), 'repository': value.get('repository')}, sort_keys=True))
+              record = {**package, 'license': value['license'], 'rust_version': value.get('rust_version'), 'repository': value.get('repository')}
+              packages.append(record)
+              print('NEW_PACKAGE ' + json.dumps(record, sort_keys=True))
+          (out / 'Cargo.lock').write_text(lock_text)
+          (out / 'registry-metadata.json').write_text(json.dumps(packages, indent=2))
+          (out / 'source-commit.txt').write_text(subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True))
+          subprocess.run(['git', 'archive', '--format=tar', '--output=' + str(out / 'source.tar'), 'HEAD'], check=True)
           print('SOURCE PREPARATION ONLY. No crate archives acquired, build scripts run, or product tests executed.')
           PY
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2; temporary review transport
+        with:
+          name: ca03b-metadata
+          path: ca03b-review-artifacts/
+          if-no-files-found: error
+          retention-days: 3
