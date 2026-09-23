@@ -2,7 +2,8 @@
 
 This is the first CA-03/Q1 sub-packet. It is a library-only implementation, not
 an encrypted vault, persistent credential store, or authorized account operation.
-It depends on the CA-02 review branch until that work is merged by the owner.
+CA-02's read-only discovery code is merged. PR #3 targets main; its actual source
+and final-head CI remain independently reviewable. No merge is implied here.
 
 ## Implemented
 
@@ -53,20 +54,25 @@ registry advancement recoverable together. Do not wire this slice to live accoun
 ## Dependencies and validation
 
 Direct pins reuse `serde = 1.0.229` and `serde_json = 1.0.145` from the existing
-reviewed lock. No registry package, version, checksum, native binding or build script
-is added. The internal vault lock entry is checked by locked hosted Cargo runs;
-the completion environment has no Rust toolchain. The existing dependency review
-checker remains unchanged and still compares all 32 external packages.
+reviewed lock. No registry package, version, checksum, native binding or build
+script is added. The 32-entry external dependency review remains unchanged.
+Review and acquisition are separate blocking CI steps, including on Windows;
+formatting, tests and Clippy remain blocking. Rust is executed on hosted runners,
+not claimed as locally executed when the preparation host lacks the toolchain.
 
 Primary API basis: https://serde.rs/impl-deserializer.html and
 https://docs.rs/serde/latest/serde/de/trait.MapAccess.html. These document the
 visitor/seed interface, not application security. The wrapper implements the
 application's depth and duplicate-key policy and keeps Serde's own limit enabled.
 
-The Rust suite in `crates/vault/tests/data.rs` covers boundaries, malformed input,
-decoded duplicate keys, nested objects, byte/absence preservation, identity and
-stale-generation rejection, retention and debug/error canaries. Hosted final-head
-formatting, tests and Clippy must pass before this slice is ready for review.
+`crates/vault/tests/data.rs` covers bounds, malformed input, decoded duplicate
+keys, byte/absence preservation, identity, stale-generation rejection, retention
+and debug/error canaries. `data_edges.rs` adds decoded surrogate-pair duplicates,
+malformed surrogates, object depth, rejected-append non-consumption, shuffled slots,
+explicit optional absence and UTF-8 byte-based identity limits. All fixtures are
+synthetic. Inspect PR #3 and validation.md for actual head-bound execution results;
+a test definition or an older green head is not a current pass.
+
 Compilation/model tests do not close full T-08/T-11/T-12/T-13/T-18/T-31 scenarios.
 
 ## Remaining CA-03
