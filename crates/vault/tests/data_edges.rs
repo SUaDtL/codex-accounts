@@ -103,8 +103,7 @@ fn identity_limit_counts_utf8_bytes_not_characters() {
     assert_eq!(exact.len(), 2048);
     assert!(Identity::new("SYNTHETIC".into(), exact.clone(), "SYNTHETIC".into()).is_ok());
     assert_eq!(
-        Identity::new("SYNTHETIC".into(), format!("{exact}x"), "SYNTHETIC".into())
-            .unwrap_err(),
+        Identity::new("SYNTHETIC".into(), format!("{exact}x"), "SYNTHETIC".into()).unwrap_err(),
         DataError::InvalidIdentity
     );
 }
