@@ -28,15 +28,22 @@ class SpecificationTests(unittest.TestCase):
         table = spec_index.symbols(data)
         self.assertTrue(all(f"T-{i:02d}" in table for i in range(1, 35)))
 
-    def test_product_crates_have_no_dependencies_or_unsafe(self):
+    def test_safe_crates_remain_dependency_free_with_scoped_native_boundary(self):
         import tomllib
-        for path in (ROOT / "crates").glob("*/Cargo.toml"):
+        for name in ["core", "platform", "runtime"]:
+            path = ROOT / "crates" / name / "Cargo.toml"
             parsed = tomllib.loads(path.read_text())
             self.assertNotIn("dependencies", parsed)
             self.assertIs(parsed["package"]["publish"]["workspace"], True)
         workspace = tomllib.loads((ROOT / "Cargo.toml").read_text())
         self.assertFalse(workspace["workspace"]["package"]["publish"])
         self.assertEqual(workspace["workspace"]["lints"]["rust"]["unsafe_code"], "forbid")
+
+        discovery = tomllib.loads((ROOT / "crates/discovery/Cargo.toml").read_text())
+        self.assertEqual(discovery["lints"]["rust"]["unsafe_code"], "deny")
+        self.assertEqual(discovery["dependencies"]["serde_json"], "=1.0.145")
+        self.assertEqual(discovery["dependencies"]["toml"]["version"], "=0.8.23")
+        self.assertIs(discovery["package"]["publish"]["workspace"], True)
 
     def test_inventory_has_no_subprocess_network_or_write_imports(self):
         tree = ast.parse((ROOT / "tools/q0_inventory.py").read_text())

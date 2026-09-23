@@ -128,6 +128,8 @@ impl ObservationStatus {
     }
 }
 
+pub mod compatibility;
+
 #[cfg(test)]
 mod tests {
     use super::*;
