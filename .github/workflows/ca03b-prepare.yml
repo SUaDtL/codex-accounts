@@ -2,7 +2,7 @@ name: CA-03B dependency metadata (not validation)
 on:
   push:
     branches: [feat/ca-03b-vault-crypto]
-    paths: [.github/workflows/ca03b-prepare.yml]
+    paths: [.github/workflows/ca03b-prepare.yml, tools/ca03b_review_sources.py]
 permissions:
   contents: read
 jobs:
@@ -75,6 +75,8 @@ jobs:
           subprocess.run(['git', 'archive', '--format=tar', '--output=' + str(out / 'source.tar'), 'HEAD'], check=True)
           print('SOURCE PREPARATION ONLY. No crate archives acquired, build scripts run, or product tests executed.')
           PY
+      - name: Inspect checksum-bound source archives without executing dependency code
+        run: python3 tools/ca03b_review_sources.py
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2; temporary review transport
         with:
           name: ca03b-metadata
