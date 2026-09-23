@@ -1,5 +1,27 @@
 # Validation and evidence boundary
 
+## CA-03A data increment
+
+PR #3 is a separate, dependent review of `crates/vault`: in-memory resource
+validation and generation metadata only. Encryption, native key protection,
+persistent storage and full CA-03/Q1 acceptance remain unimplemented.
+
+Local checks: 50 Python tests passed (48 inherited plus two static library-boundary
+cases); the specification/projection/provenance checks passed. Local Rust tools
+remain unavailable. Hosted run 35809705379 for
+`6a6e7a329c5cb73a3d160b068c0096a76223f2a5` compiled and passed all tests and
+Clippy on Ubuntu/Windows/macOS, including 18 new Rust data cases, but failed
+formatting in the test file. Commit `543118c5c06e9b794c8bb1fbd3e85410109dfd5f` applies the exact pinned-formatter
+diff and passed replacement run 35810179693. The final-head run must be checked
+after the last documentation commit; see PR #3's current
+validation section for the actual SHA/run result. An older partial/green result
+is not transferred to a later SHA.
+
+No external package/version/checksum was added; the existing 32-entry dependency
+review is unchanged. The internal vault lock entry was accepted by `--locked`
+hosted Cargo. Safe-core lints, always-refuse operation gates and empty catalog
+remain unchanged. No credential bytes were collected from an installed app.
+
 ## CA-02 discovery increment
 
 Source inspected: `39a74ab8f4f31e6b7d3c1fde4fe21d74850449d4`, PR #2.
@@ -15,7 +37,7 @@ These changes do not enable credentials or qualify an installation.
 | Dependency review | Existing 32-package locked review remains unchanged; no new dependency in CA-02 closeout. See dependency-policy.md and ca-02-dependencies.json. |
 | Local completion checks | 48 Python tests passed, including 13 projection/provenance/plan tests. Spec check passed 43 requirements, 34 acceptance IDs and zero qualified records. |
 | Local Rust toolchain | NOT AVAILABLE in this completion environment; do not claim local compilation or native execution. The changed CLI test needs the final-head hosted run. |
-| Final-head CI | Inspect the completed checks linked from PR #2; results for the earlier head above must not be transferred to a later commit. The PR handoff records the actual final SHA and run IDs. |
+| CA-02 completed-head CI | Head `6ee778e9592d46132f253e2bee836b2650a44bd0`, run [35808957582](https://github.com/SUaDtL/codex-accounts/actions/runs/35808957582): all four jobs succeeded. Inspected Windows job 107015928251 records 43 Rust passes, including nine native API cases and the redirected-output regression. Python suite: 48 passes. |
 | Real installation / Q0 contract | NOT RUN; official publisher/runtime role, effective home/policy, auth-resource/identity and lifecycle contracts remain unresolved. |
 | Full product/release acceptance | NOT COMPLETE. No OAuth, account handoff, encrypted vault, Tauri UI, release package, signing or reproducibility qualification. |
 
