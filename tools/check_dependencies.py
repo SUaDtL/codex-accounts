@@ -1,4 +1,4 @@
-"""Verify the inherited and scoped CA-04A dependency reviews before build acquisition."""
+"""Verify inherited scoped dependency reviews before build acquisition."""
 from __future__ import annotations
 
 import hashlib
@@ -53,5 +53,14 @@ def check(root: Path = ROOT) -> dict[str, int | str]:
     return {'reviewed_packages': len(expected), 'lock_review': 'passed'}
 
 
+def observed_inputs(root: Path = ROOT) -> dict[str, str]:
+    """Diagnostics only: hashes never authorize acquisition or update a review."""
+    paths = ['Cargo.lock', 'Cargo.toml', 'docs/ca-04a-dependencies.json']
+    paths += [str(p.relative_to(root)).replace('\\', '/')
+              for p in sorted((root / 'crates').glob('*/Cargo.toml'))]
+    return {p: hashlib.sha256((root / p).read_bytes()).hexdigest() for p in paths}
+
+
 if __name__ == '__main__':
+    print(json.dumps({'observed_source_inputs_not_approval': observed_inputs()}, sort_keys=True), flush=True)
     print(json.dumps(check(), sort_keys=True))
