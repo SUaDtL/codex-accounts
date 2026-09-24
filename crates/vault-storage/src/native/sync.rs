@@ -1,7 +1,8 @@
 //! Read-only sync-location evidence. API failure is not evidence of absence.
 use super::*;
 
-// A thread-affine guard: never uninitialize COM on a different thread.
+// Stack-owned and thread-affine: never run COM teardown in a TLS destructor.
+// Windows holds its loader lock while Rust thread-local destructors execute.
 struct Apartment(std::marker::PhantomData<std::rc::Rc<()>>);
 impl Apartment {
     fn enter() -> Result<Self, StorageError> {
@@ -18,26 +19,23 @@ impl Apartment {
 }
 impl Drop for Apartment {
     fn drop(&mut self) {
-        // SAFETY: successful same-thread initialization is owned by this guard.
+        // SAFETY: same-thread stack guard, after all scoped WinRT interfaces drop,
+        // before thread exit acquires the loader lock. Never stored in thread_local!.
         unsafe { windows::Win32::System::WinRT::RoUninitialize() };
     }
-}
-thread_local! {
-    // Keep the owning thread's MTA alive across an entire storage session.
-    // Nested queries must not repeatedly tear down process COM infrastructure.
-    // The same-thread TLS destructor balances the one successful initialization.
-    static APARTMENT: Result<Apartment, StorageError> = Apartment::enter();
 }
 
 pub(super) fn registered_sync_check(ancestors: &[File]) -> Result<(), StorageError> {
     use windows::core::{Interface, HSTRING};
     use windows::Storage::{IStorageItem, Provider::IStorageProviderSyncRootManagerStatics};
-    APARTMENT.with(|value| value.as_ref().map(|_| ()).map_err(|e| *e))?;
+    // Declared first, dropped last on every return and unwind. Nested successful
+    // initializations (including S_FALSE) each retain their own balancing guard.
+    let _apartment = Apartment::enter()?;
     // This must succeed positively. A failed enumeration is NEVER no registered roots.
     // Microsoft documents both legacy and modern registrations in this inventory.
     // Request the registered factory directly: the generated static helper caches
     // an agile factory across apartment teardown. This scoped factory and every
-    // derived interface are released before the thread-owned apartment. There is no
+    // derived interface are released before the stack-owned apartment. There is no
     // generated helper's DLL-search fallback for a missing registered class.
     let factory: IStorageProviderSyncRootManagerStatics = unsafe {
         windows::Win32::System::WinRT::RoGetActivationFactory(&HSTRING::from(
@@ -138,9 +136,29 @@ mod creation_checks;
 #[cfg(test)]
 #[test]
 fn native_repeated_inventory_retains_the_owned_thread_apartment() {
-    // Every query gets an uncached factory and a fresh successful inventory.
-    // The thread retains its apartment until all queries and interfaces end.
+    // Explicit stack ownership retains the apartment across this nested batch.
+    // Every query still gets an uncached factory and independently balanced guard.
+    let _apartment = Apartment::enter().expect("owned batch apartment");
     for _ in 0..100 {
         registered_sync_check(&[]).expect("independent registered-root inventory");
+    }
+}
+
+#[cfg(test)]
+#[test]
+fn native_inventory_thread_exit_balances_com_before_tls_teardown() {
+    // Exercise concurrent fresh thread lifetimes, not merely a reused test thread.
+    // No COM object or apartment crosses a thread boundary or survives its stack.
+    let children: Vec<_> = (0..8)
+        .map(|_| {
+            std::thread::spawn(|| {
+                for _ in 0..8 {
+                    registered_sync_check(&[]).expect("fresh thread inventory");
+                }
+            })
+        })
+        .collect();
+    for child in children {
+        child.join().expect("inventory thread completed");
     }
 }
