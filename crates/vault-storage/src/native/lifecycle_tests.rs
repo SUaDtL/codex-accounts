@@ -387,7 +387,6 @@ fn ca04b_system_owned_directory_is_not_a_current_user_home() {
                 null_mut(),
                 null_mut(),
                 null_mut(),
-                null_mut(),
                 &mut descriptor,
             )
         },
