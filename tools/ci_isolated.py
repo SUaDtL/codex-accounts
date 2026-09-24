@@ -16,6 +16,13 @@ import sys
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
+STAGE = 'entry'
+
+
+def stage(value: str) -> None:
+    global STAGE
+    STAGE = value
+    print('Isolation stage: ' + value, flush=True)
 COMMANDS = (
     ('tests', ['test', '--workspace', '--all-targets', '--no-fail-fast']),
     ('release_tests', ['test', '--workspace', '--all-targets', '--release', '--no-fail-fast']),
@@ -47,20 +54,25 @@ def no_ip_route() -> None:
         except OSError as error:
             if error.errno in {errno.ENETUNREACH, errno.EHOSTUNREACH, errno.EAFNOSUPPORT}:
                 continue
+            print(json.dumps({'network_probe_family': int(family), 'inconclusive_errno': error.errno}), flush=True)
             raise ValueError('Network probe was inconclusive') from None
         raise ValueError('Unexpected route in isolated build')
 
 
 def inner(config: dict) -> int:
+    stage('verify-namespace-owner-and-capabilities')
     validate_status(Path('/proc/self/status').read_text(), config['uid'],
                     config['namespace'], os.readlink('/proc/self/ns/net'))
+    stage('verify-no-ip-routes')
     no_ip_route()
+    stage('verify-fresh-build-inputs')
     env = config['env']
     env.update({'CARGO_TARGET_DIR': config['target'], 'CARGO_NET_OFFLINE': 'true'})
     target = Path(config['target'])
     if not target.is_dir() or any(target.iterdir()):
         raise ValueError('Isolated build must start with an empty target directory')
     print('Direct IPv4/IPv6 routes absent; capabilities dropped; fresh target directory verified', flush=True)
+    stage('execute-offline-checks')
     outcomes = {}
     for name, arguments in COMMANDS:
         command = [config['cargo'], *arguments, '--locked', '--offline']
@@ -77,6 +89,7 @@ def inner(config: dict) -> int:
 
 
 def run() -> int:
+    stage('verify-runner-and-utilities')
     if sys.platform != 'linux' or os.getuid() == 0:
         raise ValueError('Requires an ordinary standard Linux runner')
     # Reviewed acquisition is performed before this command. Do not acquire here.
@@ -101,6 +114,7 @@ def run() -> int:
                    '--inh-caps=-all', '--ambient-caps=-all', '--bounding-set=-all',
                    '--no-new-privs', '--', paths[3], '-i', 'PATH=/usr/bin:/bin',
                    str(Path(sys.executable).resolve()), str(Path(__file__).resolve()), 'inner']
+        stage('create-namespace-and-drop-privileges')
         result = subprocess.run(command, input=payload, text=True, cwd=ROOT, timeout=1500, check=False)
         return result.returncode
 
@@ -118,4 +132,4 @@ if __name__ == '__main__':
             raise ValueError('Invalid invocation')
         raise SystemExit(result)
     except (OSError, ValueError, TypeError, KeyError, subprocess.SubprocessError):
-        raise SystemExit('Isolated build failed; no connected-host fallback was used') from None
+        raise SystemExit('Isolated build failed at ' + STAGE + '; no connected-host fallback was used') from None

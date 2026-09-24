@@ -26,18 +26,18 @@ CASES = (
 MAX_OUTPUT = 1024 * 1024
 
 
-def verify(output: bytes, returncode: int) -> None:
+def verify(output: bytes, returncode: int, cases: tuple[str, ...] = CASES) -> None:
     if returncode != 0 or len(output) > MAX_OUTPUT:
         raise ValueError('Native execution failed or exceeded output bound')
     text = output.decode('utf-8', errors='strict')
     rows = re.findall(r'^test ([a-zA-Z0-9_:]+) \.\.\. (.+)$', text, re.M)
-    expected = {PREFIX + name for name in CASES}
+    expected = {PREFIX + name for name in cases}
     names = [name for name, _ in rows]
     if (len(names) != len(expected) or set(names) != expected
             or any(result.strip() != 'ok' for _, result in rows)):
         raise ValueError('Required native case missing, duplicated, ignored or unsuccessful')
     summaries = re.findall(r'^test result: (.+)$', text, re.M)
-    pattern = (rf'ok\. {len(CASES)} passed; 0 failed; 0 ignored; 0 measured; '
+    pattern = (rf'ok\. {len(cases)} passed; 0 failed; 0 ignored; 0 measured; '
                r'\d+ filtered out; finished in [0-9.]+s\s*')
     if len(summaries) != 1 or not re.fullmatch(pattern, summaries[0]):
         raise ValueError('Native result summary does not prove complete execution')
@@ -46,20 +46,39 @@ def verify(output: bytes, returncode: int) -> None:
 def run() -> None:
     if platform.system() != 'Windows' or platform.machine().lower() not in {'amd64', 'x86_64'}:
         raise ValueError('Windows x64 is required; a portable skip is not a pass')
+    failed = False
     for profile in ('debug', 'release'):
-        command = ['cargo', 'test', '-p', 'codex-accounts-vault-storage', '--lib']
-        if profile == 'release':
-            command += ['--release']
-        command += ['--locked', '--offline', 'ca04b_', '--', '--test-threads=1', '--format=pretty']
-        # Raw test output stays in a temporary local file and is never uploaded or
-        # echoed by this verifier. The ordinary workspace step supplies diagnostics.
-        with tempfile.TemporaryFile() as output:
-            result = subprocess.run(command, cwd=ROOT, stdout=output, stderr=output,
-                                    timeout=180, check=False)
-            output.seek(0)
-            verify(output.read(MAX_OUTPUT + 1), result.returncode)
-        print(json.dumps({'profile': profile, 'executed_native_cases': list(CASES),
-                          'result': 'passed', 'desktop_qualification': 'not_established'}), flush=True)
+        for case in CASES:
+            command = ['cargo', 'test', '-p', 'codex-accounts-vault-storage', '--lib']
+            if profile == 'release':
+                command += ['--release']
+            command += ['--locked', '--offline', PREFIX + case, '--', '--exact',
+                        '--test-threads=1', '--format=pretty', '--nocapture']
+            # Separate processes preserve other case evidence after a native abort.
+            # Raw output stays in a temporary local file, never an uploaded log.
+            output_bytes = b''
+            code = None
+            try:
+                with tempfile.TemporaryFile() as output:
+                    result = subprocess.run(command, cwd=ROOT, stdout=output, stderr=output,
+                                            timeout=180, check=False)
+                    code = result.returncode
+                    output.seek(0)
+                    output_bytes = output.read(MAX_OUTPUT + 1)
+                    verify(output_bytes, code, (case,))
+                passed = True
+            except (OSError, ValueError, subprocess.SubprocessError):
+                passed = False
+                failed = True
+            # Only known case names, a fixed error category and source line numbers
+            # leave the verifier. Never echo panic text, paths or child output.
+            lines = re.findall(rb'lifecycle_tests\.rs:(\d{1,5}):', output_bytes)
+            print(json.dumps({'profile': profile, 'native_case': case,
+                              'result': 'passed' if passed else 'failed',
+                              'failure_source_lines': [] if passed else [int(n) for n in lines[:8]],
+                              'desktop_qualification': 'not_established'}), flush=True)
+    if failed:
+        raise ValueError('One or more required native cases did not pass')
 
 
 if __name__ == '__main__':
