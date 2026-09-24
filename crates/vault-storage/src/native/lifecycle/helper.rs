@@ -3,7 +3,9 @@
 //! can create this owner. Official-runtime creation/stdio remains a later packet.
 use super::super::*;
 use super::process::ObservedProcess;
-use crate::lifecycle_model::{owned_exit_observed, Fault, ProcessKey, MAX_FAMILY};
+use crate::lifecycle_model::{
+    owned_exit_observed, owned_member_survey_pending, Fault, ProcessKey, MAX_FAMILY,
+};
 use std::collections::BTreeMap;
 use std::time::{Duration, Instant};
 use windows_sys::Win32::System::JobObjects::*;
@@ -12,11 +14,13 @@ pub(super) struct OwnedFamily {
     job: Token,
     root: ObservedProcess,
     retained: BTreeMap<ProcessKey, ObservedProcess>,
+    member_observation_incomplete: bool,
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) struct ExitObservation {
     pub forced: bool,
     pub observed_members: usize,
+    pub member_observation_incomplete: bool,
 }
 impl std::fmt::Debug for OwnedFamily {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -58,6 +62,7 @@ impl OwnedFamily {
             job,
             root,
             retained: BTreeMap::new(),
+            member_observation_incomplete: false,
         };
         family.check_limits()?;
         Ok(family)
@@ -171,14 +176,14 @@ impl OwnedFamily {
             return Ok(true);
         }
         if let Err(error) = self.retain_members() {
-            // A process can exit between the job PID snapshot and OpenProcess.
-            // Never reinterpret access denial as absence: require independent
-            // root/retained handle signals AND a freshly observed empty owned job.
-            return if self.exit_observed()? {
-                Ok(true)
-            } else {
-                Err(error)
-            };
+            if !owned_member_survey_pending(error) {
+                return Err(error);
+            }
+            // Inspection may race with exit or remain denied. Preserve incomplete
+            // survey evidence; do not relabel denial as absence or restart a timer.
+            // False remains pending. Only independent signals AND empty job count
+            // can become true, even after an incomplete or missed member survey.
+            self.member_observation_incomplete = true;
         }
         self.exit_observed()
     }
@@ -213,8 +218,10 @@ impl OwnedFamily {
             return Ok(ExitObservation {
                 forced: false,
                 observed_members: self.retained.len(),
+                member_observation_incomplete: self.member_observation_incomplete,
             });
         }
+        self.check_limits()?;
         // SAFETY: only the owner of the private, newly created job can reach this
         // call, and ONLY after its grace period actually expired. Never a PID kill.
         if unsafe { TerminateJobObject(self.job.0, 1) } == 0 {
@@ -226,6 +233,7 @@ impl OwnedFamily {
         Ok(ExitObservation {
             forced: true,
             observed_members: self.retained.len(),
+            member_observation_incomplete: self.member_observation_incomplete,
         })
     }
     #[cfg(test)]

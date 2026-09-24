@@ -73,6 +73,15 @@ pub(crate) fn shared_home_readiness(complete_snapshot: bool) -> Result<(), Fault
         Err(Fault::QualificationMissing)
     }
 }
+/// Only a member survey of an already-owned job may remain pending during its
+/// fixed exit budget. This is not an exit result, nor permission to ignore a
+/// changed job boundary, failed accounting query, bound, or missing qualification.
+pub(crate) fn owned_member_survey_pending(error: Fault) -> bool {
+    matches!(
+        error,
+        Fault::AccessDenied | Fault::Disappeared | Fault::Incomplete | Fault::Changed
+    )
+}
 /// Native callers supply observations from an owned, non-breakaway job and
 /// retained handles. A successful quit/terminate call is deliberately no input.
 pub(crate) fn owned_exit_observed(
@@ -140,6 +149,31 @@ mod tests {
             }
         }
         assert_eq!(owned_exit_observed(true, 129, true), Err(Fault::Bound));
+    }
+    #[test]
+    fn denied_member_survey_is_pending_not_exit_or_home_authority() {
+        for error in [
+            Fault::AccessDenied,
+            Fault::Disappeared,
+            Fault::Incomplete,
+            Fault::Changed,
+        ] {
+            assert!(owned_member_survey_pending(error));
+            assert!(!owned_exit_observed(true, 1, true).unwrap());
+            assert!(!owned_exit_observed(false, 0, true).unwrap());
+            assert!(!owned_exit_observed(true, 0, false).unwrap());
+            assert!(owned_exit_observed(true, 0, true).unwrap());
+            assert!(shared_home_readiness(true).is_err());
+        }
+        for error in [
+            Fault::Bound,
+            Fault::QuitUnavailable,
+            Fault::Timeout,
+            Fault::HelperStuck,
+            Fault::QualificationMissing,
+        ] {
+            assert!(!owned_member_survey_pending(error));
+        }
     }
     #[test]
     fn invalid_zero_identity_and_self_parent_do_not_form_a_tree() {
