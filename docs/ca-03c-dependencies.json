@@ -1,0 +1,31 @@
+{
+  "schema": "codex-accounts/dependency-review/v1",
+  "packet": "CA-03C",
+  "status": "source_reviewed",
+  "review_date": "2026-09-23",
+  "predecessor_sha256": {
+    "docs/ca-02-dependencies.json": "ceaffa36b058d90fef01df21634610938aa47755edd8b6a15f7adc7257f6cc5f",
+    "docs/ca-03b-dependencies.json": "0071f27fcdd6dd9aba04aee06e9cb75b2177be7fae7999980f05a19c31563c7d"
+  },
+  "lock_sha256": "5170c0802782deb29cb472e7cc6105a8028b56bcca74691f894f0c74f60c0950",
+  "manifest_sha256": {
+    "Cargo.toml": "c009495e6fa55854b3befc954791c171e3ce971341afaa45a4d50086ea3f1478",
+    "crates/core/Cargo.toml": "209eb46bb52c2f4fb11dcd931e4274927be939318b5e3f5fdbe881de96b8788e",
+    "crates/platform/Cargo.toml": "1e17352db76845b523486cf2cd6c844e7fb06582e25a2df8f437f7b5675f3846",
+    "crates/runtime/Cargo.toml": "d8a1fac06ff9db18903e3ccb238ab2a1028e7dd3f10bd09e0227e17dd88f0f41",
+    "crates/discovery/Cargo.toml": "79841e868232a145681c654a4d4cf5c8f8269daf0e5c3e52a5d4ca554381d01a",
+    "crates/vault/Cargo.toml": "dc5ac46edfd6dbea78ad8588cf124cbd602958d49537624cccbf207ef4cd1229",
+    "crates/vault-crypto/Cargo.toml": "d48fbb2861c50086613bbde5caa9d6971385a3a8c1664d45e9b2a4426ccc4e8f",
+    "crates/vault-storage/Cargo.toml": "c44225e4f0c48f78651000dc78d606da1175fae3111a48b7c5c883e6b60ce77b"
+  },
+  "packages": [],
+  "scope": "No new external package/version/checksum or build script. Prior 58 exact records retained. Adds local vault-storage and borrowed non-secret ID/identity accessors. Windows-sys features enable documented current-user security, native handle/filesystem, CloudFilter and known-folder APIs. All application-authored native effects are isolated in vault-storage/src/native.rs. Linux/macOS remain unsupported for persistent storage. Reuses windows 0.62.2 with Storage_Provider and Win32_System_WinRT for independent read-only registered-sync-root enumeration; no registration, new package or version.",
+  "source_review": {
+    "windows-sys": "0.61.2 archive verified against existing Cargo checksum. Inspected generated FILE_RENAME_INFO/FILE_DISPOSITION_INFO, security/token/ACL, known-folder, CloudFilter and file API declarations; no new native library beyond OS DLLs; no package build script. GetDriveTypeW now rejects non-fixed drives before file opens; the IO/Ioctl feature additions reuse already reviewed native declarations for a synthetic-only junction regression. No product reparse-point creation API. WindowsProgramming exposes the SDK DRIVE_FIXED constant; no additional native call or package.",
+    "uuid": "OS randomness already reviewed in CA-03B; random UUID version/variant bits per RFC 9562. No new random generator.",
+    "advisories": "Inherited CA-03B RustSec snapshot and affected-range review apply to identical versions. No new cargo-audit execution or full audit claimed.",
+    "preparation_run": 35912987673,
+    "preparation_artifact_sha256": "19bdcc18b72f45b4401b6de38cabe2cd5df3a1198b22680b1098b777e3eef691",
+    "windows": "0.62.2 exact cached archive and generated StorageProviderSyncRootManager::GetCurrentSyncRoots, SyncRootInfo::Path, IStorageItem::Path, IVectorView::Size/GetAt and RoInitialize/RoUninitialize declarations inspected. Microsoft documents successful inventory including legacy and modern registered roots. Errors do not count as absence. Folder identity is compared via metadata handles; unavailable/remote/reparse-root observations refuse. WinRT apartment is same-thread balanced; no package registration or service mutation. Scoped factory retrieval now uses the generated RoGetActivationFactory and IStorageProviderSyncRootManagerStatics vtable, with a direct exact windows-collections 0.3.2 dependency (already reviewed/locked) for its output type. Interfaces are released before balanced apartment teardown. This avoids a process-static cached factory outliving the calling apartment and avoids generated heuristic DLL-search fallback. No new package/version, COM registration, or privilege change. The owning MTA is retained by a same-thread TLS guard through the storage session and balanced at thread exit. Registered sync-folder ancestors are opened in order without following reparse points."
+  }
+}

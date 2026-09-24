@@ -1,4 +1,4 @@
-"""Verify the inherited and CA-03B dependency reviews before build acquisition."""
+"""Verify the inherited and scoped CA-04A dependency reviews before build acquisition."""
 from __future__ import annotations
 
 import hashlib
@@ -13,15 +13,27 @@ def check(root: Path = ROOT) -> dict[str, int | str]:
     lock_bytes = (root / 'Cargo.lock').read_bytes()
     lock = tomllib.loads(lock_bytes.decode('utf-8'))
     inherited = json.loads((root / 'docs/ca-02-dependencies.json').read_text(encoding='utf-8'))
-    review = json.loads((root / 'docs/ca-03b-dependencies.json').read_text(encoding='utf-8'))
+    crypto = json.loads((root / 'docs/ca-03b-dependencies.json').read_text(encoding='utf-8'))
+    storage = json.loads((root / 'docs/ca-03c-dependencies.json').read_text(encoding='utf-8'))
+    review = json.loads((root / 'docs/ca-04a-dependencies.json').read_text(encoding='utf-8'))
+    required = {'docs/ca-02-dependencies.json', 'docs/ca-03b-dependencies.json', 'docs/ca-03c-dependencies.json'}
+    if set(review['predecessor_sha256']) != required:
+        raise ValueError('Prior review set changed')
+    for path, expected_hash in review['predecessor_sha256'].items():
+        if hashlib.sha256((root / path).read_bytes()).hexdigest() != expected_hash:
+            raise ValueError('Prior review bytes changed')
     if (inherited['schema'] != 'codex-accounts/dependency-review/v1'
             or review['schema'] != 'codex-accounts/dependency-review/v1'
-            or review['status'] != 'source_reviewed'):
+            or review['status'] != 'source_reviewed'
+            or storage['schema'] != 'codex-accounts/dependency-review/v1'
+            or storage['status'] != 'source_reviewed'
+            or crypto['schema'] != 'codex-accounts/dependency-review/v1'
+            or crypto['status'] != 'source_reviewed'):
         raise ValueError('Unknown or incomplete dependency review')
     if hashlib.sha256(lock_bytes).hexdigest() != review['lock_sha256']:
         raise ValueError('Reviewed lock bytes changed')
     actual_packages = [p for p in lock['package'] if 'source' in p]
-    expected_packages = inherited['packages'] + review['packages']
+    expected_packages = inherited['packages'] + crypto['packages'] + storage['packages'] + review['packages']
     keyed = lambda items: {(p['name'], p['version']): (p['source'], p['checksum']) for p in items}
     actual, expected = keyed(actual_packages), keyed(expected_packages)
     if (len(actual) != len(actual_packages) or len(expected) != len(expected_packages)

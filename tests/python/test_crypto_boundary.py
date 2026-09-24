@@ -73,8 +73,8 @@ class DependencyReviewTests(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.root = Path(self.tmp.name)
-        manifest = json.loads((ROOT / 'docs/ca-03b-dependencies.json').read_text())
-        paths = list(manifest['manifest_sha256']) + ['Cargo.lock', 'docs/ca-03b-dependencies.json', 'docs/ca-02-dependencies.json']
+        manifest = json.loads((ROOT / 'docs/ca-04a-dependencies.json').read_text())
+        paths = list(manifest['manifest_sha256']) + ['docs/ca-03c-dependencies.json'] + ['Cargo.lock', 'docs/ca-04a-dependencies.json', 'docs/ca-03b-dependencies.json', 'docs/ca-02-dependencies.json']
         for relative in paths:
             target = self.root / relative
             target.parent.mkdir(parents=True, exist_ok=True)
@@ -82,7 +82,7 @@ class DependencyReviewTests(unittest.TestCase):
         self.review = manifest
 
     def fail_with(self, review):
-        (self.root / 'docs/ca-03b-dependencies.json').write_text(json.dumps(review))
+        (self.root / 'docs/ca-04a-dependencies.json').write_text(json.dumps(review))
         with self.assertRaises(ValueError):
             check_dependencies.check(self.root)
 
@@ -99,15 +99,22 @@ class DependencyReviewTests(unittest.TestCase):
 
     def test_duplicate_or_missing_packages_refuse(self):
         review = copy.deepcopy(self.review)
-        review['packages'].append(review['packages'][0])
+        crypto = json.loads((self.root / 'docs/ca-03b-dependencies.json').read_text())
+        review['packages'].append(crypto['packages'][0])
         self.fail_with(review)
         review = copy.deepcopy(self.review)
-        review['packages'].pop()
+        path = self.root / 'docs/ca-03b-dependencies.json'
+        original = json.loads(path.read_text())
+        original['packages'].pop()
+        path.write_text(json.dumps(original))
         self.fail_with(review)
 
     def test_altered_checksum_or_inherited_override_refuses(self):
         review = copy.deepcopy(self.review)
-        review['packages'][0]['checksum'] = '0' * 64
+        crypto = json.loads((self.root / 'docs/ca-03b-dependencies.json').read_text())
+        package = copy.deepcopy(crypto['packages'][0])
+        package['checksum'] = '0' * 64
+        review['packages'].append(package)
         self.fail_with(review)
         review = copy.deepcopy(self.review)
         inherited = json.loads((self.root / 'docs/ca-02-dependencies.json').read_text())

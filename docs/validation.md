@@ -1,51 +1,80 @@
 # Validation and evidence boundary
 
-## Current review: CA-03B / PR #5
+## Current review: CA-04A / PR #7
 
-PR #5 is stacked on unmerged PR #3 at
-`595eebdb8d5d561ec855e6ef63a6aec3c10ad3ea`. It implements library-only
-XChaCha20-Poly1305 envelopes, HKDF-SHA256-separated keys, OS randomness,
-owned-buffer zeroization and current-user Windows x64 DPAPI. No persistent
-vault, real credential read, login, process control, UI or product authority exists.
-The dependency's T-07 amendment is unchanged and requires its own owner review.
+CA-04A implements a private executable switch coordinator and authenticated encrypted
+journals inside the existing storage commit protocol. Production effects, real
+account inputs, native Desktop process authority, login and qualification records
+remain absent. PR #7 targets main and preserves the reviewed CA-03C dependency:
+PR #6 was merged by the owner into the former CA-03A branch after PR #3 merged.
+No branch reset, automatic merge or replacement of that history is part of this work.
 
-| Evidence | Observed result and scope |
+| Evidence | Observed scope |
 | --- | --- |
-| Initial CA-03B CI | Head `7c963287ae7fa799c075dc6ffa5470622f54fa77`, PR run [35864627512](https://github.com/SUaDtL/codex-accounts/actions/runs/35864627512): source/Python passed; all three Rust jobs failed only formatting. Tests and Clippy passed independently. |
-| Formatter correction | Exact rustfmt 1.90.0 patch from preparation run 35895393270, source `4103cd6123debcbe5f997708c0c42d4593c27ec1`, applied without changing behavior or assertions. Temporary preparation workflow removed. Preparation is not validation. |
-| Local closeout | 71 Python tests passed; specification/projection/provenance and 58-package lock/manifest checks passed. The extracted baseline Git tree matched the remote tree before editing. |
-| Local Rust/native | NOT RUN: no local Rust toolchain or Windows session. Hosted results are never represented as local execution. |
-| Final-head CI | PR #5 records the actual final commit, completed PR/push workflow IDs and inspected native logs after publication. No older head or preparation run counts as a current pass. |
-| Native evidence pending | Three ignored two-user evidence helpers are NOT RUN, not passes. Distinct-user controls, unavailable-store behavior and independent macOS Keychain remain open. |
+| Source baseline | Continued review branch at `43902b9beeff27d06abf3e440bec29f0bfb0baa4`, source tree `1f902b637f9e584c43340c2dbcf43f5a1e5e58e4`, recovered and checked against its Git source artifact. |
+| Local toolchain | Rust 1.90.0, rustfmt and Clippy from the digest-checked existing development inputs. Preparation/acquisition does not count as validation. |
+| Local executable checks | `cargo test --workspace --all-targets --locked --offline` passed, including 44 storage cases: 22 inherited storage plus 22 journal/coordinator tests. Formatting and workspace all-targets Clippy with `-D warnings` passed. |
+| Local source checks | 78 Python tests passed; specification/model/projection/provenance and exact 58-package manifest/lock checks passed. |
+| Native checks | Two new Windows tests exercise actual DPAPI/storage reopen for completed and interrupted journals; external resource/helper/launch effects remain synthetic. Local Windows execution is unavailable. Final-head hosted results and inspected logs must be recorded on PR #7 before marking ready. |
+| Release evidence | Actual Desktop contract, owner Windows 11, ordinary two-user/unavailable-store, sync-provider, physical-power-loss/directory-metadata and independent macOS qualification remain open. |
 
-The crypto suite exercises exact bytes and empty payloads, every expected-context
-field, all single-byte mutations, truncated/extended/overflowing formats, versions,
-wrong keys, nonce/root/randomness failures, presence-aware fingerprints and redaction.
-The independent synthetic vector is a cross-implementation check, not native account
-or complete T-15/T-16/T-31 closure. Windows tests exercise actual DPAPI with synthetic
-data; ca-03b-crypto.md provides the exact ordinary-user collection procedure.
+The fault suite injects every recorded storage effect in forward/restoration
+transitions and request/cancel/recovery-choice commits. It discards runtime session
+state on reopen and requires a verified reachable newest generation, exact external
+synthetic bytes, complete journal holds and bounded cleanup. External stage/replace/
+helper/reap/cleanup/launch failures are separately injected. A0-to-A1-to-B-to-A1,
+post-helper B1 restoration, optional absence combinations, late binding/policy/writer
+failure, duplicate requests, conflict evidence, typed helper policy failure and
+uncertain launch outcomes are tested. Neither an I/O error after publication nor an
+old surviving file justifies fabricating a rollback or Desktop-confirmed state.
 
-Scope/security/recovery review: expected context must be independently selected;
-valid AEAD is not freshness or protection from whole-vault rollback. No unchecked
-key migration, plaintext fallback, public entropy override or raw root-key
-constructor is exposed. Native unsafe is limited to the documented DPAPI module;
-core/platform/runtime safeguards remain. No real credentials or synthetic DPAPI
-fixture are committed. Only the opt-in test helper writes its encrypted test file.
+The initial unfinished PR head failed the dependency-manifest gate before Rust
+execution. The repair adds the missing local core dependency edge to the lock and
+records its scoped review separately; all 58 external records and predecessor review
+bytes remain unchanged. Temporary preparation is removed. No blocking test,
+platform, warning policy, safety lint or CI condition is removed or weakened.
+No new external package or native API is added.
 
-The 26 new dependencies supplement 32 unchanged checksum records. Full lock and
-manifest/feature checks precede acquisition; formatting, tests and Clippy remain
-blocking. The normative source, provenance, existing CI workflow and empty catalog
-are unchanged by this closeout. See dependency-policy.md and ca-03b-dependencies.json.
+The journal is an explicit `CAREG002` registry extension committed together with
+selection and complete retention holds. Existing `CAREG001` data is read without a
+rewrite; conversion occurs through the tested recoverable first-journal commit.
+No key migration or silently accepted unknown codec exists. Unresolved switch
+records block public profile writes/pruning. Conflict evidence is bounded and
+retained, never accepted as a valid credential generation or erased automatically.
+The private synthetic effects driver cannot be selected through the public API.
+
+Synthetic and hosted native results cover the exact tested source only. Final-head
+PR/push results are recorded on PR #7 after publication; older or preparation-run
+results do not count. No complete T-01 through T-34 release scenario is closed.
+See `ca-04a-journal.md` for executable commands, expected native test counts and
+redaction/cleanup rules. No real auth files, account identities, keys, user paths
+or raw helper output should be shared.
+
+## Preserved CA-03C final evidence
+
+PR #6 head `6c8144f041ba16be1b6c33c1de6f3d1f6aa8dfb8` passed PR run
+35933850694 and push run 35933846776. Inspected source/Windows logs recorded
+75 Python and 129 Rust passes, including 40 storage cases; three inherited two-user
+helpers were NOT RUN. Native tests exercised synthetic protected storage, lock
+release, link/ownership/sharing refusal, WinRT enumeration, control repair and
+20 process-restart boundaries. Those results apply to CA-03C, not CA-04A.
+
+The native protected test-parent and apartment-lifetime corrections preserve
+production path/ownership restrictions. The native unsafe boundary is unchanged
+by CA-04A. File flush/write-through and process restart are not proof of physical
+power-loss ordering or a qualified directory-metadata persistence primitive.
+F-012/T-21/T-22 and full Q1 remain open. Same-user malware, administrators,
+whole-vault replay, backups and secure physical erasure are not excluded.
 
 ## Preserved earlier evidence
 
 | Increment | Exact evidence and scope |
 | --- | --- |
-| CA-03A / PR #3 | Head `595eebdb8d5d561ec855e6ef63a6aec3c10ad3ea`; PR run 35819942583 and push run 35819939120 passed. Source job 107049451062 recorded 62 Python passes; Windows job 107049451273 recorded 66 Rust passes, including 23 vault-data cases and nine discovery/native API cases. Formatting and Clippy passed on all three platforms. These are historical results, not CA-03B validation. |
+| CA-03A / PR #3 | Head `595eebdb8d5d561ec855e6ef63a6aec3c10ad3ea`; PR run 35819942583 and push run 35819939120 passed. Source job 107049451062 recorded 62 Python passes; Windows job 107049451273 recorded 66 Rust passes, including 23 vault-data cases and nine discovery/native API cases. Formatting and Clippy passed on all three platforms. These are historical results, not CA-03C validation. |
 | CA-02 / PR #2 | Owner merged head `6ee778e9592d46132f253e2bee836b2650a44bd0` as `7773d3472d13b7087179c0819a37fd5030a8f1c9`. Run 35808957582 passed: 48 Python tests and 43 Rust tests in the inspected Windows log. Later T-07 adoption and CI acquisition repair are not attributed to this merge. |
 | Foundation / PR #1 | Merge `54f01f3a77936523d8202ad37d8a46c5fe32a4c6`; tested head `9b9328f474322c9de48dc6a8db332ee8105899dd`, runs 35761967137 and 35761962743 passed: 35 Python and 19 Rust tests, formatting and Clippy. |
 
-PR #3 implements the remaining P02-A08 canonical/visible T-07 change and v2
+The owner merge of PR #3 includes the remaining P02-A08 canonical/visible T-07 change and v2
 provenance migration. Original bytes reconstruct to the preserved digest; all
 43 requirements and 34 acceptance IDs remain. Review/merge of that amendment is
 not a qualification record. CA-03A supplies strict data/generation rules, not
@@ -58,13 +87,21 @@ traces remain Q0 evidence gaps. Earlier hosted Windows was Server 2025 x64, not 
 owner's Windows 11 Desktop qualification. See q0-qualification.md and PR #2's
 checklist disposition for the detailed discovery evidence.
 
-## Remaining gates
 
-CA-03C must implement protected local storage, independently selected context,
-root-key bootstrap, encrypted registry/immutable generations, exclusive locking,
-write-ahead commits and startup recovery, with native path/ACL/durability and
-retention tests. No persistent account storage is exposed before those obligations.
-Two-user and unavailable-store evidence remains required for full native key
-protection; macOS qualification is independent. Q0 facts cannot be invented to
-activate a later adapter. Coordinator/recovery, official login, Tauri UI and all
-complete release scenarios remain pending. No automatic CA-04 advancement.
+## Preserved CA-03B final evidence
+
+PR #5 head 9fd8e6902ce909dfcad39fbb40f48e6af81bc17e passed PR run 35897568260
+and push run 35897560936. Inspected logs recorded 71 Python and 89 Windows Rust
+passes, including 23 crypto cases; three two-user helpers were ignored/NOT RUN.
+Those results apply to CA-03B, not later storage changes. Its scoped crypto, KDF,
+randomness, zeroization, DPAPI and advisory evidence remains in ca-03b-crypto.md and
+ca-03b-dependencies.json. The owner merge into the dependency branch does not itself
+qualify native storage, validate Desktop behavior or close the remaining release gates.
+
+## Next eligible implementation
+
+CA-04B: native owner/canonical-home lifetime locking, writer discovery and actual
+exit/descendant proof. This is a future bounded packet in `next-pr.md`, not an
+automatically executed phase. Reuse CA-04A's journal; do not expose synthetic
+quiescence, consent, policy or compatibility as production authority. Full Q0/Q1/Q2,
+macOS, official login, UI and release qualification remain open.
