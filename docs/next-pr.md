@@ -1,9 +1,15 @@
-# Next bounded slice: CA-04B
+# Next bounded product slice: CA-04B
 
-Parent packet: CA-04 / Q2. CA-04A is submitted in PR #7 against main. Inspect live
-refs, AGENTS.md, its actual diff and final-head CI before selecting a base. The PR
-preserves the CA-03C dependency that the owner merged into the former CA-03A branch.
-Do not reset history, merge a dependency automatically, or duplicate completed work.
+Parent packet: CA-04 / Q2. CA-04A and the preserved CA-03C dependency are merged
+through PR #7. Verified main baseline is `103d1a409ea19544ac4a18f33a19df925f5efc58`;
+main run 35962095930 passed. Inspect live refs, AGENTS.md, current open PRs and actual
+head checks before choosing a base. This snapshot is not permission to reset history.
+
+The owner requested a CI/CD and coverage review before resuming product work.
+PR #8 carries that bounded assurance repair and `docs/ci-review.md` records fixed
+and unresolved gaps. Review it first; do not assume it merged or recreate its work.
+CA-04B remains selected but is not started by the CI review. The main `CI gate`
+protection setting requires separate owner action; a workflow edit does not enable it.
 
 ## Deliverable
 
@@ -53,11 +59,13 @@ versus observed exit. Native tests must own their newly created directories and
 children; no global process kills, account creation or permission changes. Preserve
 journal refusal and restart tests when integrating observed prerequisites.
 
-Run pinned formatting, workspace compilation/tests/Clippy, Python/source/projection/
-provenance/dependency checks, and selected native OS tests. Inspect completed checks
-for the actual final PR head. Update the single working roadmap and validation record;
-record unobserved native cases honestly. Open/update one normal review PR. No merge,
-force push/reset, permission change, release or live account operation.
+Run the current pinned formatting, workspace compilation/tests/Clippy, documentation
+tests, optimized compilation, Python/source/projection/provenance/dependency and
+workflow-contract checks, plus selected native OS tests. Inspect completed results
+for the actual final PR head and test-merge SHA. Cargo-offline execution is not an
+OS network sandbox. Update the single roadmap and validation record; report missing
+native evidence honestly. Publish one normal review PR; no merge, force push/reset,
+permission change, release or live account operation.
 
 ## Unresolved integration gates
 
@@ -68,5 +76,8 @@ independent macOS remain open. Native process tests with synthetic children do n
 qualify Codex Desktop. Provide exact safe collection steps and redacted expected
 results for remaining evidence; never request real authentication files.
 
-CA-04B has not been started by CA-04A's handoff. Full CA-04/Q2 remains open; no
-CA-05 advancement or production authority follows from a code or test pass alone.
+CI review follow-ups include owner-enforced main protection, a scoped checkout
+runtime upgrade, actual build-network isolation, refreshed advisory tooling and
+future measured coverage/release provenance. Do not represent those as resolved by
+a green test count. Full CA-04/Q2 remains open; no CA-05 advancement or production
+authority follows from a code or test pass alone.
