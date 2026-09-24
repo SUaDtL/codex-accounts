@@ -66,4 +66,4 @@ jobs:
         if: ${{ !cancelled() && steps.toolchain.outcome == 'success' && steps.dependency_review.outcome == 'success' && steps.dependencies.outcome == 'success' }}
         run: cargo clippy --workspace --all-targets --locked --offline -- -D warnings
       - name: Native qualification boundary
-        run: echo "Model checks only. No Desktop installation qualified; no OAuth, vault, or account mutation tested."
+        run: echo "Synthetic models and native OS APIs tested. No Desktop installation qualified; no real OAuth or live account mutation tested."

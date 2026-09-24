@@ -24,6 +24,11 @@ impl Drop for Identity {
     }
 }
 impl Identity {
+    /// Borrowed structural components for the encrypted storage codec, not diagnostics.
+    pub fn components(&self) -> (&str, &str, &str) {
+        (&self.issuer, &self.subject, &self.workspace)
+    }
+
     pub fn new(issuer: String, subject: String, workspace: String) -> Result<Self, DataError> {
         let identity = Self {
             issuer,
@@ -50,6 +55,11 @@ macro_rules! id_type {
         #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
         pub struct $name([u8; 16]);
         impl $name {
+            /// Opaque identifier bytes; never a principal or workspace identifier.
+            pub fn to_bytes(self) -> [u8; 16] {
+                self.0
+            }
+
             pub fn from_bytes(bytes: [u8; 16]) -> Result<Self, DataError> {
                 if bytes == [0; 16] {
                     return Err(DataError::InvalidId);

@@ -1,77 +1,66 @@
-# Next safe slice: CA-03C
+# Next bounded slice: CA-04A
 
-Parent packet: CA-03 / Q1. CA-03A and its in-place T-07/provenance amendment are
-in PR #3. CA-03B is implemented in dependent PR #5, based on CA-03A head
-`595eebdb8d5d561ec855e6ef63a6aec3c10ad3ea`. Read live refs, PR review/merge state,
-AGENTS.md, the working plan and current dependency records before selecting a base.
-Do not merge a dependent PR into its parent feature branch. After owner merges,
-reconcile/retarget with normal reviewed commits; never reset or force-push.
+Parent packet: CA-04 / Q2. Read live refs, AGENTS.md, PR #3 and PR #6 before choosing
+a base. CA-03C is submitted in PR #6 on the CA-03A dependency branch, after the owner
+merged CA-03B there. Do not reset that history or merge into the dependency branch.
+Reconcile/retarget only after the relevant owner merge. Current CI is recorded on
+the actual PR head, not established by this pointer.
 
-## Implement one protected persistence slice
+## Deliverable
 
-Implement a local Windows x64 storage adapter and encrypted registry/generations
-as one recoverable unit. Reuse CA-03A strict exact-byte/absence/generation rules
-and CA-03B crypto primitives; do not invent another cipher, refresh client or
-credential-management interface. Review exact pins/features before any dependency
-change. The current lock and 58-package record are not permission to float versions.
+Implement a storage-backed encrypted switch journal and executable coordinator
+for synthetic resource effects. Use the existing persistent generation/registry
+engine, not a second filesystem transaction implementation or trait-only scaffold.
+The journal must durably bind operation ID, source/target generations, expected
+resource presence/integrity, per-resource intent/completion, cancellation, primary
+failure and restoration outcome. Journal references must participate in the vault's
+complete persisted retention holds in the same commit protocol. A caller-supplied
+partial reference list or active=true value cannot authorize deletion or switching.
 
-Create switcher-owned storage only after validating the local, non-network,
-non-known-sync root and its ancestors with native handle-based ownership/link
-checks. Use protected owner/SYSTEM DACLs from creation, not post-write permission
-repair. Refuse unsafe roots, broad inherited access, junctions, symlinks, hardlinks,
-sharing conflicts and replacement races. No secrets or keys in an unqualified
-folder, no blanket ACL changes to an arbitrary directory, no plaintext fallback.
+Drive explicit requested/locked/quiescent/source-saved/staged/installed/observed/
+committed/relaunch/confirmation and recovery transitions. Before each modeled
+external replacement, persist its intent and verify prerequisites. Preserve exact
+newest generations; helper refresh must be captured before restoration. Reuse the
+separate installation/acceptance/launch/Desktop-identity/recovery result types.
+Cancellation after the first write enters reconciliation; launch failure after
+commit never silently selects an older account. Restoration itself is journaled.
 
-Implement random profile/generation IDs, native-protected root-key bootstrap,
-independently selected envelope context, bounded encrypted registry and immutable
-generation files. Encrypt identity metadata and preserve every resource's exact
-bytes and absence. Enforce the 50-profile product limit and resource/set bounds.
-Define serialization overhead separately; do not silently widen credential bounds.
-Do not accept a matching envelope's own untrusted context as expected context.
+The concrete executable effects in this packet are encrypted switcher-owned
+storage and controlled synthetic resources only. No production adapter may accept
+fixture evidence as quiescence, policy, consent, verified identity or compatibility.
+A public credential CLI, arbitrary filesystem/RPC adapter, forged qualification
+receipt, live auth replacement or normal-user application termination remains
+prohibited. Actual native writer discovery and the target-home lock are separate
+CA-04 work; the current vault-root lock is not their completed implementation.
 
-Durably preserve an encrypted generation before advancing its registry pointer.
-Implement write-ahead recovery for key/bootstrap, registry and generation commits
-in the same packet as their writes. Exclusive operation locking, same-directory
-staging, flush/replacement/durability, conflicting/stale-parent refusal and startup
-reconciliation need concrete native behavior. A single atomic rename does not make
-a multi-file storage commit atomic. Failures must preserve the prior reachable
-state or an explicit recoverable state; no silent key regeneration on corrupt/lost
-key material and no destructive reset option.
+## Read and test
 
-Retention/deletion must protect the latest and all unresolved journal references.
-Prune only at the specified clean-terminal/later-startup boundary. Active-profile
-deletion stays refused, and removal never revokes provider sessions or touches the
-official application's live auth/history. Persistent integration must account for
-complete journal references, not trust a caller's incomplete in-memory list.
+Read SPEC-TRANSACTION, SPEC-RECOVERY, F-009 through F-014, F-019 through F-025,
+S-003 through S-009, F-026 and the complete relevant T-13/T-14/T-18 through T-23/
+T-27 through T-31 scenarios. Read the current storage/crypto contracts and tests,
+not just this outline. The plan does not amend those requirements.
 
-## Tests and authority boundary
+Test full synthetic A0->A1->B->A1, post-helper B1/restoration, every resource presence
+combination, stale/unknown external bytes, duplicate operations, startup recovery,
+cancellation at every stage and faults before/after each durable forward/restoration
+write. Restart using persisted state and verify generation reachability/holds.
+Test primary and restoration errors remain distinct. No successful helper response
+or file installation becomes Desktop confirmation. Corrupt evidence and missing
+preconditions must prevent the corresponding transition, not be silently skipped.
 
-Use obviously synthetic data and owned test directories only. Test initial/create/
-reopen, exact-byte roundtrips, all resource presence combinations, wrong key/context,
-corruption, incompatible schema, concurrent writers, stale updates, profile bounds,
-retention/deletion and secret canaries. Inject failure before/after each durable
-bootstrap, generation and registry write and each recovery write, including
-flush/replace/permission/sharing/disk errors. Verify recovery after process restart,
-not just an in-memory state transition. Native tests need the actual target OS.
+Run pinned formatting, workspace compilation/tests/Clippy, Python and source/
+projection/provenance/dependency checks. Add native tests only for actually executed
+OS effects. Inspect final-head CI and logs, preserve blocking gates and update the
+single roadmap/validation record. Exact new dependencies/native bindings require
+scoped review before acquisition. Publish one normal review PR; no merge, force
+push, reset, release, permission changes or live account operation.
 
-CA-03B's three two-existing-user tests and unavailable-store evidence remain open
-until executed and reviewed; ca-03b-crypto.md provides the exact safe procedure.
-Do not invent users, lower permissions or use a fixture/Boolean as native proof.
-macOS Keychain and native path/durability qualification remain independent.
-Q0 publisher/runtime/home/policy/resource/identity/lifecycle facts are still pending.
-Persistent code with synthetic inputs cannot qualify a Codex credential schema.
+## Unresolved integration gates
 
-No live Codex credential capture/replacement, managed login, Desktop process
-control, credential CLI/MCP/HTTP, Tauri action, network request or production
-dispatch in this slice. No automatic CA-04 advancement. Full Q1 remains open until
-its complete native, corruption, retention and secret-handling obligations close.
-
-## Validation and handoff
-
-Run the pinned Rust formatting/compilation/tests/Clippy, Python tests and source/
-projection/provenance/dependency checks. Inspect final-head CI and native logs;
-keep every independent check blocking. Record native gaps explicitly. Update the
-existing implementation plan and validation record, not a second roadmap.
-Publish one normal review PR on an observed dependency base; re-read before a
-force:false ref update, verify the tree and complete changed-file set. No merge,
-force push, release, permission changes or live account operations.
+Q0 publisher/runtime/home/backend/policy/resource/identity/lifecycle evidence,
+CA-03B ordinary two-user/unavailable-store tests, Windows physical-power-loss and
+directory-metadata durability qualification, and independent macOS persistence
+remain open. ca-03c-storage.md and ca-03b-crypto.md contain safe synthetic collection
+steps and redaction rules. Missing evidence blocks real integration and release,
+not this explicitly bounded generic implementation. No full Q1/Q2 closure or
+CA-05 advancement is implied by selecting CA-04A.

@@ -58,15 +58,27 @@ The exact advisory IDs, archive digest and limitations remain in the JSON record
 No new dependency or manifest change is introduced by the formatting/closeout fix.
 Recheck advisories before distribution and review any future lock/feature change.
 
-## Native boundary
+## CA-03C reuse and native scope
 
-Application-authored unsafe is limited to `crates/discovery/src/native.rs` and
-`crates/vault-crypto/src/dpapi.rs`. The crypto exception is Windows x64-only for
-CryptProtectData, CryptUnprotectData and LocalFree from the inherited windows-sys
-pin. Neighboring crypto modules forbid unsafe; the crypto crate otherwise denies
-it. Existing safe crates retain forbid. See ca-02-native-boundary.md and
-ca-03b-crypto.md for pointer lifetime, output ownership and zeroization review.
-There is no blanket safety-lint exception.
+`ca-03c-dependencies.json` preserves the exact CA-02/CA-03B review bytes and all
+58 external package/version/checksum entries. No package version or build script
+is added. The local storage crate and narrowly selected Windows SDK features are
+bound through complete manifest and lock hashes. Direct windows-collections 0.3.2
+reuses the existing locked package for the generated WinRT collection output type.
+The inherited advisory snapshot covers identical versions, not a new cargo-audit
+execution or a guarantee against subsequent advisories.
+
+Application-authored unsafe is limited to the existing discovery boundary, crypto
+DPAPI module and private vault-storage native module/children. The storage adapter
+uses documented SDK security/file/known-folder/CloudFilter/WinRT APIs. Additional
+IO/Ioctl declarations construct junctions only inside owned synthetic tests;
+production code never creates a reparse point or repairs existing ACLs. Drive type
+constants come from the SDK rather than guessed values. COM initialization is
+balanced on its owning thread, with uncached per-query activation factories and
+no heuristic DLL-search fallback. See ca-03c-storage.md for lifetime and durability
+limitations. Adjacent storage engine/codec/records/recovery and existing safe core
+restrictions remain intact; there is no blanket safety-lint exception.
+
 No owner project license is selected by recording dependency licenses.
 
 CI retains the existing checkout commit pin and read-only repository permissions.
