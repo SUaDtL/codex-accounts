@@ -45,6 +45,11 @@ def validate_status(status: str, uid: int, parent_namespace: str, current_namesp
 
 
 def no_ip_route() -> None:
+    # Query the current network namespace through the socket API, not a sysfs
+    # mount inherited from the connected host. An errno alone is never proof.
+    interfaces = socket.if_nameindex()
+    if len(interfaces) != 1 or interfaces[0][1] != 'lo':
+        raise ValueError('Isolated namespace must contain only loopback')
     # UDP connect checks numeric routing without sending a packet or querying DNS.
     for family, address in ((socket.AF_INET, ('192.0.2.1', 9)),
                             (socket.AF_INET6, ('2001:db8::1', 9))):
@@ -52,7 +57,12 @@ def no_ip_route() -> None:
             with socket.socket(family, socket.SOCK_DGRAM) as probe:
                 probe.connect(address)
         except OSError as error:
-            if error.errno in {errno.ENETUNREACH, errno.EHOSTUNREACH, errno.EAFNOSUPPORT}:
+            refused = {errno.ENETUNREACH, errno.EHOSTUNREACH, errno.EAFNOSUPPORT}
+            # A fresh namespace with no IPv6 source address can return this before
+            # routing. Accept it only for IPv6 AND the independently empty topology.
+            if family == socket.AF_INET6:
+                refused.add(errno.EADDRNOTAVAIL)
+            if error.errno in refused:
                 continue
             print(json.dumps({'network_probe_family': int(family), 'inconclusive_errno': error.errno}), flush=True)
             raise ValueError('Network probe was inconclusive') from None
@@ -71,7 +81,7 @@ def inner(config: dict) -> int:
     target = Path(config['target'])
     if not target.is_dir() or any(target.iterdir()):
         raise ValueError('Isolated build must start with an empty target directory')
-    print('Direct IPv4/IPv6 routes absent; capabilities dropped; fresh target directory verified', flush=True)
+    print('Only loopback present; IPv4/IPv6 probes refused; capabilities dropped; fresh target verified', flush=True)
     stage('execute-offline-checks')
     outcomes = {}
     for name, arguments in COMMANDS:

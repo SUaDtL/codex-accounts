@@ -54,6 +54,14 @@ class NativeProofTests(unittest.TestCase):
         self.assertEqual(len(names), len(run_native_tests.CASES))
         self.assertNotIn('#[ignore', source)
 
+    def test_only_fixed_failure_categories_leave_native_diagnostics(self):
+        prefix = b'called `Result::unwrap()` on an `Err` value: '
+        self.assertEqual(run_native_tests.failure_categories(prefix + b'Changed\n'), ['Changed'])
+        self.assertEqual(run_native_tests.failure_categories(prefix + b'Incomplete\r\n'), ['Incomplete'])
+        self.assertEqual(run_native_tests.failure_categories(prefix + b'SYNTHETIC_SECRET\n'), [])
+        self.assertEqual(run_native_tests.failure_categories(prefix + b'Changed_SECRET\n'), [])
+        self.assertEqual(run_native_tests.failure_categories(b'SYNTHETIC_PATH Changed\n'), [])
+
     def test_portable_host_cannot_claim_windows_proof(self):
         with patch.object(run_native_tests.platform, 'system', return_value='Linux'):
             with self.assertRaises(ValueError):
@@ -83,15 +91,30 @@ class IsolatedBuildTests(unittest.TestCase):
                 ci_isolated.validate_status(good, uid, parent, child)
 
     def test_successful_route_or_inconclusive_error_cannot_pass(self):
-        for error in (None, OSError(errno.EACCES, 'SYNTHETIC_NOT_NETWORK_PROOF')):
+        with patch.object(ci_isolated.socket, 'if_nameindex', return_value=[(1, 'lo')]):
+            for error in (None, OSError(errno.EACCES, 'SYNTHETIC_NOT_NETWORK_PROOF'),
+                          OSError(errno.EADDRNOTAVAIL, 'SYNTHETIC_IPV4_ERROR')):
+                with patch.object(ci_isolated.socket, 'socket') as socket:
+                    socket.return_value.__enter__.return_value.connect.side_effect = error
+                    with self.assertRaises(ValueError):
+                        ci_isolated.no_ip_route()
             with patch.object(ci_isolated.socket, 'socket') as socket:
-                socket.return_value.__enter__.return_value.connect.side_effect = error
+                socket.return_value.__enter__.return_value.connect.side_effect = OSError(errno.ENETUNREACH, 'synthetic')
+                ci_isolated.no_ip_route()
+                self.assertEqual(socket.call_count, 2)
+
+    def test_ipv6_no_source_requires_independent_loopback_only_topology(self):
+        with patch.object(ci_isolated.socket, 'if_nameindex', return_value=[(1, 'lo')]), \
+             patch.object(ci_isolated.socket, 'socket') as socket:
+            socket.return_value.__enter__.return_value.connect.side_effect = [
+                OSError(errno.ENETUNREACH, 'synthetic'), OSError(errno.EADDRNOTAVAIL, 'synthetic')]
+            ci_isolated.no_ip_route()
+        for interfaces in ([], [(2, 'eth0')], [(1, 'lo'), (2, 'eth0')], [(1, 'lo'), (1, 'lo')]):
+            with patch.object(ci_isolated.socket, 'if_nameindex', return_value=interfaces), \
+                 patch.object(ci_isolated.socket, 'socket') as socket:
                 with self.assertRaises(ValueError):
                     ci_isolated.no_ip_route()
-        with patch.object(ci_isolated.socket, 'socket') as socket:
-            socket.return_value.__enter__.return_value.connect.side_effect = OSError(errno.ENETUNREACH, 'synthetic')
-            ci_isolated.no_ip_route()
-            self.assertEqual(socket.call_count, 2)
+                socket.assert_not_called()
 
     def test_failed_check_remains_failed_and_other_independent_checks_execute(self):
         with tempfile.TemporaryDirectory() as directory:

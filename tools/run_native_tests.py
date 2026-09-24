@@ -24,6 +24,15 @@ CASES = (
     'ca04b_snapshot_and_known_descendants_never_become_home_authority',
 )
 MAX_OUTPUT = 1024 * 1024
+FAULTS = {b'AccessDenied', b'Disappeared', b'Incomplete', b'Changed', b'Bound',
+          b'QuitUnavailable', b'Timeout', b'HelperStuck', b'QualificationMissing'}
+
+
+def failure_categories(output: bytes) -> list[str]:
+    # Match only the fixed enum after Rust's unwrap diagnostic, never arbitrary
+    # panic text. Unknown values and canaries are not exported.
+    values = re.findall(rb'called `Result::unwrap\(\)` on an `Err` value: ([A-Za-z]+)(?:\r?\n|$)', output[:MAX_OUTPUT])
+    return sorted({value.decode('ascii') for value in values if value in FAULTS})
 
 
 def verify(output: bytes, returncode: int, cases: tuple[str, ...] = CASES) -> None:
@@ -70,12 +79,11 @@ def run() -> None:
             except (OSError, ValueError, subprocess.SubprocessError):
                 passed = False
                 failed = True
-            # Only known case names, a fixed error category and source line numbers
-            # leave the verifier. Never echo panic text, paths or child output.
             lines = re.findall(rb'lifecycle_tests\.rs:(\d{1,5}):', output_bytes)
             print(json.dumps({'profile': profile, 'native_case': case,
                               'result': 'passed' if passed else 'failed',
                               'failure_source_lines': [] if passed else [int(n) for n in lines[:8]],
+                              'failure_categories': [] if passed else failure_categories(output_bytes),
                               'desktop_qualification': 'not_established'}), flush=True)
     if failed:
         raise ValueError('One or more required native cases did not pass')

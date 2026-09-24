@@ -345,6 +345,9 @@ fn ca04b_home_mutex_process_contention_and_exit_release() {
 #[test]
 fn ca04b_home_replacement_and_non_directory_paths_refuse() {
     let fixture = home();
+    // Construct the hazard before taking the restrictive directory handles.
+    // The lock must not be weakened to permit later fixture setup.
+    std::fs::hard_link(fixture.0.join("marker"), fixture.0.join("linked")).unwrap();
     let lock = HomeLock::acquire(&fixture.0).unwrap();
     assert!(std::fs::rename(&fixture.0, fixture.0.with_extension("moved")).is_err());
     let parent = fixture.0.parent().unwrap();
@@ -358,7 +361,6 @@ fn ca04b_home_replacement_and_non_directory_paths_refuse() {
     ] {
         assert!(HomeLock::acquire(&path).is_err());
     }
-    std::fs::hard_link(fixture.0.join("marker"), fixture.0.join("linked")).unwrap();
     assert!(HomeLock::acquire(&fixture.0.join("linked")).is_err());
 }
 #[test]
@@ -382,6 +384,7 @@ fn ca04b_system_owned_directory_is_not_a_current_user_home() {
                 SE_FILE_OBJECT,
                 OWNER_SECURITY_INFORMATION,
                 &mut owner,
+                null_mut(),
                 null_mut(),
                 null_mut(),
                 null_mut(),
