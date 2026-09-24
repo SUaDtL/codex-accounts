@@ -63,6 +63,7 @@ impl<D: Files> Storage<D> {
             later_startup: false,
             blocked: false,
             control_repair: true,
+            switch_session: None,
             torn_control: stage.map(Zeroizing::new),
         };
         store.verify_registry(root, &store.registry)?;

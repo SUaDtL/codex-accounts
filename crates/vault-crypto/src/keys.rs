@@ -123,6 +123,23 @@ impl RootKey {
 }
 
 pub struct Fingerprint(Zeroizing<[u8; 32]>);
+impl Fingerprint {
+    /// Fixed-size storage encoding. The caller must encrypt this value; it is
+    /// never suitable for UI, diagnostics, logs, or a portable credential export.
+    pub fn storage_bytes(&self) -> &[u8; 32] {
+        &self.0
+    }
+    /// Parse only a tag, not trusted evidence. Verify against independently
+    /// selected context and bytes before using a recovered fingerprint.
+    pub fn from_storage_bytes(bytes: &[u8]) -> Result<Self, CryptoError> {
+        if bytes.len() != 32 {
+            return Err(CryptoError::InvalidEnvelope);
+        }
+        let mut tag = Zeroizing::new([0; 32]);
+        tag.copy_from_slice(bytes);
+        Ok(Self(tag))
+    }
+}
 
 /// Versioned ciphertext, not proof of its origin, user scope, or storage safety.
 pub struct ProtectedRootKey(Vec<u8>);

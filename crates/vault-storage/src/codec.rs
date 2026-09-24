@@ -231,7 +231,11 @@ pub(crate) fn generation(
 }
 pub(crate) fn registry(r: &Registry) -> Result<Zeroizing<Vec<u8>>, StorageError> {
     r.validate()?;
-    let mut w = Writer::new(b"CAREG001");
+    let mut w = Writer::new(if r.format == 1 {
+        b"CAREG001"
+    } else {
+        b"CAREG002"
+    });
     w.u64(r.revision);
     w.u8(u8::from(r.active_known));
     w.option_id(r.active);
@@ -259,10 +263,28 @@ pub(crate) fn registry(r: &Registry) -> Result<Zeroizing<Vec<u8>>, StorageError>
             w.id(g);
         }
     }
+    if r.format == 2 {
+        w.u32(r.rejected.len() as u32);
+        for id in &r.rejected {
+            w.id(id);
+        }
+        w.u32(r.journals.len() as u32);
+        for j in &r.journals {
+            journal_codec::write(&mut w, j);
+        }
+    }
     w.finish()
 }
 pub(crate) fn read_registry(bytes: &[u8]) -> Result<Registry, StorageError> {
-    let mut d = Reader::new(bytes, b"CAREG001")?;
+    let format = if bytes.starts_with(b"CAREG001") { 1 } else { 2 };
+    let mut d = Reader::new(
+        bytes,
+        if format == 1 {
+            b"CAREG001"
+        } else {
+            b"CAREG002"
+        },
+    )?;
     let revision = d.u64()?;
     let active_known = d.boolean()?;
     let active = d.option_id()?;
@@ -302,8 +324,21 @@ pub(crate) fn read_registry(bytes: &[u8]) -> Result<Registry, StorageError> {
         }
         holds.push(Hold { id, generations });
     }
+    let mut rejected = Vec::new();
+    let mut journals = Vec::new();
+    if format == 2 {
+        for _ in 0..d.count(MAX_PROFILES)? {
+            rejected.push(d.id()?);
+        }
+        for _ in 0..d.count(crate::journal::MAX_JOURNALS)? {
+            journals.push(journal_codec::read(&mut d)?);
+        }
+    }
     d.end()?;
     let r = Registry {
+        format,
+        journals,
+        rejected,
         revision,
         active_known,
         active,
@@ -366,3 +401,6 @@ pub(crate) fn read_state(bytes: &[u8]) -> Result<State, StorageError> {
     s.validate()?;
     Ok(s)
 }
+
+#[path = "journal_codec.rs"]
+mod journal_codec;

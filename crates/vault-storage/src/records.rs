@@ -158,6 +158,9 @@ pub(crate) struct Hold {
     pub generations: Vec<Id>,
 }
 pub(crate) struct Registry {
+    pub format: u8,
+    pub journals: Vec<crate::journal::Journal>,
+    pub rejected: Vec<Id>,
     pub revision: u64,
     pub profiles: Vec<Profile>,
     pub generations: Vec<Generation>,
@@ -168,6 +171,9 @@ pub(crate) struct Registry {
 impl Registry {
     pub fn empty() -> Self {
         Self {
+            format: 1,
+            journals: vec![],
+            rejected: vec![],
             revision: 0,
             profiles: vec![],
             generations: vec![],
@@ -183,6 +189,13 @@ impl Registry {
                 std::iter::once(g.manifest.clone())
                     .chain(g.rules.iter().filter_map(|r| r.blob.clone()))
             })
+            .chain(
+                self.journals
+                    .iter()
+                    .flat_map(|j| j.evidence.iter())
+                    .flat_map(|e| e.resources.iter())
+                    .filter_map(|r| r.blob.clone()),
+            )
             .collect()
     }
     pub fn validate(&self) -> Result<(), StorageError> {
@@ -192,6 +205,13 @@ impl Registry {
             || self.holds.len() > MAX_GENERATIONS
         {
             return Err(StorageError::InputLimit);
+        }
+        if !matches!(self.format, 1 | 2)
+            || (self.format == 1 && (!self.journals.is_empty() || !self.rejected.is_empty()))
+            || self.journals.len() > crate::journal::MAX_JOURNALS
+            || self.blobs().len() > MAX_BLOBS
+        {
+            return Err(StorageError::Corrupt);
         }
         let pids: BTreeSet<_> = self.profiles.iter().map(|p| p.id).collect();
         let gids: BTreeSet<_> = self.generations.iter().map(|g| g.id).collect();
@@ -271,6 +291,18 @@ impl Registry {
                 return Err(StorageError::InputLimit);
             }
         }
+        let jids: BTreeSet<_> = self.journals.iter().map(|j| j.id).collect();
+        let rejected: BTreeSet<_> = self.rejected.iter().copied().collect();
+        if jids.len() != self.journals.len()
+            || rejected.len() != self.rejected.len()
+            || !rejected.is_subset(&pids)
+            || self.journals.iter().filter(|j| !j.terminal()).count() > 1
+        {
+            return Err(StorageError::Corrupt);
+        }
+        for journal in &self.journals {
+            journal.validate(self)?;
+        }
         for h in &self.holds {
             let refs: BTreeSet<_> = h.generations.iter().copied().collect();
             if refs.is_empty() || refs.len() != h.generations.len() || !refs.is_subset(&gids) {
@@ -284,6 +316,7 @@ impl Registry {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Recovery {
     Clean,
+    SwitchPending,
     ControlRepairRequired,
     CommitPending,
     CleanupPending,

@@ -6,6 +6,7 @@ rust-version.workspace = true
 publish.workspace = true
 
 [dependencies]
+codex-accounts-core = { path = "../core" }
 codex-accounts-vault = { path = "../vault" }
 codex-accounts-vault-crypto = { path = "../vault-crypto" }
 getrandom = "=0.3.4"

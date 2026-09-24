@@ -10,6 +10,11 @@ mod engine;
 mod native;
 #[cfg_attr(not(all(windows, target_arch = "x86_64")), allow(dead_code))]
 mod records;
+// No production effects adapter exists in CA-04A. The private coordinator is
+// exercised by synthetic effects only; this does not relax any safety lint.
+#[allow(dead_code)]
+mod journal;
+pub use journal::{OperationStatus, SwitchPhase};
 
 use codex_accounts_vault::{CredentialSet, Identity, Resource, ResourceId, ResourceShape};
 pub use codex_accounts_vault::{GenerationId, ProfileId};
@@ -38,6 +43,7 @@ pub enum StorageError {
     ActiveProfile,
     Referenced,
     LaterStartupRequired,
+    SwitchPending,
 }
 impl std::fmt::Display for StorageError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -151,6 +157,10 @@ impl Vault {
 }
 #[cfg(all(windows, target_arch = "x86_64"))]
 impl Vault {
+    /// Metadata only. This does not start, resume, or authorize a switch.
+    pub fn switch_status(&self) -> Result<Vec<OperationStatus>, StorageError> {
+        self.storage.switch_status()
+    }
     pub fn recovery(&self) -> Recovery {
         self.storage.recovery()
     }
