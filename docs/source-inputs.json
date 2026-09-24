@@ -1,10 +1,13 @@
 {
-  "schema": "codex-accounts/source-inputs/v1",
+  "schema": "codex-accounts/source-inputs/v2",
   "date": "2026-09-22",
   "files": [
     {
       "path": "docs/local-codex-switcher-spec.html",
-      "sha256": "a5041d63e0b517f68019a4b527c050014616e7bd46c5742768a65199120ad3e6"
+      "sha256": "af8171ed2e69cdca214afc5a569f060e70582033c72829594c1c81f02fd82d43",
+      "original_sha256": "a5041d63e0b517f68019a4b527c050014616e7bd46c5742768a65199120ad3e6",
+      "revision": "ca-02-t07-proposal-1",
+      "amendment": "docs/spec-amendments/ca-02-t07.md"
     },
     {
       "path": "docs/codex-switchers-comparison.html",

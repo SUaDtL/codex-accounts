@@ -23,3 +23,6 @@ Thumbs.db
 **/staging/
 /local-evidence/
 /local-reports/
+
+# Explicit two-user synthetic evidence artifact; never repository source.
+/crates/vault-crypto/ca03b-synthetic.dpapi

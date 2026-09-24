@@ -14,8 +14,8 @@ ROOT = Path(__file__).resolve().parents[2]
 
 class ProjectionTests(unittest.TestCase):
     def setUp(self):
-        self.original = spec_index.SPEC.read_text(encoding='utf-8')
-        self.html = spec_proposal.render(self.original)
+        self.current = spec_index.SPEC.read_text(encoding='utf-8')
+        self.html = spec_proposal.render(self.current)
         self.model = json.loads(spec_proposal.MODEL.search(self.html).group(2))
 
     def test_every_normative_section_and_source_agrees(self):
@@ -73,7 +73,10 @@ class ProjectionTests(unittest.TestCase):
         self.assertEqual(entry['original_sha256'], spec_proposal.ORIGINAL_SHA256)
         self.assertEqual(entry['sha256'], spec_proposal.CANDIDATE_SHA256)
         self.assertEqual(hashlib.sha256(spec_index.SPEC.read_bytes()).hexdigest(),
-                         spec_proposal.ORIGINAL_SHA256)
+                         spec_proposal.CANDIDATE_SHA256)
+        self.assertEqual(manifest, json.loads((ROOT / 'docs/source-inputs.json').read_text()))
+        self.assertEqual(spec_proposal.reconstruct_original(self.html),
+                         spec_proposal.reconstruct_original(self.current))
 
     def test_unchanged_research_and_index_retain_original_digests(self):
         manifest = json.loads((ROOT / 'docs/source-inputs.json').read_text())
