@@ -44,6 +44,20 @@ jobs:
         id: python
         if: ${{ !cancelled() && steps.checkout.outcome == 'success' }}
         run: python3 -m unittest discover -s tests/python -v
+      - name: Retain exact committed source evidence
+        id: source_evidence
+        if: ${{ !cancelled() && steps.checkout.outcome == 'success' }}
+        run: python3 tools/ci_source.py
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1, Node 24; source evidence only
+        id: source_upload
+        if: ${{ !cancelled() && steps.source_evidence.outcome == 'success' }}
+        with:
+          name: source-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/ca-source-evidence/
+          if-no-files-found: error
+          retention-days: 7
+          overwrite: false
+          include-hidden-files: false
       - name: Require every source check to execute successfully
         id: assess
         if: ${{ always() && steps.checkout.outcome == 'success' }}
