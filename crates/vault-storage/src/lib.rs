@@ -1,5 +1,33 @@
-//! CA-03C: encrypted storage library. No Codex file reads, login, process control,
-//! credential CLI, or authority to qualify a Desktop installation.
+//! CA-03C/CA-04A: encrypted storage and private journal implementation.
+//! No Codex file reads, login, process control, credential CLI, or authority to
+//! qualify a Desktop installation.
+//!
+//! # Public metadata construction does not perform I/O
+//!
+//! ```
+//! use codex_accounts_vault_storage::{ProfileText, Vault};
+//! assert!(ProfileText::new("SYNTHETIC_LABEL".to_owned()).is_ok());
+//! assert!(ProfileText::new(String::new()).is_err());
+//! let unopened: Option<Vault> = None;
+//! assert!(unopened.is_none());
+//! ```
+//!
+//! # Coordinator effects cannot be supplied by a library consumer
+//!
+//! ```compile_fail,E0603
+//! use codex_accounts_vault_storage::engine::coordinator::Effects;
+//! ```
+//!
+//! # A public vault does not expose a live-switch entry point
+//!
+//! ```compile_fail,E0599
+//! use codex_accounts_vault_storage::Vault;
+//! fn cannot_dispatch(vault: &mut Vault) {
+//!     vault.begin_switch();
+//! }
+//! ```
+//!
+//! These executable API checks do not qualify any native or Desktop behavior.
 #![deny(unsafe_code)]
 #[cfg_attr(not(all(windows, target_arch = "x86_64")), allow(dead_code))]
 mod codec;

@@ -1,16 +1,19 @@
-name: Bootstrap checks
+name: Repository checks
 
 on:
   push:
+    branches: [main]
   pull_request:
+  merge_group:
+    types: [checks_requested]
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: bootstrap-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  group: checks-${{ github.workflow }}-${{ github.event_name }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   source-and-python:
@@ -18,17 +21,35 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2; separately reviewed upgrade pending
+        id: checkout
         with:
           persist-credentials: false
-      - name: Record test interpreter
-        run: python3 --version
+      - name: Record checked out commit and tree
+        id: revision
+        run: git log -1 --format="%H %T"
       - name: Validate supplied source integrity
-        run: |
-          python3 tools/spec_index.py check
-          python3 tools/check_dependencies.py
+        id: spec
+        if: ${{ !cancelled() && steps.checkout.outcome == 'success' }}
+        run: python3 tools/spec_index.py check
+      - name: Validate reviewed dependency lock
+        id: dependency_review
+        if: ${{ !cancelled() && steps.checkout.outcome == 'success' }}
+        run: python3 tools/check_dependencies.py
+      - name: Validate workflow contract
+        id: workflow_contract
+        if: ${{ !cancelled() && steps.checkout.outcome == 'success' }}
+        run: python3 tools/ci_contract.py
       - name: Run developer-tool tests
+        id: python
+        if: ${{ !cancelled() && steps.checkout.outcome == 'success' }}
         run: python3 -m unittest discover -s tests/python -v
+      - name: Require every source check to execute successfully
+        id: assess
+        if: ${{ always() && steps.checkout.outcome == 'success' }}
+        env:
+          CI_RESULTS: ${{ toJSON(steps) }}
+        run: python3 tools/ci_gate.py source
 
   rust-models:
     name: Rust models (${{ matrix.os }})
@@ -39,31 +60,75 @@ jobs:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2; separately reviewed upgrade pending
+        id: checkout
         with:
           persist-credentials: false
-      - name: Acquire pinned development toolchain
-        id: toolchain
-        run: rustup toolchain install 1.90.0 --profile minimal --component rustfmt --component clippy
-      # Separate steps preserve the review failure on Windows PowerShell too.
-      # Dependency acquisition must not run after a failed lock review.
+      - name: Record checked out commit and tree
+        id: revision
+        run: git log -1 --format="%H %T"
+      # Review before any dependency acquisition. Keep native commands separate.
       - name: Validate reviewed dependency lock
         id: dependency_review
         run: python tools/check_dependencies.py
+      - name: Acquire pinned development toolchain
+        id: toolchain
+        run: rustup toolchain install 1.90.0 --profile minimal --component rustfmt --component clippy
       - name: Acquire reviewed dependencies
         id: dependencies
         run: cargo fetch --locked
       - name: Record compiler
+        id: compiler
+        if: ${{ !cancelled() && steps.toolchain.outcome == 'success' }}
         run: rustc --version --verbose
+      - name: Assert runner coverage lane
+        id: host
+        if: ${{ !cancelled() && steps.checkout.outcome == 'success' }}
+        env:
+          CI_MATRIX_OS: ${{ matrix.os }}
+        run: python tools/ci_gate.py host
       - name: Check formatting
+        id: format
+        if: ${{ !cancelled() && steps.toolchain.outcome == 'success' }}
         run: cargo fmt --all -- --check
-      # Keep independent checks visible after a formatting/test failure.
-      # Their failures still fail the job; do not use continue-on-error.
-      - name: Test models without network
+      # Cargo offline constrains acquisition, not sockets opened by build/test code.
+      # No-fail-fast continues other test executables while retaining a failed exit.
+      - name: Test workspace (Cargo offline)
+        id: tests
         if: ${{ !cancelled() && steps.toolchain.outcome == 'success' && steps.dependency_review.outcome == 'success' && steps.dependencies.outcome == 'success' }}
-        run: cargo test --workspace --all-targets --locked --offline
-      - name: Lint models without network
+        run: cargo test --workspace --all-targets --no-fail-fast --locked --offline
+      - name: Test documentation (Cargo offline)
+        id: doctests
+        if: ${{ !cancelled() && steps.toolchain.outcome == 'success' && steps.dependency_review.outcome == 'success' && steps.dependencies.outcome == 'success' }}
+        run: cargo test --workspace --doc --no-fail-fast --locked --offline
+      - name: Build optimized targets (Cargo offline)
+        id: release_build
+        if: ${{ !cancelled() && steps.toolchain.outcome == 'success' && steps.dependency_review.outcome == 'success' && steps.dependencies.outcome == 'success' }}
+        run: cargo build --workspace --all-targets --release --locked --offline
+      - name: Lint workspace (Cargo offline)
+        id: clippy
         if: ${{ !cancelled() && steps.toolchain.outcome == 'success' && steps.dependency_review.outcome == 'success' && steps.dependencies.outcome == 'success' }}
         run: cargo clippy --workspace --all-targets --locked --offline -- -D warnings
-      - name: Native qualification boundary
-        run: echo "Synthetic models and native OS APIs tested. No Desktop installation qualified; no real OAuth or live account mutation tested."
+      - name: Require every Rust check to execute successfully
+        id: assess
+        if: ${{ always() && steps.checkout.outcome == 'success' }}
+        env:
+          CI_RESULTS: ${{ toJSON(steps) }}
+        run: python tools/ci_gate.py rust
+
+  ci-gate:
+    name: CI gate
+    needs: [source-and-python, rust-models]
+    if: ${{ always() }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2; separately reviewed upgrade pending
+        id: checkout
+        with:
+          persist-credentials: false
+      - name: Require all prerequisite jobs to succeed
+        id: assess
+        env:
+          CI_RESULTS: ${{ toJSON(needs) }}
+        run: python3 tools/ci_gate.py jobs
