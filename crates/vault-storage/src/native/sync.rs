@@ -13,7 +13,7 @@ impl Apartment {
                 windows::Win32::System::WinRT::RO_INIT_MULTITHREADED,
             )
         }
-        .map_err(|_| StorageError::UnsafePath)?;
+        .map_err(|e| api_error("initialize", e))?;
         Ok(Self(std::marker::PhantomData))
     }
 }
@@ -23,6 +23,11 @@ impl Drop for Apartment {
         // before thread exit acquires the loader lock. Never stored in thread_local!.
         unsafe { windows::Win32::System::WinRT::RoUninitialize() };
     }
+}
+fn api_error(_stage: &'static str, _error: windows::core::Error) -> StorageError {
+    #[cfg(test)]
+    diagnostics::record(_stage, _error.code().0);
+    StorageError::UnsafePath
 }
 
 pub(super) fn registered_sync_check(ancestors: &[File]) -> Result<(), StorageError> {
@@ -42,7 +47,7 @@ pub(super) fn registered_sync_check(ancestors: &[File]) -> Result<(), StorageErr
             "Windows.Storage.Provider.StorageProviderSyncRootManager",
         ))
     }
-    .map_err(|_| StorageError::UnsafePath)?;
+    .map_err(|e| api_error("factory", e))?;
     // SAFETY: use the generated SDK vtable and output type. The live factory
     // owns the call; null-initialized output is converted only after success.
     let roots: windows_collections::IVectorView<
@@ -52,17 +57,17 @@ pub(super) fn registered_sync_check(ancestors: &[File]) -> Result<(), StorageErr
         (factory.vtable().GetCurrentSyncRoots)(factory.as_raw(), &mut output)
             .and_then(|| windows::core::Type::from_abi(output))
     }
-    .map_err(|_| StorageError::UnsafePath)?;
-    let count = roots.Size().map_err(|_| StorageError::UnsafePath)?;
+    .map_err(|e| api_error("inventory", e))?;
+    let count = roots.Size().map_err(|e| api_error("count", e))?;
     if count > 128 {
         return Err(StorageError::InputLimit);
     }
     let ids = ancestors.iter().map(stamp).collect::<Result<Vec<_>, _>>()?;
     for i in 0..count {
-        let root = roots.GetAt(i).map_err(|_| StorageError::UnsafePath)?;
-        let folder = root.Path().map_err(|_| StorageError::UnsafePath)?;
-        let item: IStorageItem = folder.cast().map_err(|_| StorageError::UnsafePath)?;
-        let path = item.Path().map_err(|_| StorageError::UnsafePath)?;
+        let root = roots.GetAt(i).map_err(|e| api_error("root", e))?;
+        let folder = root.Path().map_err(|e| api_error("folder", e))?;
+        let item: IStorageItem = folder.cast().map_err(|e| api_error("item", e))?;
+        let path = item.Path().map_err(|e| api_error("path", e))?;
         if path.is_empty() || path.len() > 240 {
             return Err(StorageError::UnsafePath);
         }
@@ -97,7 +102,7 @@ pub(super) fn registered_sync_check(ancestors: &[File]) -> Result<(), StorageErr
             return Err(StorageError::UnsafePath);
         }
     }
-    if roots.Size().map_err(|_| StorageError::UnsafePath)? != count {
+    if roots.Size().map_err(|e| api_error("recount", e))? != count {
         return Err(StorageError::ExternalChange);
     }
     Ok(())
@@ -132,6 +137,9 @@ pub(super) fn cloud_check(f: &File, ancestors: &[File]) -> Result<(), StorageErr
 #[cfg(test)]
 #[path = "creation_checks.rs"]
 mod creation_checks;
+#[cfg(test)]
+#[path = "sync_diagnostics_tests.rs"]
+mod diagnostics;
 
 #[cfg(test)]
 #[test]
@@ -153,12 +161,16 @@ fn native_inventory_thread_exit_balances_com_before_tls_teardown() {
         .map(|_| {
             std::thread::spawn(|| {
                 for _ in 0..8 {
-                    registered_sync_check(&[]).expect("fresh thread inventory");
+                    registered_sync_check(&[]).unwrap_or_else(|error| {
+                        panic!("fresh thread inventory: {error:?}; {:?}", diagnostics::last())
+                    });
                 }
             })
         })
         .collect();
+    let mut completed = true;
     for child in children {
-        child.join().expect("inventory thread completed");
+        completed &= child.join().is_ok();
     }
+    assert!(completed, "all inventory threads must complete");
 }

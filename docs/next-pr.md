@@ -1,83 +1,85 @@
-# Next bounded product slice: CA-04B
+# Next bounded slice after CA-04B review: CA-04C
 
-Parent packet: CA-04 / Q2. CA-04A and the preserved CA-03C dependency are merged
-through PR #7. Verified main baseline is `103d1a409ea19544ac4a18f33a19df925f5efc58`;
-main run 35962095930 passed. Inspect live refs, AGENTS.md, current open PRs and actual
-head checks before choosing a base. This snapshot is not permission to reset history.
+Parent: CA-04 / Q2. CA-04A and storage are merged through PR #7; CI assurance through
+PR #8. CA-04B is PR #9 on `feat/ca-04b-native-lifecycle`, based on observed main
+`27afd3381958b68154947e7f8d0092b214c226c6`. Inspect its live final head, complete diff,
+review state and CI before choosing the next base. Do not assume PR #9 merged,
+reset history, stack unnoticed dependencies or repeat completed code.
 
-The owner requested a CI/CD and coverage review before resuming product work.
-PR #8 carries that bounded assurance repair and `docs/ci-review.md` records fixed
-and unresolved gaps. Review it first; do not assume it merged or recreate its work.
-CA-04B remains selected but is not started by the CI review. The main `CI gate`
-protection setting requires separate owner action; a workflow edit does not enable it.
+If CA-04B remains incomplete or has failed current-head checks, finish that PR
+before starting this packet. Publishing this pointer is not automatic advancement.
 
 ## Deliverable
 
-Implement concrete Windows x64 owner/canonical-target-home lifetime locking and
-bounded writer/process observations for the future coordinator adapter. Reuse the
-existing private journal and storage engine; do not create a second transaction
-protocol or an arbitrary public process/filesystem executor.
+Implement a narrow private Windows target-resource adapter over the existing
+CA-04A journal and storage engine, first exercised only against freshly created
+synthetic target homes. Reuse CA-04B home/process ownership; do not add another
+transaction protocol or a public arbitrary-path/filesystem/process executor.
 
-Bind the kernel lock to the observed canonical home identity and current owner,
-not only an unnormalized pathname or marker file. Prove contention and release on
-exit with controlled child processes. The existing vault-root lock is not a
-substitute for this target-home lock. Detect path/owner replacement, reparse and
-hardlink hazards; never repair arbitrary directory permissions.
+Stage the declared bounded synthetic resource set in its destination directory
+with secure creation, exact bytes/explicit absence, handle-bound expected-old
+comparisons and per-resource journal intent/completion. Validate resulting identity,
+permissions and bytes. Preserve newest outgoing and post-helper generations and
+complete retention holds. Foreign/unexpected data must enter conflict without
+blind overwrite. Restoration uses the same write-ahead protocol and preserves
+primary/restoration failures separately.
 
-Implement bounded process identity/liveness observations, including owner, stable
-start identity and descendant tracking. A PID, name substring or successful signal
-is not exit proof. Use exact qualified installation/runtime bindings when available;
-without the necessary Q0 rules report unknown and do not authorize mutation. Never
-terminate a user-owned Desktop, IDE or terminal in ordinary tests. Normal-quit and
-owned-helper timeout behavior must be tested with controlled synthetic children
-before any later real integration. Do not infer shared-home association from a
-process name, current directory or an unverified command line alone.
+Trace whether existing protected-storage primitives can be reused safely; do not
+copy vault naming, ACL or fixed-root assumptions into an actual Desktop home.
+No live auth filename, guessed companion or guessed effective home belongs in a
+synthetic resource contract. No behavior-test fixture can enable a distributable
+production effects adapter. A real adapter remains blocked until the exact Q0
+resource/home/policy/lifecycle contract and required filesystem durability are
+established through reviewed owner evidence.
 
-Keep effect authority private and impossible to manufacture through deserialized
-booleans, a public trait implementation, a developer override or a fake receipt.
-Do not connect synthetic evidence to production switching. No live credential read
-or replacement, login, inference, task replay, UI, installer or release belongs in
-this slice. Exact Q0 policy/home/resource facts and filesystem durability remain
-separate prerequisite gates.
+Characterize file flush, replacement and directory-metadata durability separately.
+Do not rename a successful process restart test as physical-power-loss proof or
+remove F-012/T-21/T-22 because metadata durability is difficult. An unsupported
+primitive or unobserved case remains a named integration gate.
 
-## Required reads and validation
+## Required reads
 
-Read SPEC-PROCESSES, SPEC-TRANSACTION, SPEC-RECOVERY, F-004 through F-014,
-F-019/F-024 and the complete T-06/T-14/T-17/T-19/T-20/T-21/T-22 scenarios. Read the
-current discovery, storage and CA-04A journal contracts and relevant tests. The
-plan cannot silently amend these requirements.
+Read live AGENTS.md, the current implementation plan, validation and CI contract,
+CA-03C storage/recovery, CA-04A coordinator/Effects/journal and CA-04B ownership APIs.
+Read SPEC-PROCESSES, SPEC-TRANSACTION, SPEC-RECOVERY, S-003/S-005/S-008/S-009,
+F-007/F-009/F-012/F-013/F-014/F-019/F-020/F-022/F-024/F-025 and the complete
+T-05/T-08/T-13/T-14/T-17/T-18/T-19/T-20/T-21/T-22/T-23/T-29/T-30/T-31 scenarios.
+Use tools/spec_index.py list/show/check when local execution is available.
 
-Review any new SDK feature/native binding against exact pinned source and official
-documentation before acquisition. Keep the unsafe boundary small and justified;
-retain safe-core and coordinator restrictions. Do not upgrade unrelated packages
-or change CI failure semantics as incidental cleanup.
+## Tests and review
 
-Test actual kernel contention/release, Unicode/canonical identity and replacement,
-wrong owner, denied/partial enumeration, process disappearance and reused PID/start
-identity, hidden/late descendants, normal quit refusal/timeout and helper signal
-versus observed exit. Native tests must own their newly created directories and
-children; no global process kills, account creation or permission changes. Preserve
-journal refusal and restart tests when integrating observed prerequisites.
+Use real Windows filesystem/lock/process APIs with controlled synthetic resources.
+Prove exact-byte/absence combinations, midpoint multi-resource interruptions,
+expected-parent and external-writer conflicts, sharing/ACL/link/replacement refusal,
+cleanup failure, newest-generation preservation and reopen at every durable forward
+and restoration boundary. Native tests own their new directories and children only.
+Retain all inherited journal/refusal/native and optimized tests; no global process
+kills, real account input, user creation or existing permission repair.
 
-Run the current pinned formatting, workspace compilation/tests/Clippy, documentation
-tests, optimized compilation, Python/source/projection/provenance/dependency and
-workflow-contract checks, plus selected native OS tests. Inspect completed results
-for the actual final PR head and test-merge SHA. Cargo-offline execution is not an
-OS network sandbox. Update the single roadmap and validation record; report missing
-native evidence honestly. Publish one normal review PR; no merge, force push/reset,
-permission change, release or live account operation.
+Any added binding, SDK feature or dependency requires exact pinned source/API review
+and a scoped manifest/lock record preserving predecessors. Keep unsafe code inside
+the private native boundary; keep the core/coordinator/codec restrictions.
 
-## Unresolved integration gates
+Run existing standard-hosted source/Python/projection/provenance/dependency checks,
+formatting, debug/release workspace tests, doctests, optimized compilation, Clippy,
+named Windows CA-04B cases and Linux direct-IP-isolated checks. Add exact named
+CA-04C native proof without allowing zero/ignored cases. All failures remain
+blocking, with final-head and tested-merge evidence inspected before handoff.
 
-Q0 publisher/runtime/home/backend/policy/resource/identity/lifecycle evidence,
-ordinary two-user/unavailable-store protection, owner Windows 11/sync-provider
-qualification, physical power-loss and directory-metadata persistence, and
-independent macOS remain open. Native process tests with synthetic children do not
-qualify Codex Desktop. Provide exact safe collection steps and redacted expected
-results for remaining evidence; never request real authentication files.
+Update the single roadmap, validation and safe collection procedure. Open/update
+one normal PR, verify its complete file set and checks. No merge, force push/reset,
+release, permission/protection change or live account operation.
 
-CI review follow-ups include owner-enforced main protection, a scoped checkout
-runtime upgrade, actual build-network isolation, refreshed advisory tooling and
-future measured coverage/release provenance. Do not represent those as resolved by
-a green test count. Full CA-04/Q2 remains open; no CA-05 advancement or production
-authority follows from a code or test pass alone.
+## Deliberately outside this packet
+
+No official login/refresh client, new RPC/CLI/MCP/HTTP credential surface, renderer,
+installer, inference, app patching, broad history migration or automatic rotation.
+Owned-runtime production construction/private stdio is later CA-05 work, not a
+reason to expose the test constructor. Native confirmation and exact installation
+qualification cannot be supplied by a bool. macOS remains independently gated.
+
+Q0, ordinary two-user/unavailable-store protection, owner Windows 11/sync providers,
+physical-power-loss/directory-metadata and complete product acceptance remain open.
+CI follow-ups still include Windows/macOS network isolation, current advisory
+automation, measured decision-path coverage, SBOM/provenance and clean unsigned
+payload comparison. Main protection is an owner setting; do not change it here.

@@ -132,13 +132,21 @@ impl OwnedFamily {
             return Err(Fault::Incomplete);
         }
         let count = unsafe { (*list).NumberOfProcessIdsInList } as usize;
-        if count > MAX_FAMILY || unsafe { (*list).NumberOfAssignedProcesses } as usize != count {
+        if count > MAX_FAMILY {
+            return Err(Fault::Bound);
+        }
+        if unsafe { (*list).NumberOfAssignedProcesses } as usize != count {
             return Err(Fault::Incomplete);
         }
         // SAFETY: header count is bounded against the exact allocated tail capacity.
         let ids = unsafe { std::slice::from_raw_parts((*list).ProcessIdList.as_ptr(), count) };
         for raw in ids {
             let pid = u32::try_from(*raw).map_err(|_| Fault::Incomplete)?;
+            // The original root is already retained and independently polled.
+            // Reopening its exiting PID must not prevent surveying a live child.
+            if pid == self.root.key().pid {
+                continue;
+            }
             let mut already_retained = false;
             for process in self.retained.values().filter(|p| p.key().pid == pid) {
                 if !process.signalled()? {
@@ -151,9 +159,10 @@ impl OwnedFamily {
             }
             let process = match ObservedProcess::open(pid) {
                 Ok(p) => p,
-                // Disappearance is not exit evidence. The later empty job check
-                // independently proves no member remains, including a missed child.
-                Err(Fault::Disappeared) => continue,
+                Err(e) if owned_member_survey_pending(e) => {
+                    self.member_observation_incomplete = true;
+                    continue;
+                }
                 Err(e) => return Err(e),
             };
             let mut belongs = 0;
@@ -161,7 +170,8 @@ impl OwnedFamily {
             if unsafe { IsProcessInJob(process.raw(), self.job.0, &mut belongs) } == 0
                 || belongs == 0
             {
-                return Err(Fault::Changed);
+                self.member_observation_incomplete = true;
+                continue;
             }
             if !self.retained.contains_key(&process.key()) && self.retained.len() >= MAX_FAMILY {
                 return Err(Fault::Bound);
@@ -179,10 +189,8 @@ impl OwnedFamily {
             if !owned_member_survey_pending(error) {
                 return Err(error);
             }
-            // Inspection may race with exit or remain denied. Preserve incomplete
-            // survey evidence; do not relabel denial as absence or restart a timer.
-            // False remains pending. Only independent signals AND empty job count
-            // can become true, even after an incomplete or missed member survey.
+            // Incomplete/denied survey is pending within the same fixed budget.
+            // Only independent signals AND empty job accounting can become true.
             self.member_observation_incomplete = true;
         }
         self.exit_observed()
