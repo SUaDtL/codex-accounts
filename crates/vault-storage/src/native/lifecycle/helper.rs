@@ -134,6 +134,16 @@ impl OwnedFamily {
         let ids = unsafe { std::slice::from_raw_parts((*list).ProcessIdList.as_ptr(), count) };
         for raw in ids {
             let pid = u32::try_from(*raw).map_err(|_| Fault::Incomplete)?;
+            let mut already_retained = false;
+            for process in self.retained.values().filter(|p| p.key().pid == pid) {
+                if !process.signalled()? {
+                    already_retained = true;
+                    break;
+                }
+            }
+            if already_retained {
+                continue;
+            }
             let process = match ObservedProcess::open(pid) {
                 Ok(p) => p,
                 // Disappearance is not exit evidence. The later empty job check
@@ -157,7 +167,22 @@ impl OwnedFamily {
     }
     pub(super) fn poll_exit(&mut self) -> Result<bool, Fault> {
         self.check_limits()?;
-        self.retain_members()?;
+        if self.exit_observed()? {
+            return Ok(true);
+        }
+        if let Err(error) = self.retain_members() {
+            // A process can exit between the job PID snapshot and OpenProcess.
+            // Never reinterpret access denial as absence: require independent
+            // root/retained handle signals AND a freshly observed empty owned job.
+            return if self.exit_observed()? {
+                Ok(true)
+            } else {
+                Err(error)
+            };
+        }
+        self.exit_observed()
+    }
+    fn exit_observed(&self) -> Result<bool, Fault> {
         let root = self.root.signalled()?;
         let active = self.active()?;
         let mut retained = true;

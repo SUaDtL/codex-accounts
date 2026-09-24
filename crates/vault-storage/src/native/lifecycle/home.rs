@@ -206,10 +206,13 @@ impl HomeLock {
             return Err(StorageError::UnsafePath);
         }
         let mut directories = Vec::new();
+        // Metadata-only handles do not participate in all sharing checks. Request
+        // directory read access so no-delete sharing actually pins each ancestor.
+        // No directory contents or credential files are read through these handles.
         for p in paths {
             let file = open_file(
                 p,
-                FILE_READ_ATTRIBUTES | READ_CONTROL,
+                FILE_LIST_DIRECTORY | FILE_READ_ATTRIBUTES | READ_CONTROL,
                 FILE_SHARE_READ,
                 OPEN_EXISTING,
                 None,
@@ -305,7 +308,7 @@ impl HomeLock {
             self.security.check(file, false)?;
             let reopened = open_file(
                 path,
-                FILE_READ_ATTRIBUTES | READ_CONTROL,
+                FILE_LIST_DIRECTORY | FILE_READ_ATTRIBUTES | READ_CONTROL,
                 FILE_SHARE_READ,
                 OPEN_EXISTING,
                 None,

@@ -18,6 +18,7 @@ use windows_sys::Win32::UI::WindowsAndMessaging::*;
 const CHILD_TEST: &str = "native::lifecycle::tests::native_lifecycle_child";
 const MARKER: &[u8] = b"SYNTHETIC_CA04B_ONLY";
 static REFUSE_CLOSE: AtomicBool = AtomicBool::new(false);
+static CLOSE_RECEIVED: AtomicBool = AtomicBool::new(false);
 
 fn home() -> super::super::tests::Sandbox {
     let mut fixture = super::super::tests::Sandbox::new();
@@ -188,6 +189,9 @@ impl Drop for TestFamily {
 }
 
 unsafe extern "system" fn window_proc(window: HWND, message: u32, w: WPARAM, l: LPARAM) -> LRESULT {
+    if message == WM_CLOSE {
+        CLOSE_RECEIVED.store(true, Ordering::Relaxed);
+    }
     match message {
         WM_CLOSE if REFUSE_CLOSE.load(Ordering::Relaxed) => 0,
         WM_CLOSE | WM_TIMER => {
@@ -242,6 +246,9 @@ fn run_window(root: &Path, refuse: bool) {
         }
         unsafe { TranslateMessage(&message) };
         unsafe { DispatchMessageW(&message) };
+        if CLOSE_RECEIVED.swap(false, Ordering::Relaxed) {
+            signal(root, "close-received");
+        }
     }
 }
 
@@ -386,7 +393,7 @@ fn ca04b_system_owned_directory_is_not_a_current_user_home() {
     let _descriptor = Allocation(descriptor);
     assert!(
         sid_copy(owner).unwrap() != security.user,
-        "requires an ordinary runner, not the system owner"
+        "requires a runner identity distinct from the system owner"
     );
     assert!(matches!(
         HomeLock::acquire(&root),
@@ -485,7 +492,11 @@ fn ca04b_normal_quit_requires_actual_process_exit() {
     child.resume();
     wait_marker(&fixture.0, "ready-window");
     let observed = ObservedProcess::open(child.pid).unwrap();
-    assert_eq!(observed.request_normal_quit(observed.key()).unwrap(), 1);
+    let delivered = observed.request_normal_quit(observed.key()).unwrap();
+    // Windows can create auxiliary top-level windows in the same process. The
+    // actual fixture's WM_CLOSE receipt, not an assumed HWND count, is the oracle.
+    assert!((1..=crate::lifecycle_model::MAX_WINDOWS).contains(&delivered));
+    wait_marker(&fixture.0, "close-received");
     observed.wait_exit(Duration::from_secs(5)).unwrap();
     assert!(observed.signalled().unwrap());
     child.wait();
@@ -497,7 +508,11 @@ fn ca04b_refused_normal_quit_never_terminates_observed_process() {
     child.resume();
     wait_marker(&fixture.0, "ready-window");
     let observed = ObservedProcess::open(child.pid).unwrap();
-    assert_eq!(observed.request_normal_quit(observed.key()).unwrap(), 1);
+    let delivered = observed.request_normal_quit(observed.key()).unwrap();
+    // Windows can create auxiliary top-level windows in the same process. The
+    // actual fixture's WM_CLOSE receipt, not an assumed HWND count, is the oracle.
+    assert!((1..=crate::lifecycle_model::MAX_WINDOWS).contains(&delivered));
+    wait_marker(&fixture.0, "close-received");
     assert_eq!(
         observed.wait_exit(Duration::from_millis(60)),
         Err(Fault::Timeout)
