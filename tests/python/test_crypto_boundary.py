@@ -73,8 +73,8 @@ class DependencyReviewTests(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.root = Path(self.tmp.name)
-        manifest = json.loads((ROOT / 'docs/ca-03c-dependencies.json').read_text())
-        paths = list(manifest['manifest_sha256']) + ['Cargo.lock', 'docs/ca-03c-dependencies.json', 'docs/ca-03b-dependencies.json', 'docs/ca-02-dependencies.json']
+        manifest = json.loads((ROOT / 'docs/ca-04a-dependencies.json').read_text())
+        paths = list(manifest['manifest_sha256']) + ['docs/ca-03c-dependencies.json'] + ['Cargo.lock', 'docs/ca-04a-dependencies.json', 'docs/ca-03b-dependencies.json', 'docs/ca-02-dependencies.json']
         for relative in paths:
             target = self.root / relative
             target.parent.mkdir(parents=True, exist_ok=True)
@@ -82,7 +82,7 @@ class DependencyReviewTests(unittest.TestCase):
         self.review = manifest
 
     def fail_with(self, review):
-        (self.root / 'docs/ca-03c-dependencies.json').write_text(json.dumps(review))
+        (self.root / 'docs/ca-04a-dependencies.json').write_text(json.dumps(review))
         with self.assertRaises(ValueError):
             check_dependencies.check(self.root)
 

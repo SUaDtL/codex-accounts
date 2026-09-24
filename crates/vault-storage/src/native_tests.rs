@@ -559,3 +559,48 @@ fn native_ancestor_owner_allowlist_is_exact_not_any_service_or_user() {
     unrelated[last] ^= 1;
     assert!(!s.ancestor_owner_allowed(&unrelated));
 }
+
+#[test]
+fn native_switch_journals_persist_reopen_and_prune_without_live_effects() {
+    let dir = Sandbox::new();
+    let mut disk = Disk::at(&dir.0, true).unwrap();
+    let root = bootstrap(&mut disk, true).unwrap();
+    let mut store = Storage::create(disk, &root).unwrap();
+    crate::engine::coordinator::tests::native_roundtrip(&mut store, &root);
+    let expected = store.switch_status().unwrap();
+    assert_eq!(expected.len(), 2);
+    drop(store);
+    drop(root);
+    let mut disk = Disk::at(&dir.0, false).unwrap();
+    let root = bootstrap(&mut disk, false).unwrap();
+    let mut store = Storage::open(disk, &root).unwrap();
+    assert_eq!(store.switch_status().unwrap(), expected);
+    store.prune(&root).unwrap();
+    assert!(store.switch_status().unwrap().is_empty());
+}
+
+#[test]
+fn native_interrupted_journal_blocks_dispatch_and_preserves_synthetic_helper_refresh() {
+    let dir = Sandbox::new();
+    let mut disk = Disk::at(&dir.0, true).unwrap();
+    let root = bootstrap(&mut disk, true).unwrap();
+    let mut store = Storage::create(disk, &root).unwrap();
+    let (id, mut effects) =
+        crate::engine::coordinator::tests::native_prepare_interrupted(&mut store, &root);
+    drop(store);
+    drop(root);
+    let mut disk = Disk::at(&dir.0, false).unwrap();
+    let root = bootstrap(&mut disk, false).unwrap();
+    let mut store = Storage::open(disk, &root).unwrap();
+    crate::engine::coordinator::tests::native_finish_interrupted(
+        &mut store,
+        &root,
+        id,
+        &mut effects,
+    );
+    let expected = store.switch_status().unwrap();
+    drop(store);
+    let disk = Disk::at(&dir.0, false).unwrap();
+    let store = Storage::open(disk, &root).unwrap();
+    assert_eq!(store.switch_status().unwrap(), expected);
+}

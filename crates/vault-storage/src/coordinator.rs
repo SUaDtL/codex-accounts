@@ -411,7 +411,11 @@ impl<D: Files> Storage<D> {
         }
         if target {
             j.helper = Helper::Reaped;
-            j.phase = SwitchPhase::Observed;
+            j.phase = if j.failure.is_some() {
+                SwitchPhase::Recovery
+            } else {
+                SwitchPhase::Observed
+            };
         } else {
             j.source_saved = true;
             j.phase = SwitchPhase::SourceSaved;
@@ -699,9 +703,20 @@ impl<D: Files> Storage<D> {
                 }
             }
             HelperRunning => {
-                j.acceptance = effects
-                    .observe(j.id)
-                    .unwrap_or(CredentialAcceptance::ObservationUnavailable);
+                // Transport unavailability is an explicit observation value. Other
+                // failures must not be laundered into permission to commit. Reap
+                // and preserve any refreshed bytes before offering recovery.
+                j.acceptance = match effects.observe(j.id) {
+                    Ok(value) => value,
+                    Err(f) => {
+                        j.failure.get_or_insert(f);
+                        if f == Failure::LoginRequired {
+                            CredentialAcceptance::Rejected
+                        } else {
+                            CredentialAcceptance::ObservationUnavailable
+                        }
+                    }
+                };
                 j.phase = HelperReaping;
                 self.save_journal(root, j)?;
             }
@@ -737,6 +752,7 @@ impl<D: Files> Storage<D> {
                     self.save_journal(root, j)?;
                     return Ok(());
                 }
+                self.exact_live(root, &j, &effects.snapshot()?, true)?;
                 j.launch = effects.launch(j.id).unwrap_or(DesktopLaunch::Failed);
                 if j.launch == DesktopLaunch::Opened {
                     j.phase = AwaitingConfirmation;
@@ -766,6 +782,7 @@ impl<D: Files> Storage<D> {
         }
         j.cancel = true;
         j.failure.get_or_insert(Failure::Cancelled);
+        self.save_journal(root, j.clone())?;
         if j.write_intent == 0 {
             // Cancellation before any replacement never closes a user app or
             // changes the live bytes/active association merely to "restore" them.
@@ -809,6 +826,7 @@ impl<D: Files> Storage<D> {
         mut j: Journal,
         choice: Choice,
     ) -> Result<(), SwitchError> {
+        effects.guard(Check::Confirm, &j.binding)?;
         effects.guard(Check::Lock, &j.binding)?;
         if j.committed {
             // The app might already have launched. No automatic relaunch, signal,
@@ -822,6 +840,12 @@ impl<D: Files> Storage<D> {
             };
             self.save_journal(root, j)?;
             return Ok(());
+        }
+        // A process/storage interruption may have prevented recording the exact
+        // initial error. Preserve that uncertainty, not an invented I/O diagnosis.
+        if j.failure.is_none() {
+            j.failure = Some(Failure::Interrupted);
+            self.save_journal(root, j.clone())?;
         }
         if j.write_intent == 0 {
             return self.cancel_switch(root, effects, j.id);

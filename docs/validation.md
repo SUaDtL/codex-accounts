@@ -1,57 +1,70 @@
 # Validation and evidence boundary
 
-## Current review: CA-03C / PR #6
+## Current review: CA-04A / PR #7
 
-CA-03C implements protected Windows x64 persistence, encrypted registry/identity/
-immutable generations, independent expected contexts, write-ahead storage commits,
-retention and startup/explicit control recovery. Product credential authority is
-still disabled. No real auth input, login, Desktop process action or qualification
-record is introduced. The owner merged PR #5 into the CA-03A branch; PR #6 preserves
-that dependency and must not be merged into it. PR #3's T-07 amendment remains subject
-to its own review. Read live refs before retargeting or selecting a subsequent base.
+CA-04A implements a private executable switch coordinator and authenticated encrypted
+journals inside the existing storage commit protocol. Production effects, real
+account inputs, native Desktop process authority, login and qualification records
+remain absent. PR #7 targets main and preserves the reviewed CA-03C dependency:
+PR #6 was merged by the owner into the former CA-03A branch after PR #3 merged.
+No branch reset, automatic merge or replacement of that history is part of this work.
 
 | Evidence | Observed scope |
 | --- | --- |
-| Local toolchain | Actual Rust 1.90.0, rustfmt and Clippy restored from checked development-input artifact for source 4c09923ea8c19571fe83bdbf96e453732be734a9; cached package checksums and archive digests verified. Preparation is not a test pass. |
-| Local closeout | Workspace tests and Clippy passed on Linux; 22 storage model scenarios include strengthened per-effect forward/restoration/control-repair fault tests. Windows GNU cross-target Clippy passed; it is not native Windows execution. |
-| Local integrity | 75 Python tests, specification/model/projection/provenance and exact 58-package dependency checks passed. Diff/secret/scope review and preserving-tree comparisons passed for the selected source. |
-| Implementation-head native checks | Head 4a122159089a593cc3bf2559bdc4ec2eb424f993, PR run 35933092487: all four jobs passed. Windows job 107423943943 records 129 Rust passes including 40 storage cases; three inherited two-user helpers were NOT RUN. The final documentation head is checked separately below. |
-| Final-head CI | PR #6 records the actual final source commit, completed PR/push runs and inspected logs after publication. Only results bound to that final head count as current passes. |
-| Native release qualification | Owner Windows 11, ordinary two-user/unavailable-store, sync-provider environment and physical-power-loss/directory-metadata qualification remain NOT RUN or incomplete. macOS storage is unsupported. |
+| Source baseline | Continued review branch at `43902b9beeff27d06abf3e440bec29f0bfb0baa4`, source tree `1f902b637f9e584c43340c2dbcf43f5a1e5e58e4`, recovered and checked against its Git source artifact. |
+| Local toolchain | Rust 1.90.0, rustfmt and Clippy from the digest-checked existing development inputs. Preparation/acquisition does not count as validation. |
+| Local executable checks | `cargo test --workspace --all-targets --locked --offline` passed, including 44 storage cases: 22 inherited storage plus 22 journal/coordinator tests. Formatting and workspace all-targets Clippy with `-D warnings` passed. |
+| Local source checks | 78 Python tests passed; specification/model/projection/provenance and exact 58-package manifest/lock checks passed. |
+| Native checks | Two new Windows tests exercise actual DPAPI/storage reopen for completed and interrupted journals; external resource/helper/launch effects remain synthetic. Local Windows execution is unavailable. Final-head hosted results and inspected logs must be recorded on PR #7 before marking ready. |
+| Release evidence | Actual Desktop contract, owner Windows 11, ordinary two-user/unavailable-store, sync-provider, physical-power-loss/directory-metadata and independent macOS qualification remain open. |
 
-Native repairs preserve protection rules. Hosted LocalAppData ownership did not
-satisfy the direct-parent rule; tests now create a new protected synthetic parent,
-never change the existing parent's owner/DACL. Repeated per-call apartment teardown
-produced refusals and a child access violation. The adapter now owns one balanced
-thread-lifetime MTA and uncached, scoped activation factories. Fresh successful sync
-inventory remains mandatory. Fixed-local-drive checks run before object access;
-registered sync-root ancestors cannot be followed through unchecked reparse points.
+The fault suite injects every recorded storage effect in forward/restoration
+transitions and request/cancel/recovery-choice commits. It discards runtime session
+state on reopen and requires a verified reachable newest generation, exact external
+synthetic bytes, complete journal holds and bounded cleanup. External stage/replace/
+helper/reap/cleanup/launch failures are separately injected. A0-to-A1-to-B-to-A1,
+post-helper B1 restoration, optional absence combinations, late binding/policy/writer
+failure, duplicate requests, conflict evidence, typed helper policy failure and
+uncertain launch outcomes are tested. Neither an I/O error after publication nor an
+old surviving file justifies fabricating a rollback or Desktop-confirmed state.
 
-The storage recovery review closed the blocked-open gap for a torn control stage:
-opening authenticates the committed reachable state, blocks mutations and offers an
-explicit action that preserves encrypted evidence before exact-stage removal. A
-valid staged control also checks inventory before publication. Tests no longer count
-unreopenable storage as successful recovery merely because some old bytes survived.
-Recovery evidence is bounded, never operational authority and never automatically
-pruned. Corrupt committed state, foreign files and stale stages continue to refuse.
+The initial unfinished PR head failed the dependency-manifest gate before Rust
+execution. The repair adds the missing local core dependency edge to the lock and
+records its scoped review separately; all 58 external records and predecessor review
+bytes remain unchanged. Temporary preparation is removed. No blocking test,
+platform, warning policy, safety lint or CI condition is removed or weakened.
+No new external package or native API is added.
 
-Native tests use only newly created synthetic directories: protected creation,
-bootstrap/reopen, file replacement/deletion, broad-ACL and hardlink/junction refusal,
-sharing, locks, repeated WinRT inventory, torn-control recovery and same-test-binary
-process restart at 20 commit boundaries. They do not run Codex or read real credentials.
-Three inherited two-user helpers remain intentionally NOT RUN and are not counted
-as passes. No skip or relaxed assertion repairs a failing ordinary test.
+The journal is an explicit `CAREG002` registry extension committed together with
+selection and complete retention holds. Existing `CAREG001` data is read without a
+rewrite; conversion occurs through the tested recoverable first-journal commit.
+No key migration or silently accepted unknown codec exists. Unresolved switch
+records block public profile writes/pruning. Conflict evidence is bounded and
+retained, never accepted as a valid credential generation or erased automatically.
+The private synthetic effects driver cannot be selected through the public API.
 
-File write-through, explicit file flush and handle rename tests are not full hardware
-power-loss ordering or a qualified directory-metadata flush. F-012/T-21/T-22 and full
-Q1 remain open. Same-user hostile code, administrators, whole-vault replay, swap,
-backups and physical erasure are outside stronger guarantees. See ca-03c-storage.md
-for exact limits, safe commands, expected results and remaining evidence.
+Synthetic and hosted native results cover the exact tested source only. Final-head
+PR/push results are recorded on PR #7 after publication; older or preparation-run
+results do not count. No complete T-01 through T-34 release scenario is closed.
+See `ca-04a-journal.md` for executable commands, expected native test counts and
+redaction/cleanup rules. No real auth files, account identities, keys, user paths
+or raw helper output should be shared.
 
-The temporary preparation workflow is removed. All 58 external package/version/
-checksum entries and predecessor review bytes remain unchanged. Scoped SDK features
-and manifest/lock bytes are checked before acquisition. Existing CI remains blocking;
-no main update, merge, force push, release or live account mutation is part of this PR.
+## Preserved CA-03C final evidence
+
+PR #6 head `6c8144f041ba16be1b6c33c1de6f3d1f6aa8dfb8` passed PR run
+35933850694 and push run 35933846776. Inspected source/Windows logs recorded
+75 Python and 129 Rust passes, including 40 storage cases; three inherited two-user
+helpers were NOT RUN. Native tests exercised synthetic protected storage, lock
+release, link/ownership/sharing refusal, WinRT enumeration, control repair and
+20 process-restart boundaries. Those results apply to CA-03C, not CA-04A.
+
+The native protected test-parent and apartment-lifetime corrections preserve
+production path/ownership restrictions. The native unsafe boundary is unchanged
+by CA-04A. File flush/write-through and process restart are not proof of physical
+power-loss ordering or a qualified directory-metadata persistence primitive.
+F-012/T-21/T-22 and full Q1 remain open. Same-user malware, administrators,
+whole-vault replay, backups and secure physical erasure are not excluded.
 
 ## Preserved earlier evidence
 
@@ -61,7 +74,7 @@ no main update, merge, force push, release or live account mutation is part of t
 | CA-02 / PR #2 | Owner merged head `6ee778e9592d46132f253e2bee836b2650a44bd0` as `7773d3472d13b7087179c0819a37fd5030a8f1c9`. Run 35808957582 passed: 48 Python tests and 43 Rust tests in the inspected Windows log. Later T-07 adoption and CI acquisition repair are not attributed to this merge. |
 | Foundation / PR #1 | Merge `54f01f3a77936523d8202ad37d8a46c5fe32a4c6`; tested head `9b9328f474322c9de48dc6a8db332ee8105899dd`, runs 35761967137 and 35761962743 passed: 35 Python and 19 Rust tests, formatting and Clippy. |
 
-PR #3 implements the remaining P02-A08 canonical/visible T-07 change and v2
+The owner merge of PR #3 includes the remaining P02-A08 canonical/visible T-07 change and v2
 provenance migration. Original bytes reconstruct to the preserved digest; all
 43 requirements and 34 acceptance IDs remain. Review/merge of that amendment is
 not a qualification record. CA-03A supplies strict data/generation rules, not
@@ -87,8 +100,8 @@ qualify native storage, validate Desktop behavior or close the remaining release
 
 ## Next eligible implementation
 
-CA-04A is the selected bounded storage-backed switch journal/coordinator slice in
-next-pr.md, not an automatically executed phase. Persisted active-state/operation-hold
-integration is still private/unavailable to production in CA-03C. Native quiescence,
-target-home locking, official login, UI and all complete release scenarios remain
-pending. Full Q0/Q1 and macOS qualification are not claimed by this handoff.
+CA-04B: native owner/canonical-home lifetime locking, writer discovery and actual
+exit/descendant proof. This is a future bounded packet in `next-pr.md`, not an
+automatically executed phase. Reuse CA-04A's journal; do not expose synthetic
+quiescence, consent, policy or compatibility as production authority. Full Q0/Q1/Q2,
+macOS, official login, UI and release qualification remain open.

@@ -91,3 +91,18 @@ snapshot; https://blog.rust-lang.org/2025/09/18/Rust-1.90.0/ ;
 https://github.com/microsoft/windows-rs ; https://github.com/RustSec/advisory-db .
 The current official configuration reference is a key-name reference only, not an
 installed-build precedence rule: https://developers.openai.com/codex/config-reference/ .
+
+## CA-04A local integration review
+
+`ca-04a-dependencies.json` adds only the existing dependency-free core path edge to
+vault-storage, for its separated observation types. No external package, feature,
+version, checksum, native API or build script changes. All 58 external entries and
+the exact CA-02/CA-03B/CA-03C review files are preserved. The new manifest/lock
+expectations are reviewed as this local integration, not an unexplained digest
+replacement. The checker applies the complete review chain before acquisition.
+
+The coordinator, journal and codec forbid unsafe code and have no public effects
+constructor or external dispatcher. The sole effects driver is compiled into tests.
+The fingerprint byte codec exists only to persist opaque marks inside authenticated
+encrypted metadata; it is not a diagnostic exporter. No new advisory scan or full
+independent audit is claimed for unchanged dependencies.

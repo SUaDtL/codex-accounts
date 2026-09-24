@@ -5,14 +5,14 @@ use std::{cell::RefCell, collections::BTreeMap, rc::Rc};
 // Only tests can inject a storage implementation. This records persisted bytes
 // independently of Storage, so dropping/reopening loses all coordinator memory.
 #[derive(Clone, Default)]
-struct Memory(Rc<RefCell<Medium>>);
+pub(super) struct Memory(pub(super) Rc<RefCell<Medium>>);
 #[derive(Clone, Default)]
-struct Medium {
-    files: BTreeMap<String, Vec<u8>>,
-    step: usize,
-    fail: Option<usize>,
-    code: Option<StorageError>,
-    trace: Vec<&'static str>,
+pub(super) struct Medium {
+    pub(super) files: BTreeMap<String, Vec<u8>>,
+    pub(super) step: usize,
+    pub(super) fail: Option<usize>,
+    pub(super) code: Option<StorageError>,
+    pub(super) trace: Vec<&'static str>,
 }
 impl Memory {
     fn checkpoint(&self, stage: &'static str) -> Result<(), StorageError> {
@@ -25,21 +25,21 @@ impl Memory {
             Ok(())
         }
     }
-    fn snapshot(&self) -> Self {
+    pub(super) fn snapshot(&self) -> Self {
         let mut m = self.0.borrow().clone();
         m.step = 0;
         m.fail = None;
         m.trace.clear();
         Self(Rc::new(RefCell::new(m)))
     }
-    fn fail(&self, n: usize, code: StorageError) {
+    pub(super) fn fail(&self, n: usize, code: StorageError) {
         let mut m = self.0.borrow_mut();
         m.step = 0;
         m.fail = Some(n);
         m.code = Some(code);
         m.trace.clear();
     }
-    fn heal(&self) {
+    pub(super) fn heal(&self) {
         self.0.borrow_mut().fail = None;
     }
 }

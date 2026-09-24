@@ -111,6 +111,7 @@ dependencies = [
 name = "codex-accounts-vault-storage"
 version = "0.1.0"
 dependencies = [
+ "codex-accounts-core",
  "codex-accounts-vault",
  "codex-accounts-vault-crypto",
  "getrandom",

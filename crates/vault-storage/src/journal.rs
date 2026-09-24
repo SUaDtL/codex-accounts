@@ -77,6 +77,7 @@ pub(crate) enum Failure {
     Cancelled,
     Launch,
     InvalidData,
+    Interrupted,
 }
 impl Failure {
     pub fn parse(n: u8) -> Result<Self, StorageError> {
@@ -95,6 +96,7 @@ impl Failure {
             Cancelled,
             Launch,
             InvalidData,
+            Interrupted,
         ]
         .get(n.checked_sub(1).ok_or(StorageError::Corrupt)? as usize)
         .copied()
@@ -115,6 +117,7 @@ impl Failure {
             Self::Cancelled => "E_CANCELLED",
             Self::Launch => "E_LAUNCH_FAILED",
             Self::InvalidData => "E_VAULT_CORRUPT",
+            Self::Interrupted => "E_RECOVERY_REQUIRED",
         }
     }
 }

@@ -1,66 +1,72 @@
-# Next bounded slice: CA-04A
+# Next bounded slice: CA-04B
 
-Parent packet: CA-04 / Q2. Read live refs, AGENTS.md, PR #3 and PR #6 before choosing
-a base. CA-03C is submitted in PR #6 on the CA-03A dependency branch, after the owner
-merged CA-03B there. Do not reset that history or merge into the dependency branch.
-Reconcile/retarget only after the relevant owner merge. Current CI is recorded on
-the actual PR head, not established by this pointer.
+Parent packet: CA-04 / Q2. CA-04A is submitted in PR #7 against main. Inspect live
+refs, AGENTS.md, its actual diff and final-head CI before selecting a base. The PR
+preserves the CA-03C dependency that the owner merged into the former CA-03A branch.
+Do not reset history, merge a dependency automatically, or duplicate completed work.
 
 ## Deliverable
 
-Implement a storage-backed encrypted switch journal and executable coordinator
-for synthetic resource effects. Use the existing persistent generation/registry
-engine, not a second filesystem transaction implementation or trait-only scaffold.
-The journal must durably bind operation ID, source/target generations, expected
-resource presence/integrity, per-resource intent/completion, cancellation, primary
-failure and restoration outcome. Journal references must participate in the vault's
-complete persisted retention holds in the same commit protocol. A caller-supplied
-partial reference list or active=true value cannot authorize deletion or switching.
+Implement concrete Windows x64 owner/canonical-target-home lifetime locking and
+bounded writer/process observations for the future coordinator adapter. Reuse the
+existing private journal and storage engine; do not create a second transaction
+protocol or an arbitrary public process/filesystem executor.
 
-Drive explicit requested/locked/quiescent/source-saved/staged/installed/observed/
-committed/relaunch/confirmation and recovery transitions. Before each modeled
-external replacement, persist its intent and verify prerequisites. Preserve exact
-newest generations; helper refresh must be captured before restoration. Reuse the
-separate installation/acceptance/launch/Desktop-identity/recovery result types.
-Cancellation after the first write enters reconciliation; launch failure after
-commit never silently selects an older account. Restoration itself is journaled.
+Bind the kernel lock to the observed canonical home identity and current owner,
+not only an unnormalized pathname or marker file. Prove contention and release on
+exit with controlled child processes. The existing vault-root lock is not a
+substitute for this target-home lock. Detect path/owner replacement, reparse and
+hardlink hazards; never repair arbitrary directory permissions.
 
-The concrete executable effects in this packet are encrypted switcher-owned
-storage and controlled synthetic resources only. No production adapter may accept
-fixture evidence as quiescence, policy, consent, verified identity or compatibility.
-A public credential CLI, arbitrary filesystem/RPC adapter, forged qualification
-receipt, live auth replacement or normal-user application termination remains
-prohibited. Actual native writer discovery and the target-home lock are separate
-CA-04 work; the current vault-root lock is not their completed implementation.
+Implement bounded process identity/liveness observations, including owner, stable
+start identity and descendant tracking. A PID, name substring or successful signal
+is not exit proof. Use exact qualified installation/runtime bindings when available;
+without the necessary Q0 rules report unknown and do not authorize mutation. Never
+terminate a user-owned Desktop, IDE or terminal in ordinary tests. Normal-quit and
+owned-helper timeout behavior must be tested with controlled synthetic children
+before any later real integration. Do not infer shared-home association from a
+process name, current directory or an unverified command line alone.
 
-## Read and test
+Keep effect authority private and impossible to manufacture through deserialized
+booleans, a public trait implementation, a developer override or a fake receipt.
+Do not connect synthetic evidence to production switching. No live credential read
+or replacement, login, inference, task replay, UI, installer or release belongs in
+this slice. Exact Q0 policy/home/resource facts and filesystem durability remain
+separate prerequisite gates.
 
-Read SPEC-TRANSACTION, SPEC-RECOVERY, F-009 through F-014, F-019 through F-025,
-S-003 through S-009, F-026 and the complete relevant T-13/T-14/T-18 through T-23/
-T-27 through T-31 scenarios. Read the current storage/crypto contracts and tests,
-not just this outline. The plan does not amend those requirements.
+## Required reads and validation
 
-Test full synthetic A0->A1->B->A1, post-helper B1/restoration, every resource presence
-combination, stale/unknown external bytes, duplicate operations, startup recovery,
-cancellation at every stage and faults before/after each durable forward/restoration
-write. Restart using persisted state and verify generation reachability/holds.
-Test primary and restoration errors remain distinct. No successful helper response
-or file installation becomes Desktop confirmation. Corrupt evidence and missing
-preconditions must prevent the corresponding transition, not be silently skipped.
+Read SPEC-PROCESSES, SPEC-TRANSACTION, SPEC-RECOVERY, F-004 through F-014,
+F-019/F-024 and the complete T-06/T-14/T-17/T-19/T-20/T-21/T-22 scenarios. Read the
+current discovery, storage and CA-04A journal contracts and relevant tests. The
+plan cannot silently amend these requirements.
 
-Run pinned formatting, workspace compilation/tests/Clippy, Python and source/
-projection/provenance/dependency checks. Add native tests only for actually executed
-OS effects. Inspect final-head CI and logs, preserve blocking gates and update the
-single roadmap/validation record. Exact new dependencies/native bindings require
-scoped review before acquisition. Publish one normal review PR; no merge, force
-push, reset, release, permission changes or live account operation.
+Review any new SDK feature/native binding against exact pinned source and official
+documentation before acquisition. Keep the unsafe boundary small and justified;
+retain safe-core and coordinator restrictions. Do not upgrade unrelated packages
+or change CI failure semantics as incidental cleanup.
+
+Test actual kernel contention/release, Unicode/canonical identity and replacement,
+wrong owner, denied/partial enumeration, process disappearance and reused PID/start
+identity, hidden/late descendants, normal quit refusal/timeout and helper signal
+versus observed exit. Native tests must own their newly created directories and
+children; no global process kills, account creation or permission changes. Preserve
+journal refusal and restart tests when integrating observed prerequisites.
+
+Run pinned formatting, workspace compilation/tests/Clippy, Python/source/projection/
+provenance/dependency checks, and selected native OS tests. Inspect completed checks
+for the actual final PR head. Update the single working roadmap and validation record;
+record unobserved native cases honestly. Open/update one normal review PR. No merge,
+force push/reset, permission change, release or live account operation.
 
 ## Unresolved integration gates
 
 Q0 publisher/runtime/home/backend/policy/resource/identity/lifecycle evidence,
-CA-03B ordinary two-user/unavailable-store tests, Windows physical-power-loss and
-directory-metadata durability qualification, and independent macOS persistence
-remain open. ca-03c-storage.md and ca-03b-crypto.md contain safe synthetic collection
-steps and redaction rules. Missing evidence blocks real integration and release,
-not this explicitly bounded generic implementation. No full Q1/Q2 closure or
-CA-05 advancement is implied by selecting CA-04A.
+ordinary two-user/unavailable-store protection, owner Windows 11/sync-provider
+qualification, physical power-loss and directory-metadata persistence, and
+independent macOS remain open. Native process tests with synthetic children do not
+qualify Codex Desktop. Provide exact safe collection steps and redacted expected
+results for remaining evidence; never request real authentication files.
+
+CA-04B has not been started by CA-04A's handoff. Full CA-04/Q2 remains open; no
+CA-05 advancement or production authority follows from a code or test pass alone.

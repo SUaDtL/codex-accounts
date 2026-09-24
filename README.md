@@ -29,12 +29,19 @@ and explicit encrypted-evidence recovery for torn unpublished control writes.
 See [the crypto contract](docs/ca-03b-crypto.md) and
 [the storage contract and native checks](docs/ca-03c-storage.md).
 
-These are libraries, not an enabled capture/switch path. Structural identity is not
-verified Desktop identity. Full Q0, two-user/unavailable-store and physical-power-loss
-qualification remain open; macOS persistence is unsupported. PR #6 carries CA-03C
-on the CA-03A dependency branch, after the owner's PR #5 merge there. Review PR #3
-before reconciling/retargeting #6 to main; do not merge #6 into its dependency branch.
-Next bounded work: CA-04A storage-backed switch journal/coordinator. It has not run.
+CA-04A adds an encrypted switch journal and private executable coordinator using
+that storage engine: complete generation holds, newest-source preservation,
+post-helper capture, per-resource write-ahead intent, cancellation, conflict
+preservation and journaled restoration. Only controlled tests implement external
+effects; no production switch entry point exists. See
+[the journal contract and executable checks](docs/ca-04a-journal.md).
+
+These are development libraries, not an enabled account manager. Structural identity
+and synthetic effects are not verified Desktop behavior. Full Q0/Q1/Q2, ordinary
+two-user/unavailable-store and physical-power-loss qualification remain open;
+macOS persistence is unsupported. PR #7 targets main and preserves the CA-03C
+dependency from the owner's PR #6 merge into the former CA-03A branch.
+Next bounded work: CA-04B native target-home locking and writer/exit proof.
 
 The product direction is Rust core plus a thin Tauri 2 shell. No inference proxy,
 credential-management CLI/MCP/HTTP interface, background rotation, host patch,
@@ -49,8 +56,8 @@ working roadmap, adopted from the Project packet. The [next-packet brief](docs/n
 defines the bounded next increment. [Validation](docs/validation.md) separates source,
 CI/native API tests and real Desktop qualification.
 
-The in-place T-07 clarification and v2 source-manifest migration are submitted in
-PR #3 for owner review, as described in [the scoped amendment](docs/spec-amendments/ca-02-t07.md).
+The in-place T-07 clarification and v2 source-manifest migration were merged through
+owner review of PR #3, as described in [the scoped amendment](docs/spec-amendments/ca-02-t07.md).
 Original specification bytes remain reconstructable to their retained digest;
 unchanged comparison/index inputs still verify byte-for-byte. A passing document
 check or merge never qualifies an installation. The

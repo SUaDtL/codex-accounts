@@ -10,6 +10,10 @@ use std::collections::BTreeSet;
 type EncryptedWrites = Vec<(Blob, Vec<u8>)>;
 #[path = "control_repair.rs"]
 mod control_repair;
+// No production effect adapter is exposed. Only tests drive this private engine.
+#[allow(dead_code)]
+#[path = "coordinator.rs"]
+pub(crate) mod coordinator;
 
 pub(crate) trait Files {
     fn read(&self, name: &str) -> Result<Option<Vec<u8>>, StorageError>;
@@ -47,6 +51,7 @@ pub(crate) struct Storage<D: Files> {
     later_startup: bool,
     blocked: bool,
     control_repair: bool,
+    switch_session: Option<Id>,
     torn_control: Option<zeroize::Zeroizing<Vec<u8>>>,
 }
 impl<D: Files> Storage<D> {
@@ -66,6 +71,7 @@ impl<D: Files> Storage<D> {
             later_startup: false,
             blocked: false,
             control_repair: false,
+            switch_session: None,
             torn_control: None,
         };
         store.commit(root, Registry::empty(), vec![], vec![])?;
@@ -119,6 +125,7 @@ impl<D: Files> Storage<D> {
             later_startup: true,
             blocked: false,
             control_repair: false,
+            switch_session: None,
             torn_control: None,
         };
         store.verify_registry(root, &store.registry)?;
@@ -143,6 +150,17 @@ impl<D: Files> Storage<D> {
         }
         Ok(())
     }
+    fn idle(&self) -> Result<(), StorageError> {
+        self.ready()?;
+        if self.registry.journals.iter().any(|j| !j.terminal()) {
+            return Err(StorageError::SwitchPending);
+        }
+        Ok(())
+    }
+    pub fn switch_status(&self) -> Result<Vec<crate::OperationStatus>, StorageError> {
+        self.ready()?;
+        Ok(self.registry.journals.iter().map(|j| j.status()).collect())
+    }
     pub fn recovery(&self) -> Recovery {
         if self.control_repair {
             Recovery::ControlRepairRequired
@@ -152,6 +170,8 @@ impl<D: Files> Storage<D> {
             Recovery::CommitPending
         } else if self.state.deleting {
             Recovery::CleanupPending
+        } else if self.registry.journals.iter().any(|j| !j.terminal()) {
+            Recovery::SwitchPending
         } else {
             Recovery::Clean
         }
@@ -240,7 +260,7 @@ impl<D: Files> Storage<D> {
             }
             Self::read_generation_on(disk, root, g)?;
         }
-        Ok(())
+        coordinator::verify_journals(disk, root, r)
     }
     fn read_generation(
         &self,
@@ -497,7 +517,7 @@ impl<D: Files> Storage<D> {
         domain: ProfileText,
         capture: Capture,
     ) -> Result<(ProfileId, GenerationId), StorageError> {
-        self.ready()?;
+        self.idle()?;
         if self.registry.profiles.len() >= MAX_PROFILES
             || self.registry.generations.len() >= MAX_GENERATIONS
         {
@@ -537,7 +557,7 @@ impl<D: Files> Storage<D> {
         expected: GenerationId,
         capture: Capture,
     ) -> Result<GenerationId, StorageError> {
-        self.ready()?;
+        self.idle()?;
         let pid = profile.to_bytes();
         let parent = expected.to_bytes();
         let p = self
@@ -593,7 +613,7 @@ impl<D: Files> Storage<D> {
         self.read_generation(root, g)
     }
     pub fn remove(&mut self, root: &RootKey, profile: ProfileId) -> Result<(), StorageError> {
-        self.ready()?;
+        self.idle()?;
         let id = profile.to_bytes();
         if !self.registry.active_known {
             return Err(StorageError::ActiveStateUnknown);
@@ -623,18 +643,29 @@ impl<D: Files> Storage<D> {
             .into_iter()
             .filter(|b| b.key.profile == id)
             .collect();
+        next.rejected.retain(|p| *p != id);
         next.profiles.retain(|p| p.id != id);
         next.generations.retain(|g| g.profile != id);
         self.commit(root, next, vec![], retire)
     }
     pub fn prune(&mut self, root: &RootKey) -> Result<(), StorageError> {
-        self.ready()?;
+        self.idle()?;
         if !self.later_startup {
             return Err(StorageError::LaterStartupRequired);
         }
         self.verify_registry(root, &self.registry)?;
         self.inventory()?;
         let mut next = self.copy_registry()?;
+        // Retire terminal, cleaned journals only after the verified later startup.
+        // Conflict evidence is retained, even if an owner later completed recovery.
+        let expired: BTreeSet<_> = next
+            .journals
+            .iter()
+            .filter(|j| j.terminal() && j.evidence.is_empty())
+            .map(|j| j.id)
+            .collect();
+        next.journals.retain(|j| !expired.contains(&j.id));
+        next.holds.retain(|h| !expired.contains(&h.id));
         let keep: BTreeSet<_> = next
             .profiles
             .iter()
@@ -645,12 +676,13 @@ impl<D: Files> Storage<D> {
                     .flat_map(|h| h.generations.iter().copied()),
             )
             .collect();
-        let retire = next
-            .blobs()
-            .into_iter()
-            .filter(|b| !keep.contains(&b.key.generation))
-            .collect();
+        let previous_blobs = self.registry.blobs();
         next.generations.retain(|g| keep.contains(&g.id));
+        let reachable: BTreeSet<_> = next.blobs().iter().map(|b| b.key).collect();
+        let retire = previous_blobs
+            .into_iter()
+            .filter(|b| !reachable.contains(&b.key))
+            .collect();
         // The later startup was established before changing any selection.
         self.commit(root, next, vec![], retire)?;
         let mut deleting = self.state.clone();
@@ -695,4 +727,4 @@ impl<D: Files> Storage<D> {
 
 #[cfg(test)]
 #[path = "tests.rs"]
-mod tests;
+pub(super) mod tests;
