@@ -1,5 +1,5 @@
-//! CA-03C/CA-04A: encrypted storage and private journal implementation.
-//! No Codex file reads, login, process control, credential CLI, or authority to
+//! CA-03C/CA-04: encrypted storage, journals and private native primitives.
+//! No Codex file reads, login, public process control, credential CLI, or authority to
 //! qualify a Desktop installation.
 //!
 //! # Public metadata construction does not perform I/O
@@ -38,11 +38,14 @@ mod engine;
 mod native;
 #[cfg_attr(not(all(windows, target_arch = "x86_64")), allow(dead_code))]
 mod records;
-// No production effects adapter exists in CA-04A. The private coordinator is
+// No production effects adapter exists in CA-04B. The private coordinator is
 // exercised by synthetic effects only; this does not relax any safety lint.
 #[allow(dead_code)]
 mod journal;
 pub use journal::{OperationStatus, SwitchPhase};
+// Observation logic is not a qualified installation or a public effect executor.
+#[allow(dead_code)]
+mod lifecycle_model;
 
 use codex_accounts_vault::{CredentialSet, Identity, Resource, ResourceId, ResourceShape};
 pub use codex_accounts_vault::{GenerationId, ProfileId};

@@ -1,7 +1,7 @@
 //! An owned, noninherited, unnamed job is distinct from observed user processes.
 //! CA-04B has no production constructor: only controlled suspended test children
 //! can create this owner. Official-runtime creation/stdio remains a later packet.
-use super::super::super::*;
+use super::super::*;
 use super::process::ObservedProcess;
 use crate::lifecycle_model::{owned_exit_observed, Fault, ProcessKey, MAX_FAMILY};
 use std::collections::BTreeMap;
@@ -54,7 +54,11 @@ impl OwnedFamily {
         if unsafe { AssignProcessToJobObject(job.0, handle) } == 0 {
             return Err(Fault::Incomplete);
         }
-        let family = Self { job, root, retained: BTreeMap::new() };
+        let family = Self {
+            job,
+            root,
+            retained: BTreeMap::new(),
+        };
         family.check_limits()?;
         Ok(family)
     }
@@ -74,7 +78,7 @@ impl OwnedFamily {
             return Err(Fault::Incomplete);
         }
         if limits.BasicLimitInformation.LimitFlags
-            != JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE | JOB_OBJECT_LIMIT_ACTIVE_PROCESS
+            != (JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE | JOB_OBJECT_LIMIT_ACTIVE_PROCESS)
             || limits.BasicLimitInformation.ActiveProcessLimit != MAX_FAMILY as u32
         {
             return Err(Fault::Changed);
@@ -106,7 +110,9 @@ impl OwnedFamily {
         let size = std::mem::offset_of!(JOBOBJECT_BASIC_PROCESS_ID_LIST, ProcessIdList)
             + MAX_FAMILY * std::mem::size_of::<usize>();
         let mut buffer = vec![0usize; size.div_ceil(std::mem::size_of::<usize>())];
-        let list = buffer.as_mut_ptr().cast::<JOBOBJECT_BASIC_PROCESS_ID_LIST>();
+        let list = buffer
+            .as_mut_ptr()
+            .cast::<JOBOBJECT_BASIC_PROCESS_ID_LIST>();
         // SAFETY: aligned, initialized bounded variable-length SDK output.
         if unsafe {
             QueryInformationJobObject(
@@ -137,7 +143,9 @@ impl OwnedFamily {
             };
             let mut belongs = 0;
             // SAFETY: both handles are retained. A reused unrelated PID is not adopted.
-            if unsafe { IsProcessInJob(process.raw(), self.job.0, &mut belongs) } == 0 || belongs == 0 {
+            if unsafe { IsProcessInJob(process.raw(), self.job.0, &mut belongs) } == 0
+                || belongs == 0
+            {
                 return Err(Fault::Changed);
             }
             if !self.retained.contains_key(&process.key()) && self.retained.len() >= MAX_FAMILY {
@@ -177,7 +185,10 @@ impl OwnedFamily {
     }
     fn shutdown(&mut self, grace: Duration, after: Duration) -> Result<ExitObservation, Fault> {
         if self.wait(grace)? {
-            return Ok(ExitObservation { forced: false, observed_members: self.retained.len() });
+            return Ok(ExitObservation {
+                forced: false,
+                observed_members: self.retained.len(),
+            });
         }
         // SAFETY: only the owner of the private, newly created job can reach this
         // call, and ONLY after its grace period actually expired. Never a PID kill.
@@ -187,7 +198,10 @@ impl OwnedFamily {
         if !self.wait(after).map_err(|_| Fault::HelperStuck)? {
             return Err(Fault::HelperStuck);
         }
-        Ok(ExitObservation { forced: true, observed_members: self.retained.len() })
+        Ok(ExitObservation {
+            forced: true,
+            observed_members: self.retained.len(),
+        })
     }
     #[cfg(test)]
     pub(super) fn short_test_shutdown(&mut self) -> Result<ExitObservation, Fault> {

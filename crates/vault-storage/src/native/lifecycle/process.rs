@@ -1,5 +1,5 @@
 //! Read-only, retained-handle process observations. No terminate right is requested.
-use super::super::super::*;
+use super::super::*;
 use crate::lifecycle_model::{child_of, shared_home_readiness, Fault, Life, ProcessKey};
 use crate::lifecycle_model::{MAX_FAMILY, MAX_PROCESSES, MAX_WINDOWS};
 use sha2::{Digest, Sha256};
@@ -82,7 +82,8 @@ impl ObservedProcess {
             return Err(Fault::Incomplete);
         }
         // SAFETY: observation rights only. PID is not retained as later signal authority.
-        let handle = unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION | SYNCHRONIZE, 0, pid) };
+        let handle =
+            unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION | SYNCHRONIZE, 0, pid) };
         if handle.is_null() {
             return Err(failed());
         }
@@ -92,16 +93,36 @@ impl ObservedProcess {
         let mut kernel = FILETIME::default();
         let mut user = FILETIME::default();
         // SAFETY: exact SDK output structures and owned query handle.
-        if unsafe { GetProcessTimes(handle.0, &mut created, &mut exit, &mut kernel, &mut user) } == 0 {
+        if unsafe { GetProcessTimes(handle.0, &mut created, &mut exit, &mut kernel, &mut user) }
+            == 0
+        {
             return Err(failed());
         }
-        let key = ProcessKey { pid, created: filetime(created) };
+        let key = ProcessKey {
+            pid,
+            created: filetime(created),
+        };
         if key.created == 0 {
             return Err(Fault::Incomplete);
         }
-        let owner = owner(handle.0)?;
-        let image = image(handle.0)?;
-        let process = Self { handle, key, owner, image };
+        let observed = (|| Ok::<_, Fault>((owner(handle.0)?, image(handle.0)?)))();
+        let (owner, image) = match observed {
+            Ok(value) => value,
+            Err(error) => {
+                // An exited retained handle establishes disappearance, not an
+                // inaccessible process being silently treated as an empty slot.
+                if unsafe { WaitForSingleObject(handle.0, 0) } == WAIT_OBJECT_0 {
+                    return Err(Fault::Disappeared);
+                }
+                return Err(error);
+            }
+        };
+        let process = Self {
+            handle,
+            key,
+            owner,
+            image,
+        };
         process.ensure_live(key)?;
         Ok(process)
     }
@@ -126,7 +147,16 @@ impl ObservedProcess {
         let mut kernel = FILETIME::default();
         let mut user = FILETIME::default();
         // SAFETY: handle retained even after exit; exit output used ONLY if signalled.
-        if unsafe { GetProcessTimes(self.handle.0, &mut created, &mut exit, &mut kernel, &mut user) } == 0 {
+        if unsafe {
+            GetProcessTimes(
+                self.handle.0,
+                &mut created,
+                &mut exit,
+                &mut kernel,
+                &mut user,
+            )
+        } == 0
+        {
             return Err(failed());
         }
         if filetime(created) != self.key.created {
@@ -148,7 +178,8 @@ impl ObservedProcess {
         if self.signalled()? {
             return Err(Fault::Disappeared);
         }
-        if self.life(0)?.key != expected || owner(self.handle.0)? != self.owner
+        if self.life(0)?.key != expected
+            || owner(self.handle.0)? != self.owner
             || image(self.handle.0)? != self.image
         {
             return Err(Fault::Changed);
@@ -173,10 +204,21 @@ impl ObservedProcess {
         if owner(unsafe { GetCurrentProcess() })? != self.owner {
             return Err(Fault::AccessDenied);
         }
-        let mut state = Windows { pid: self.key.pid, handles: Vec::new(), overflow: false };
+        let mut state = Windows {
+            pid: self.key.pid,
+            handles: Vec::new(),
+            overflow: false,
+            seen: 0,
+            started: Instant::now(),
+        };
         // SAFETY: callback is synchronous; stack state lives through EnumWindows.
-        if unsafe { EnumWindows(Some(collect_window), (&mut state as *mut Windows) as isize) } == 0 {
-            return Err(if state.overflow { Fault::Bound } else { Fault::Incomplete });
+        if unsafe { EnumWindows(Some(collect_window), (&mut state as *mut Windows) as isize) } == 0
+        {
+            return Err(if state.overflow {
+                Fault::Bound
+            } else {
+                Fault::Incomplete
+            });
         }
         if state.handles.is_empty() {
             return Err(Fault::QuitUnavailable);
@@ -201,10 +243,20 @@ struct Windows {
     pid: u32,
     handles: Vec<(HWND, u32)>,
     overflow: bool,
+    seen: usize,
+    started: Instant,
 }
-unsafe extern "system" fn collect_window(window: HWND, argument: LPARAM) -> windows_sys::core::BOOL {
+unsafe extern "system" fn collect_window(
+    window: HWND,
+    argument: LPARAM,
+) -> windows_sys::core::BOOL {
     // SAFETY: only EnumWindows above supplies this live uniquely borrowed pointer.
     let state = unsafe { &mut *(argument as *mut Windows) };
+    state.seen += 1;
+    if state.seen > MAX_PROCESSES || state.started.elapsed() >= Duration::from_secs(2) {
+        state.overflow = true;
+        return 0;
+    }
     let mut pid = 0;
     let thread = unsafe { GetWindowThreadProcessId(window, &mut pid) };
     if pid == state.pid {
@@ -229,8 +281,14 @@ impl Inventory {
             return Err(failed());
         }
         let snapshot = Token(snapshot);
-        let mut entry = PROCESSENTRY32W { dwSize: std::mem::size_of::<PROCESSENTRY32W>() as u32, ..Default::default() };
-        let mut inventory = Self { entries: Vec::new(), complete: true };
+        let mut entry = PROCESSENTRY32W {
+            dwSize: std::mem::size_of::<PROCESSENTRY32W>() as u32,
+            ..Default::default()
+        };
+        let mut inventory = Self {
+            entries: Vec::new(),
+            complete: true,
+        };
         let mut seen = BTreeSet::new();
         let start = Instant::now();
         // SAFETY: correct structure size set before the documented iteration API.
@@ -265,34 +323,67 @@ pub(super) struct ObservedTree {
 }
 impl ObservedTree {
     pub(super) fn new(root: ObservedProcess) -> Self {
-        Self { members: BTreeMap::from([(root.key(), (0, root))]), incomplete: false }
+        Self {
+            members: BTreeMap::from([(root.key(), (0, root))]),
+            incomplete: false,
+        }
     }
     pub(super) fn refresh(&mut self, inventory: Inventory) -> Result<(), Fault> {
+        let result = self.refresh_inner(inventory);
+        if result.is_err() {
+            self.incomplete = true;
+        }
+        result
+    }
+    fn refresh_inner(&mut self, inventory: Inventory) -> Result<(), Fault> {
         self.incomplete |= !inventory.complete;
         let mut pending = inventory.entries;
+        if pending.len() > MAX_PROCESSES {
+            return Err(Fault::Bound);
+        }
+        let started = Instant::now();
         loop {
             let mut remaining = Vec::new();
             let mut changed = false;
             for (parent, process) in pending {
-                if self.members.contains_key(&process.key()) { continue; }
+                if started.elapsed() >= Duration::from_secs(2) {
+                    return Err(Fault::Bound);
+                }
+                if self.members.contains_key(&process.key()) {
+                    continue;
+                }
+                if !self.members.keys().any(|key| key.pid == parent) {
+                    remaining.push((parent, process));
+                    continue;
+                }
                 let life = process.life(parent)?;
                 let mut related = false;
                 for (parent_id, observed) in self.members.values() {
+                    if observed.key().pid != parent {
+                        continue;
+                    }
                     match child_of(&life, &observed.life(*parent_id)?) {
-                        Ok(true) => { related = true; break; }
+                        Ok(true) => {
+                            related = true;
+                            break;
+                        }
                         Ok(false) => {}
                         Err(_) => self.incomplete = true,
                     }
                 }
                 if related {
-                    if self.members.len() >= MAX_FAMILY { return Err(Fault::Bound); }
+                    if self.members.len() >= MAX_FAMILY {
+                        return Err(Fault::Bound);
+                    }
                     self.members.insert(process.key(), (parent, process));
                     changed = true;
                 } else {
                     remaining.push((parent, process));
                 }
             }
-            if !changed { break; }
+            if !changed {
+                break;
+            }
             pending = remaining;
         }
         Ok(())
@@ -301,9 +392,13 @@ impl ObservedTree {
         self.members.contains_key(&key)
     }
     pub(super) fn observed_members_exited(&self) -> Result<bool, Fault> {
-        if self.incomplete { return Err(Fault::Incomplete); }
+        if self.incomplete {
+            return Err(Fault::Incomplete);
+        }
         for (_, process) in self.members.values() {
-            if !process.signalled()? { return Ok(false); }
+            if !process.signalled()? {
+                return Ok(false);
+            }
         }
         Ok(true)
     }

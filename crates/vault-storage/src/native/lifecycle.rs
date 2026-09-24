@@ -2,9 +2,9 @@
 //! There is no public path/process executor or production Effects adapter.
 //! Synthetic child construction exists only in lifecycle_tests.rs.
 #![deny(unsafe_op_in_unsafe_fn)]
+mod helper;
 mod home;
 mod process;
-mod helper;
 
 #[cfg(test)]
 #[path = "lifecycle_tests.rs"]

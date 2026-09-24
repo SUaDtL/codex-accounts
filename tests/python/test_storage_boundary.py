@@ -53,8 +53,8 @@ class StorageBoundary(unittest.TestCase):
     def test_prior_dependency_reviews_cannot_be_rewritten(self):
         with tempfile.TemporaryDirectory() as t:
             root=Path(t)
-            review=json.loads((ROOT/'docs/ca-04a-dependencies.json').read_text())
-            files=[*review['manifest_sha256'],*review['predecessor_sha256'],'docs/ca-04a-dependencies.json','Cargo.lock']
+            review=json.loads((ROOT/'docs/ca-04b-dependencies.json').read_text())
+            files=[*review['manifest_sha256'],*review['predecessor_sha256'],'docs/ca-04b-dependencies.json','Cargo.lock']
             for p in files:
                 (root/p).parent.mkdir(parents=True,exist_ok=True);shutil.copyfile(ROOT/p,root/p)
             self.assertEqual(check_dependencies.check(root)['reviewed_packages'],58)

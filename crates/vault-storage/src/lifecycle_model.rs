@@ -122,7 +122,10 @@ mod tests {
     #[test]
     fn incomplete_and_empty_snapshots_never_authorize_shared_home_writes() {
         assert_eq!(shared_home_readiness(false), Err(Fault::Incomplete));
-        assert_eq!(shared_home_readiness(true), Err(Fault::QualificationMissing));
+        assert_eq!(
+            shared_home_readiness(true),
+            Err(Fault::QualificationMissing)
+        );
     }
     #[test]
     fn root_exit_signal_receipt_and_zero_count_are_not_interchangeable() {
@@ -147,6 +150,9 @@ mod tests {
     }
     #[test]
     fn process_keys_do_not_expose_process_identifiers_in_debug() {
-        assert_eq!(format!("{:?}", life(123456, 987654, 1).key), "ProcessKey([REDACTED])");
+        assert_eq!(
+            format!("{:?}", life(123456, 987654, 1).key),
+            "ProcessKey([REDACTED])"
+        );
     }
 }
