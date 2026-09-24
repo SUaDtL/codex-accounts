@@ -21,7 +21,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2; separately reviewed upgrade pending
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1, Node 24; reviewed in ca-04b-native-review.md
         id: checkout
         with:
           persist-credentials: false
@@ -74,7 +74,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2; separately reviewed upgrade pending
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1, Node 24; reviewed in ca-04b-native-review.md
         id: checkout
         with:
           persist-credentials: false
@@ -119,6 +119,14 @@ jobs:
         id: release_build
         if: ${{ !cancelled() && steps.toolchain.outcome == 'success' && steps.dependency_review.outcome == 'success' && steps.dependencies.outcome == 'success' }}
         run: cargo build --workspace --all-targets --release --locked --offline
+      - name: Execute optimized tests (Cargo offline)
+        id: release_tests
+        if: ${{ !cancelled() && steps.toolchain.outcome == 'success' && steps.dependency_review.outcome == 'success' && steps.dependencies.outcome == 'success' }}
+        run: cargo test --workspace --all-targets --release --no-fail-fast --locked --offline
+      - name: Verify named Windows native execution
+        id: native_tests
+        if: ${{ !cancelled() && steps.toolchain.outcome == 'success' && steps.dependency_review.outcome == 'success' && steps.dependencies.outcome == 'success' && matrix.os == 'windows-latest' }}
+        run: python tools/run_native_tests.py
       - name: Lint workspace (Cargo offline)
         id: clippy
         if: ${{ !cancelled() && steps.toolchain.outcome == 'success' && steps.dependency_review.outcome == 'success' && steps.dependencies.outcome == 'success' }}
@@ -128,16 +136,49 @@ jobs:
         if: ${{ always() && steps.checkout.outcome == 'success' }}
         env:
           CI_RESULTS: ${{ toJSON(steps) }}
+          CI_MATRIX_OS: ${{ matrix.os }}
         run: python tools/ci_gate.py rust
+
+  isolated-build:
+    name: Linux network-isolated build and tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1, Node 24
+        id: checkout
+        with:
+          persist-credentials: false
+      - name: Record checked out commit and tree
+        id: revision
+        run: git log -1 --format="%H %T"
+      - name: Validate reviewed dependency lock
+        id: dependency_review
+        run: python tools/check_dependencies.py
+      - name: Acquire pinned development toolchain
+        id: toolchain
+        run: rustup toolchain install 1.90.0 --profile minimal --component rustfmt --component clippy
+      - name: Acquire reviewed dependencies
+        id: dependencies
+        run: cargo fetch --locked
+      - name: Rebuild and test without direct IP network access
+        id: isolated
+        if: ${{ !cancelled() && steps.toolchain.outcome == 'success' && steps.dependency_review.outcome == 'success' && steps.dependencies.outcome == 'success' }}
+        run: python3 tools/ci_isolated.py
+      - name: Require isolated execution and reviewed acquisition
+        id: assess
+        if: ${{ always() && steps.checkout.outcome == 'success' }}
+        env:
+          CI_RESULTS: ${{ toJSON(steps) }}
+        run: python3 tools/ci_gate.py isolated
 
   ci-gate:
     name: CI gate
-    needs: [source-and-python, rust-models]
+    needs: [source-and-python, rust-models, isolated-build]
     if: ${{ always() }}
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2; separately reviewed upgrade pending
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1, Node 24; reviewed in ca-04b-native-review.md
         id: checkout
         with:
           persist-credentials: false
