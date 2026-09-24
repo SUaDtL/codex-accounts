@@ -1,0 +1,38 @@
+name: CA-04A offline inputs (not validation)
+on:
+  push:
+    branches: [feat/ca-04a-switch-journal]
+    paths: [.github/workflows/ca04a-prepare.yml]
+permissions:
+  contents: read
+jobs:
+  prepare:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - run: python3 tools/check_dependencies.py
+      - run: rustup toolchain install 1.90.0 --profile minimal --component rustfmt --component clippy
+      - run: cargo +1.90.0 fetch --locked
+      - name: Package reviewed source and pinned compiler for offline development
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir ca04a-inputs
+          git archive HEAD | gzip > ca04a-inputs/source.tar.gz
+          git bundle create ca04a-inputs/source.bundle HEAD refs/remotes/origin/main refs/remotes/origin/feat/ca-03a-vault-data
+          git rev-parse HEAD > ca04a-inputs/source-commit.txt
+          toolchain=$(dirname "$(dirname "$(rustup which --toolchain 1.90.0 rustc)")")
+          tar -czf ca04a-inputs/rust-1.90.0.tar.gz -C "$toolchain" .
+          tar -czf ca04a-inputs/registry.tar.gz -C "$HOME/.cargo" registry
+          cd ca04a-inputs
+          sha256sum source.tar.gz source.bundle rust-1.90.0.tar.gz registry.tar.gz > SHA256SUMS
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: ca04a-offline-inputs
+          path: ca04a-inputs/
+          if-no-files-found: error
+          retention-days: 3
