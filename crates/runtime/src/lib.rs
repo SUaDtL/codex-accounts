@@ -1,5 +1,5 @@
 //! Bounded transport primitives, not an executable runtime adapter.
-//! Strict JSON-object validation is opt-in; schema/IDs and lifecycle remain Q3.
+//! Strict JSON validation and a sealed non-login sequencer; no qualified schema or IO.
 //! LF delimits raw UTF-8 payloads; CR is preserved, not normalized.
 //! Successful EOF is terminal. Classification below grants no invocation authority.
 //! No caller may treat a decoded byte frame as a valid JSON-RPC response.
@@ -10,7 +10,11 @@ use std::fmt;
 use zeroize::{Zeroize, Zeroizing};
 
 mod json_object;
+mod session;
 pub use json_object::{JsonFrameError, JsonObjectDecoder, JsonObjectFrame};
+pub use session::{
+    IssuedRequest, ProtocolSession, RequestId, ResponseOutcome, SessionError, SessionPhase,
+};
 
 pub const MAX_FRAME_BYTES: usize = 1024 * 1024;
 pub const MAX_PENDING_BYTES: usize = 4 * 1024 * 1024;

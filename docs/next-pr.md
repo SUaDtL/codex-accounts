@@ -1,47 +1,41 @@
-# Current review: PR #13 integration and CA-05B
+# Current packet: CA-05C non-login session sequencing
 
-Continue `feat/ca-04d-staging-recovery-ci` in PR #13. The owner requested the next
-slice and resolution of its conflicts in the same PR. Observed parents:
-CA-04D `345533eacd4ed4ed288fa7a4580dd4e408106ede` and merged main
-`d64d3e31712798b1b790c70c3830c6853a67c1a2` (PR #12). Preserve both histories;
-never reset main or force-push this branch. Refresh live refs before another edit.
+Base: owner-merged PR #13 at `85aff5e32e6619d7250bf7d4dbfcffefbc016043`.
+Resume `feat/ca-05c-session-correlation` and its actual open PR. PR #13 is closed;
+keep this bounded continuation together in one follow-on review. Refresh refs,
+reviews and checks before another edit. No reset, force push or automatic merge.
 
-## Selected increment
+## Implemented for review
 
-CA-05B adds an opt-in strict JSON-object decoder over CA-05A framing. Reuse the
-existing vault parser and exact zeroize dependency; reject malformed/non-object
-JSON, decoded duplicate keys, depth overflow and transport bounds. Retain bytes,
-poison failed streams and keep diagnostics redacted. Object syntax is not an RPC
-schema, method authorization, response/login ID or identity observation.
+`crates/runtime/src/session.rs` adds sealed normalized-event sequencing: initialize
+request/send/response then initialized-send order, session-local request correlation,
+bounded account signals, absolute 10/15/30-second deadlines, credit/lifetime caps
+and sticky terminal errors. No production constructor or official wire schema.
+Twenty-four Rust tests and four Python boundary checks join the existing CI lanes.
 
-The join preserves CA-04D encrypted staging repair and complete/disjoint CI,
-CA-05A framing tests, CA-06A static views/tests and macOS documentary preparation.
-Resolve the five conflicting routing/plan/validation files rather than choosing
-one side wholesale. Reissue the macOS source baseline with its predecessor and
-scoped interface review; native construction remains unavailable.
+Read live AGENTS.md, SPEC-PROTOCOL, S-011/S-012, F-017/F-019, T-24/T-25/T-26/T-31,
+`ca-05c-session-sequencing.md`, the session implementation/tests and CA-05B framing.
+Existing storage, recovery, native and CI-partition code is unchanged.
 
-Read live AGENTS.md, SPEC-PROTOCOL, S-003/S-011/S-012/S-015, T-25/T-26/T-31,
-`ca-05b-json-objects.md`, the unchanged strict parser, runtime APIs/tests and the
-CA-04D recovery/CI reviews. One integrator owns shared records and publication.
+## Finish this review
 
-## Validation and finish
+Validate pinned formatting, runtime/workspace debug and release, doctests, Clippy,
+source/Python/dependency/projection checks and every inherited hosted job, including
+all 54 exact-name Windows native executions and isolated Linux. Review the full diff
+for authority leakage, deadline resets, ID reuse and false EOF/helper-exit claims.
+Record completed results for the actual final head and tested tree on the PR.
+Old passes do not transfer. Keep native/owner omissions explicit.
 
-Run source/projection/provenance/dependency and Python checks, preview parity,
-macOS source consistency, pinned formatting, workspace debug/release partitions,
-doctests, optimized build, all 27 named Windows behaviors in both profiles and
-Clippy with warnings denied. Hosted isolated Linux remains mandatory. Inspect
-completed logs for the final source and tested merge/tree. Failed or unavailable
-checks remain explicit; never inherit an earlier SHA's green status.
+## Next eligible slice
 
-## Next eligible step after review
+CA-05D can add bounded login-ID correlation, early-completion ordering, cancellation
+acknowledgement and ten-minute timeout as a separately selected normalized-event
+slice. Reuse CA-05C sequencing, not a second transport or credential transaction.
+No official wire schema, browser URL or helper may be invented to make those tests
+look integrated. Version-bound decoding, independently drained private stdio,
+real scheduling/suspend behavior and owned-helper stop/reap/capture still require
+their own reviewed adapter and exact Q0/Q2 evidence.
 
-Schema-independent request/handshake correlation and deadline tests can be selected
-as a later CA-05 preparation slice. A production schema must come from an approved
-exact runtime, not a synthetic fixture. No official helper/login/refresh, native
-consent or credential access is enabled by CA-05B.
-
-Operational CA-05 still needs exact Q0/Q2 and owned-helper lifecycle. macOS native
-coding needs owner selection, CA-04D review, exact SDK/binding review and an
-authorized host. Browser/keyboard/zoom/screen-reader, two-user, directory-metadata
-and physical-power-loss evidence remain separate in `maintainers/open-asks.md`.
-No merge of this PR, release, permission change or live account operation.
+The safe collection procedures and remaining platform/owner inputs are in
+`maintainers/open-asks.md`. No native permission change, user-app force-close,
+credential operation, release or product qualification is part of this packet.

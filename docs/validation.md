@@ -1,6 +1,34 @@
 # Validation and evidence boundary
 
-## PR #13 integration and CA-05B validation boundary
+## CA-05C: current execution boundary
+
+Base is owner-merged PR #13 at `85aff5e32e6619d7250bf7d4dbfcffefbc016043`.
+The selected branch is `feat/ca-05c-session-correlation`; its final head, tested
+merge/tree and inspected completed jobs are recorded on that live review. Never
+inherit the historical PR #13 results below for this changed source.
+
+Twenty-four deterministic tests exercise the actual sealed non-login sequencer;
+four Python checks enforce construction, no-IO and fixed-budget boundaries. The
+runtime has 58 ordinary cases and two compile-fail doctests. Model events are not
+wire-schema, clock/scheduler, pipe-origin, native-exit or credential evidence.
+No dependencies, native interfaces or CI execution partitions change.
+
+All existing hosted jobs and 54 named native executions remain required. Ordinary
+user/two-user, unavailable-store, exact Desktop Q0, macOS native, UI accessibility
+and physical-power-loss qualification remain separate and unestablished. Consult
+`ca-05c-session-sequencing.md` and `next-pr.md` for exact scope and next selection.
+
+## Merged PR #13: historical CA-04D/CA-05B evidence
+
+Owner merge: `85aff5e32e6619d7250bf7d4dbfcffefbc016043`. Final source
+`0ab969c4b05ffc25820f2f6c538ff510bcfa34ae` passed all six jobs in run
+[36186587877](https://github.com/SUaDtL/codex-accounts/actions/runs/36186587877).
+Its source and test merge `4dd0e38ddf7ff5088c4f533a13e8fce374d53929` share tree
+`d58404dfcf67aa3f3c9b59aae36fed708f46c5d6`. Source: 159 Python passes. Windows:
+198 workspace passes plus 27 named native cases in each profile; four doctests;
+three two-user helpers NOT RUN. Portable/isolated Linux and macOS: 160 Rust passes
+per profile and four doctests. These records do not qualify Desktop or later heads.
+The following preserves that PR's review scope and evidence limitations.
 
 This review combines CA-04D source `345533eacd4ed4ed288fa7a4580dd4e408106ede`
 with main `d64d3e31712798b1b790c70c3830c6853a67c1a2` (owner-merged PR #12).
@@ -234,8 +262,6 @@ do not prove effective official identity, process quiescence or live operation s
 
 ## Next eligible implementation
 
-Finish the CA-04D review and its exact-head evidence. Follow `next-pr.md` for the
-remaining native qualification gates and the CA-05B continuation. No automatic runtime/login/UI integration or phase advancement.
-
-The root entry point, session handoff and open-asks register route continuation.
-The repository implementation plan remains the only working roadmap.
+Finish the CA-05C review and inspect its exact-head checks. `next-pr.md` selects the
+bounded follow-on, not automatic runtime/login/UI integration. The single roadmap,
+root entry point, handoff and open-asks register retain the remaining gates.
