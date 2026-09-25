@@ -45,7 +45,12 @@ The existing debug/release workspace and isolated Linux lanes discover the new
 integration test executable. No workflow filter or skipped-test exception is added.
 These tests partially support S-011/S-012 and T-25/T-26; they do not complete them.
 
-## Deferred validation is explicit
+## Deferred validation at the CA-05A checkpoint
+
+CA-05B now adds opt-in JSON-object validation; see `ca-05b-json-objects.md`. The
+raw FrameDecoder contract remains untrusted and unchanged. The following records
+what CA-05A alone did not implement, not a claim that CA-05B is absent.
+
 
 Duplicate JSON-key rejection, malformed JSON validation, schema/depth/value bounds,
 handshake sequencing, response/login-ID correlation, notification reordering,

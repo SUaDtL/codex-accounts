@@ -1,5 +1,6 @@
-//! Explicit CAREG002 extension. CAREG001 reads without rewriting; old readers
-//! reject the new magic. Version selection and graph checks precede all use.
+//! Explicit CAREG002/003 extensions. Older records read without rewriting.
+//! CAREG003 distinguishes staging evidence from live-resource conflict evidence;
+//! old readers reject its magic. No evidence kind is an installation authority.
 #![forbid(unsafe_code)]
 use super::{Reader, Writer};
 use crate::{journal::*, records::*, StorageError};
@@ -40,7 +41,7 @@ fn failure(r: &mut Reader<'_>) -> Result<Option<Failure>, StorageError> {
         n => Ok(Some(Failure::parse(n)?)),
     }
 }
-pub(super) fn write(w: &mut Writer, j: &Journal) {
+pub(super) fn write(w: &mut Writer, j: &Journal, format: u8) {
     w.id(&j.id);
     w.0.extend_from_slice(&j.binding);
     w.u64(j.created);
@@ -80,6 +81,9 @@ pub(super) fn write(w: &mut Writer, j: &Journal) {
     marks(w, &j.target_marks);
     w.u32(j.evidence.len() as u32);
     for e in &j.evidence {
+        if format >= 3 {
+            w.u8(e.kind as u8);
+        }
         w.id(&e.id);
         w.u32(e.resources.len() as u32);
         for r in &e.resources {
@@ -88,7 +92,7 @@ pub(super) fn write(w: &mut Writer, j: &Journal) {
         }
     }
 }
-pub(super) fn read(r: &mut Reader<'_>) -> Result<Journal, StorageError> {
+pub(super) fn read(r: &mut Reader<'_>, format: u8) -> Result<Journal, StorageError> {
     let id = r.id()?;
     let binding = r.take(32)?.try_into().map_err(|_| StorageError::Corrupt)?;
     let created = r.u64()?;
@@ -131,6 +135,15 @@ pub(super) fn read(r: &mut Reader<'_>) -> Result<Journal, StorageError> {
     let target_marks = read_marks(r)?;
     let mut evidence = Vec::new();
     for _ in 0..r.count(MAX_EVIDENCE)? {
+        let kind = if format < 3 {
+            EvidenceKind::Live
+        } else {
+            match r.u8()? {
+                0 => EvidenceKind::Live,
+                1 => EvidenceKind::Staging,
+                _ => return Err(StorageError::Corrupt),
+            }
+        };
         let id = r.id()?;
         let mut resources = Vec::new();
         for _ in 0..r.count(16)? {
@@ -141,7 +154,11 @@ pub(super) fn read(r: &mut Reader<'_>) -> Result<Journal, StorageError> {
                 blob: r.optional()?,
             });
         }
-        evidence.push(Evidence { id, resources });
+        evidence.push(Evidence {
+            kind,
+            id,
+            resources,
+        });
     }
     Ok(Journal {
         id,

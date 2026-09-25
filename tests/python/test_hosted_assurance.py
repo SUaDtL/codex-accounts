@@ -119,7 +119,7 @@ class IsolatedBuildTests(unittest.TestCase):
     def test_failed_check_remains_failed_and_other_independent_checks_execute(self):
         with tempfile.TemporaryDirectory() as directory:
             config = {'uid': 1001, 'namespace': 'net:[100]', 'env': {}, 'target': directory, 'cargo': 'cargo'}
-            with patch.object(ci_isolated, 'validate_status'), patch.object(ci_isolated, 'no_ip_route'), \
+            with patch.object(ci_isolated.Path, 'read_text', return_value='SYNTHETIC_STATUS'), patch.object(ci_isolated.os, 'readlink', return_value='net:[100]'), patch.object(ci_isolated, 'validate_status'), patch.object(ci_isolated, 'no_ip_route'), \
                  patch.object(ci_isolated.subprocess, 'run') as run, redirect_stdout(io.StringIO()):
                 run.side_effect = [subprocess.CompletedProcess([], 1)] + [subprocess.CompletedProcess([], 0)] * 3
                 self.assertEqual(ci_isolated.inner(config), 1)
@@ -129,7 +129,7 @@ class IsolatedBuildTests(unittest.TestCase):
                     self.assertIn('--offline', call.args[0])
                     self.assertEqual(call.kwargs['env']['CARGO_NET_OFFLINE'], 'true')
             (Path(directory) / 'old-build').write_text('SYNTHETIC')
-            with patch.object(ci_isolated, 'validate_status'), patch.object(ci_isolated, 'no_ip_route'):
+            with patch.object(ci_isolated.Path, 'read_text', return_value='SYNTHETIC_STATUS'), patch.object(ci_isolated.os, 'readlink', return_value='net:[100]'), patch.object(ci_isolated, 'validate_status'), patch.object(ci_isolated, 'no_ip_route'):
                 with self.assertRaises(ValueError):
                     ci_isolated.inner(config)
 

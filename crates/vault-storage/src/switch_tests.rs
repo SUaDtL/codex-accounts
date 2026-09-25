@@ -1229,3 +1229,6 @@ pub(crate) fn native_finish_interrupted<D: Files>(
         Some(B1)
     );
 }
+
+#[path = "stage_repair_tests.rs"]
+mod stage_repair_tests;

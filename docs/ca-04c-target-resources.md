@@ -47,9 +47,9 @@ not rolled back merely because cleanup or launch failed.
 A process can die immediately after creating a stage but before writing its full
 contents. Such an unverified stage is not silently deleted, adopted as a generation
 or overwritten. The restart tests require a visible conflict and unchanged recorded
-live resources in those cases. A separately reviewed encrypted staging-evidence
-repair path is still needed before production integration. This is a named remaining
-recovery gate, not permission to manufacture receipts or relax cleanup validation.
+live resources in those cases. CA-04D adds a separately invoked encrypted staging-evidence repair path; see
+`ca-04d-staging-recovery.md`. This does not relax normal cleanup or qualify production
+integration. Missing ownership/path/live-state evidence still blocks repair.
 
 ## Native evidence
 
@@ -65,7 +65,7 @@ not additional behavior proofs.
 | Journal integration | Newest outgoing capture, separate installed/launch outcomes, stale selected generation, external conflict, partial installation/reopen, separately retained primary/restoration failures. |
 | Cleanup | Authenticated content and registered-mask enforcement; cleanup sharing failure blocks until verified retry without replaying a launch. |
 | Helper | Suspended test child assigned to the existing private owned job before resume; actual exit verification; newest helper-written target preserved after source restoration. |
-| Process interruption | Seventeen native forward boundaries and seventeen native restoration boundaries, each in a separately created child and real vault/home. Parent reopens the protected key and encrypted records. Three torn-stage cases remain blocked rather than falsely complete. |
+| Process interruption | Seventeen native forward boundaries and seventeen native restoration boundaries, each in a separately created child and real vault/home. Parent reopens the protected key and encrypted records. Three torn-stage cases initially refuse normal recovery; CA-04D additionally tests explicit repair. |
 
 The interruption inventory includes before/after secure stage creation, content
 write, file flush, rename/publication, post-publication file flush and handle-bound
@@ -106,9 +106,8 @@ cargo clippy --workspace --all-targets --locked --offline -- -D warnings
 ```
 
 Full source/Python and IP-network-isolation evidence runs in the inherited Linux
-hosted jobs. Two pre-existing Python fixtures are not portable to Windows (a Linux
-/proc reader and a control-character filename). Do not label their local Windows
-errors as a successful full Python run or disable their Linux CI checks.
+hosted jobs. CA-04D corrected the Unicode and mocked /proc fixtures. The POSIX-only FIFO test
+still reports an explicit Windows skip; hosted Linux runs it.
 
 The native suite creates unique protected test parents and owns its child handles.
 Do not supply real credentials or change an existing ACL to make a case pass. On
@@ -126,7 +125,7 @@ retains committed source, not a working-directory or user-home archive.
 
 Review this implementation and exact-head hosted evidence before merge. Production
 constructor/consent, exact Q0 resource/home/policy/process binding, uncooperative
-namespace-writer handling, encrypted torn-stage repair, ordinary-user/two-user and
+namespace-writer handling, production staging-repair integration, ordinary-user/two-user and
 unavailable-store protection, representative sync providers, namespace durability,
 physical power loss and independent macOS evidence remain separate requirements.
 CA-05 official-runtime construction and stdio must not reuse a fixture as authority.

@@ -8,12 +8,12 @@ establish macOS behavior or qualification. A hosted macOS compilation also does 
 
 ## Shared contract and join barrier
 
-The source baseline is owner-merged CA-04C, commit
-`455baa2eeee614586b26d419ee961475fe1ad23b`. `interface-baseline.json` pins normalized
-SHA-256 digests of seven existing files. `python tools/macos_preparation.py` checks
-source drift only; it cannot enable a product operation. Its tests reject additional
-paths, changed hashes, missing fields, duplicates, authority flags and imported
-Windows evidence. There is no automatic baseline updater or qualification writer.
+The v2 source baseline pins CA-04D commit
+`345533eacd4ed4ed288fa7a4580dd4e408106ede`, including the new private staging-repair
+callback. `ca-04d-interface-review.md` explains the two changed shared definitions,
+the new eighth file, preservation requirements and macOS exclusion mismatch.
+`interface-baseline-ca04c.json` preserves the original seven-file record verbatim.
+The checker verifies source and review provenance only, never native behavior.
 
 | Existing boundary | Reuse obligation; no invented replacement |
 | --- | --- |
@@ -25,13 +25,12 @@ Windows evidence. There is no automatic baseline updater or qualification writer
 | `vault-storage/src/journal.rs` | Reuse the one write-ahead operation/restoration protocol; no second recovery engine. |
 | `vault-storage/src/lifecycle_model.rs` | Preserve start identity and incomplete-observation refusal. Model booleans are observations, not native evidence. |
 
-The interfaces are pinned for preparation, **not declared permanently stable or
-approved for macOS integration**. CA-04D staging repair is unfinished upstream and
-is not imported here. Before native coding, the integrator must resolve CA-04D,
-review the final shared interfaces (including any new staging-repair callback), and
-reissue this source baseline in review. Any drift stops integration until reconciled.
-Never update the hashes merely to silence a failing test. Protocol and static UI
-preparation do not depend on this unresolved native join.
+The interfaces are pinned for preparation, not permanently stable or approved for
+macOS integration. PR #13 reconciles the CA-04D source delta in review. Native coding
+still requires owner selection, review of CA-04D, exact SDK/binding review and an
+authorized macOS test host. `stage_repair.rs` requires archive-before-delete and a
+separate restoration choice; advisory flock alone cannot implement Windows sharing
+exclusion. Drift still blocks source checks. No hash or passing test grants authority.
 
 ## Collected platform facts and their limits
 

@@ -1,6 +1,6 @@
 {
-  "packet_format": "codex-accounts/macos-preparation/v1",
-  "base_commit": "455baa2eeee614586b26d419ee961475fe1ad23b",
+  "packet_format": "codex-accounts/macos-preparation/v2",
+  "base_commit": "345533eacd4ed4ed288fa7a4580dd4e408106ede",
   "platform": "macos-aarch64",
   "evidence": "source-baseline-only",
   "native_status": "not-run",
@@ -9,8 +9,11 @@
     "crates/platform/src/lib.rs": "71a741688484a953a6be5d0e759631b64081981681983fe7045b31bae467cfd4",
     "crates/vault-crypto/src/keys.rs": "f3f0746562f24b6d3c797554558541bc57575289d251cf83cc3fb51fca53f11c",
     "crates/vault-storage/src/engine.rs": "7398a315ccaebc1642e156a0a9195a08c0978463087f3252ddafa0d9e5ab3258",
-    "crates/vault-storage/src/coordinator.rs": "02e059652c7a960ba0ab511ecf9b19e521d251741dfdd32f5088d0e51fb9da33",
-    "crates/vault-storage/src/journal.rs": "693e31ca309d57ad97915e19ca09e34e06c08b583e2e15cd0cc0bafac13c276d",
-    "crates/vault-storage/src/lifecycle_model.rs": "50fca4ea0099793a36322ca9ad689778e692df56331850959b3982b9c4525060"
-  }
+    "crates/vault-storage/src/coordinator.rs": "1baa0cad4589fca9705178232979ca4d6e9d76de664937df9e64644b58d0b822",
+    "crates/vault-storage/src/journal.rs": "cf933c9b646ddfb20c64f68148c3fceb64e88dcd8442596c29ad25f951f2b7b9",
+    "crates/vault-storage/src/lifecycle_model.rs": "50fca4ea0099793a36322ca9ad689778e692df56331850959b3982b9c4525060",
+    "crates/vault-storage/src/stage_repair.rs": "51afbed9afa0d943a98246adb29df6b57f88ae6d8e71986277ccc494a5b45ae8"
+  },
+  "predecessor_sha256": "baf3b499429d71fa7e4965e58ad5cb9316d68c35fd30eb1a2c399c45dc6efaa1",
+  "review_sha256": "b88abdb72a4237af658954a12ff2f50e098b647a2d9de97049825c73544e595b"
 }

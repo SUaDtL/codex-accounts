@@ -203,7 +203,7 @@ class InventoryTests(unittest.TestCase):
         self.assertEqual(before, after)
 
     def test_unicode_paths_are_accepted(self):
-        dest = self.root / "runtime-61-69.exe"
+        dest = self.root / "runtime-\u6e2c\u8a66.exe"
         self.runtime.rename(dest)
         self.runtime = dest
         self.assertFalse(self.report()["qualified"])

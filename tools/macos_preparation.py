@@ -19,6 +19,7 @@ SOURCES = (
     'crates/vault-storage/src/coordinator.rs',
     'crates/vault-storage/src/journal.rs',
     'crates/vault-storage/src/lifecycle_model.rs',
+    'crates/vault-storage/src/stage_repair.rs',
 )
 MAX_BYTES = 256 * 1024
 
@@ -46,15 +47,19 @@ def decode(raw: bytes) -> dict:
 
 
 def validate(record: dict, read_source) -> None:
-    fields = {'packet_format', 'base_commit', 'platform', 'evidence', 'native_status', 'interfaces'}
+    fields = {'packet_format', 'base_commit', 'platform', 'evidence', 'native_status', 'interfaces',
+              'predecessor_sha256', 'review_sha256'}
     if not isinstance(record, dict) or set(record) != fields:
         raise PacketError('Unexpected preparation fields')
-    if (record['packet_format'] != 'codex-accounts/macos-preparation/v1' or
-            record['base_commit'] != '455baa2eeee614586b26d419ee961475fe1ad23b' or
+    if (record['packet_format'] != 'codex-accounts/macos-preparation/v2' or
+            record['base_commit'] != '345533eacd4ed4ed288fa7a4580dd4e408106ede' or
             record['platform'] != 'macos-aarch64' or
             record['evidence'] != 'source-baseline-only' or
             record['native_status'] != 'not-run'):
         raise PacketError('Preparation is not native qualification')
+    for field in ('predecessor_sha256', 'review_sha256'):
+        if not isinstance(record[field], str) or not re.fullmatch('[0-9a-f]{64}', record[field]):
+            raise PacketError('Invalid review digest')
     bindings = record['interfaces']
     if not isinstance(bindings, dict) or set(bindings) != set(SOURCES):
         raise PacketError('Unexpected interface set')
@@ -79,6 +84,12 @@ def check(root: Path = ROOT) -> None:
     with (root / PACKET).open('rb') as stream:
         record = decode(stream.read(16 * 1024 + 1))
     validate(record, read)
+    for field, path in (
+        ('predecessor_sha256', 'docs/macos/interface-baseline-ca04c.json'),
+        ('review_sha256', 'docs/macos/ca-04d-interface-review.md'),
+    ):
+        if hashlib.sha256(read(path).replace(b'\r\n', b'\n')).hexdigest() != record[field]:
+            raise PacketError('Shared interface review provenance changed')
 
 
 if __name__ == '__main__':

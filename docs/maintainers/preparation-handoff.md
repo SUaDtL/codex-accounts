@@ -1,5 +1,8 @@
 # CA-05A / CA-06A / macOS preparation handoff
 
+Historical PR #12 handoff. PR #12 is now merged; PR #13 integrates its work with
+CA-04D and CA-05B. Current routing is `../next-pr.md`.
+
 Checkpoint: September 25, 2026. Review PR #12, branch
 `feat/ca-05-06-macos-preparation`. The actual remote head and completed checks govern
 continuation, not this dated note. Main at task start was owner-merged CA-04C,

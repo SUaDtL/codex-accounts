@@ -1,7 +1,9 @@
 //! Real Windows file effects; only newly created synthetic homes/vaults.
 use super::super::*;
 use super::target::Target;
-use crate::engine::coordinator::{Check, Choice, Effects, Request, Snapshot, SwitchError};
+use crate::engine::coordinator::{
+    Check, Choice, Effects, Request, Snapshot, StagingRepair, SwitchError,
+};
 use crate::journal::{Failure, GenerationRef, SwitchPhase};
 use crate::{Capture, ProfileId, ProfileText};
 use codex_accounts_core::{CredentialAcceptance, DesktopLaunch};
@@ -175,6 +177,20 @@ impl Effects for NativeEffects {
     }
     fn launch(&mut self, _: Id) -> Result<DesktopLaunch, Failure> {
         Err(Failure::Launch)
+    }
+}
+impl StagingRepair for NativeEffects {
+    fn preserve_then_remove_staging(
+        &mut self,
+        operation: Id,
+        registered: u16,
+        preserve: &mut dyn FnMut(Vec<Resource>) -> Result<(), SwitchError>,
+    ) -> Result<(), SwitchError> {
+        if self.helper.is_some() {
+            return Err(Failure::HelperStuck.into());
+        }
+        self.target
+            .preserve_then_remove(operation, registered, preserve)
     }
 }
 struct Fixture {
@@ -786,4 +802,23 @@ fn ca04c_process_restart_restoration_boundaries() {
 
 pub(super) fn crash_at_native_boundary() -> ! {
     std::process::exit(86)
+}
+
+#[path = "target_repair_tests.rs"]
+mod repair;
+#[test]
+fn ca04d_torn_stage_archived_before_explicit_restoration() {
+    repair::torn();
+}
+#[test]
+fn ca04d_staging_repair_refuses_writer_links_and_unregistered_files() {
+    repair::refusals();
+}
+#[test]
+fn ca04d_staging_archive_failure_preserves_plaintext_and_live_state() {
+    repair::archive_failure();
+}
+#[test]
+fn ca04d_repair_process_restart_boundaries() {
+    restart::exercise("repair");
 }

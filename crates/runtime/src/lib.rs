@@ -1,5 +1,5 @@
 //! Bounded transport primitives, not an executable runtime adapter.
-//! JSON validation, handshake/IDs, native ownership and helper lifecycle remain Q3.
+//! Strict JSON-object validation is opt-in; schema/IDs and lifecycle remain Q3.
 //! LF delimits raw UTF-8 payloads; CR is preserved, not normalized.
 //! Successful EOF is terminal. Classification below grants no invocation authority.
 //! No caller may treat a decoded byte frame as a valid JSON-RPC response.
@@ -7,6 +7,10 @@
 
 use std::collections::VecDeque;
 use std::fmt;
+use zeroize::{Zeroize, Zeroizing};
+
+mod json_object;
+pub use json_object::{JsonFrameError, JsonObjectDecoder, JsonObjectFrame};
 
 pub const MAX_FRAME_BYTES: usize = 1024 * 1024;
 pub const MAX_PENDING_BYTES: usize = 4 * 1024 * 1024;
@@ -81,7 +85,7 @@ pub enum FrameError {
 }
 
 /// Raw, untrusted frame. Debug output never contains its body.
-pub struct UntrustedFrame(Vec<u8>);
+pub struct UntrustedFrame(Zeroizing<Vec<u8>>);
 
 impl UntrustedFrame {
     pub fn as_bytes(&self) -> &[u8] {
@@ -97,7 +101,7 @@ impl fmt::Debug for UntrustedFrame {
 
 #[derive(Default)]
 pub struct FrameDecoder {
-    partial: Vec<u8>,
+    partial: Zeroizing<Vec<u8>>,
     ready: VecDeque<UntrustedFrame>,
     queued_bytes: usize,
     poisoned: bool,
@@ -167,10 +171,9 @@ impl FrameDecoder {
 
     fn fail(&mut self, error: FrameError) -> Result<(), FrameError> {
         self.poisoned = true;
-        self.partial.fill(0);
-        self.partial.clear();
+        self.partial.zeroize();
         for frame in &mut self.ready {
-            frame.0.fill(0);
+            frame.0.zeroize();
         }
         self.ready.clear();
         self.queued_bytes = 0;

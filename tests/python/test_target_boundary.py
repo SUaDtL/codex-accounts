@@ -14,9 +14,9 @@ class TargetEvidenceTests(unittest.TestCase):
 
     def test_inventory_excludes_child_harness_and_matches_all_behavior_tests(self):
         source = (ROOT / 'crates/vault-storage/src/native/lifecycle/target_tests.rs').read_text(encoding='utf-8')
-        names = re.findall(r'fn (ca04c_[a-z_]+)\(', source)
-        self.assertEqual(set(names), set(native.TARGET_CASES))
-        self.assertEqual(len(names), len(native.TARGET_CASES))
+        names = re.findall(r'fn (ca04[cd]_[a-z_]+)\(', source)
+        self.assertEqual(set(names), set(native.TARGET_CASES + native.REPAIR_CASES))
+        self.assertEqual(len(names), len(native.TARGET_CASES + native.REPAIR_CASES))
         self.assertNotIn('#[ignore', source)
         self.assertEqual(len(native.CASES), 11)
         self.assertEqual(len(native.TARGET_CASES), 12)

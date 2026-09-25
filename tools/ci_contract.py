@@ -115,10 +115,10 @@ def check_contract(text: str) -> None:
     command(rust, "host", "python tools/ci_gate.py host", SOURCE_IF)
     command(rust, "format", "cargo fmt --all -- --check", toolchain_if)
     for identifier, value in [
-        ("tests", "cargo test --workspace --all-targets --no-fail-fast --locked --offline"),
+        ("tests", "python tools/ci_workspace_tests.py debug"),
         ("doctests", "cargo test --workspace --doc --no-fail-fast --locked --offline"),
         ("release_build", "cargo build --workspace --all-targets --release --locked --offline"),
-        ("release_tests", "cargo test --workspace --all-targets --release --no-fail-fast --locked --offline"),
+        ("release_tests", "python tools/ci_workspace_tests.py release"),
         ("clippy", "cargo clippy --workspace --all-targets --locked --offline -- -D warnings"),
     ]:
         command(rust, identifier, value, RUST_IF)

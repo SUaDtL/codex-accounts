@@ -16,8 +16,9 @@ def check(root: Path = ROOT) -> dict[str, int | str]:
     crypto = json.loads((root / 'docs/ca-03b-dependencies.json').read_text(encoding='utf-8'))
     storage = json.loads((root / 'docs/ca-03c-dependencies.json').read_text(encoding='utf-8'))
     journal = json.loads((root / 'docs/ca-04a-dependencies.json').read_text(encoding='utf-8'))
-    review = json.loads((root / 'docs/ca-04b-dependencies.json').read_text(encoding='utf-8'))
-    required = {'docs/ca-02-dependencies.json', 'docs/ca-03b-dependencies.json', 'docs/ca-03c-dependencies.json', 'docs/ca-04a-dependencies.json'}
+    lifecycle = json.loads((root / 'docs/ca-04b-dependencies.json').read_text(encoding='utf-8'))
+    review = json.loads((root / 'docs/ca-05b-dependencies.json').read_text(encoding='utf-8'))
+    required = {'docs/ca-02-dependencies.json', 'docs/ca-03b-dependencies.json', 'docs/ca-03c-dependencies.json', 'docs/ca-04a-dependencies.json', 'docs/ca-04b-dependencies.json'}
     if set(review['predecessor_sha256']) != required:
         raise ValueError('Prior review set changed')
     for path, expected_hash in review['predecessor_sha256'].items():
@@ -26,6 +27,8 @@ def check(root: Path = ROOT) -> dict[str, int | str]:
     if (inherited['schema'] != 'codex-accounts/dependency-review/v1'
             or journal['schema'] != 'codex-accounts/dependency-review/v1'
             or journal['status'] != 'source_reviewed'
+            or lifecycle['schema'] != 'codex-accounts/dependency-review/v1'
+            or lifecycle['status'] != 'source_reviewed'
             or review['schema'] != 'codex-accounts/dependency-review/v1'
             or review['status'] != 'source_reviewed'
             or storage['schema'] != 'codex-accounts/dependency-review/v1'
@@ -36,7 +39,7 @@ def check(root: Path = ROOT) -> dict[str, int | str]:
     if hashlib.sha256(lock_bytes).hexdigest() != review['lock_sha256']:
         raise ValueError('Reviewed lock bytes changed')
     actual_packages = [p for p in lock['package'] if 'source' in p]
-    expected_packages = inherited['packages'] + crypto['packages'] + storage['packages'] + journal['packages'] + review['packages']
+    expected_packages = inherited['packages'] + crypto['packages'] + storage['packages'] + journal['packages'] + lifecycle['packages'] + review['packages']
     keyed = lambda items: {(p['name'], p['version']): (p['source'], p['checksum']) for p in items}
     actual, expected = keyed(actual_packages), keyed(expected_packages)
     if (len(actual) != len(actual_packages) or len(expected) != len(expected_packages)
@@ -49,10 +52,16 @@ def check(root: Path = ROOT) -> dict[str, int | str]:
     for path, digest in review['manifest_sha256'].items():
         if hashlib.sha256((root / path).read_bytes()).hexdigest() != digest:
             raise ValueError('Reviewed dependency manifest changed')
-    for name in ['core', 'platform', 'runtime']:
+    for name in ['core', 'platform']:
         value = tomllib.loads((root / f'crates/{name}/Cargo.toml').read_text(encoding='utf-8'))
         if 'dependencies' in value:
             raise ValueError('Safe bootstrap crate gained dependencies')
+    runtime = tomllib.loads((root / 'crates/runtime/Cargo.toml').read_text(encoding='utf-8'))
+    if runtime.get('dependencies') != {
+        'codex-accounts-vault': {'path': '../vault', 'version': '=0.1.0'},
+        'zeroize': {'version': '=1.8.2', 'default-features': False, 'features': ['alloc']},
+    }:
+        raise ValueError('Runtime dependency boundary changed')
     return {'reviewed_packages': len(expected), 'lock_review': 'passed'}
 
 

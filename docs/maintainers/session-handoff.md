@@ -1,81 +1,76 @@
-# Session handoff: CA-04C merged, independent preparation in review
+# Session handoff: PR #13 integration and CA-05B
 
-Checkpoint: **2026-09-25**. Refresh live refs, PRs and completed checks before editing.
-This is continuation routing, not a second roadmap or a release claim.
+## Live-state checkpoint
 
-## Current checkpoint
+PR #12 is owner-merged on main at `d64d3e31712798b1b790c70c3830c6853a67c1a2`.
+PR #13 retains CA-04D from `345533eacd4ed4ed288fa7a4580dd4e408106ede`, integrates
+that main, and adds CA-05B. Reuse `feat/ca-04d-staging-recovery-ci`; inspect its
+actual head/reviews/checks. `../next-pr.md` owns routing and
+`../implementation-plan.html` is the only working roadmap.
 
-| Item | Recorded state |
-| --- | --- |
-| Repository | `SUaDtL/codex-accounts` |
-| Owner-merged main at task start | PR #11 / CA-04C, `455baa2eeee614586b26d419ee961475fe1ad23b` |
-| Main source tree | `25e5f0ebb19f0b9b793ae22ddb7111698e680a70` |
-| Selected review | PR #12, `feat/ca-05-06-macos-preparation`; read its actual current head |
-| Selected scope | CA-05A protocol preparation, CA-06A static presentation and independent macOS preparation |
-| CA-04D | Separate unfinished staging-repair work; its existing checkout/branch was preserved, not imported or overwritten |
-| Product authority | No qualified installation; live capture/login/switch/refresh and Desktop control remain disabled |
+## Existing implementation and this increment
 
-No PR was open when this preparation began, so PR #12 was created from merged main.
-Do not reopen or reset merged PR #11, silently import another dirty checkout, or
-claim that these independent preparations complete CA-04D or operational Q3/Q4.
-[Preparation handoff](preparation-handoff.md) records this review's exact source
-surface, reproduction and verification limits. [Next packet](../next-pr.md) and
-[the single roadmap](../implementation-plan.html) govern selection.
+The discovery, protected vault/immutable generations, encrypted storage, write-ahead
+coordinator, CA-04B home/process ownership and CA-04C synthetic target adapter remain
+in place. Reuse them rather than rebuilding foundations. CA-04D adds:
 
-## Reuse existing foundations
+- `crates/vault-storage/src/stage_repair.rs`: private explicit repair, guard/live-state
+  validation, encrypted evidence callback and pending restoration boundary.
+- `journal.rs`, `journal_codec.rs`, `codec.rs`: typed Live/Staging evidence in CAREG003;
+  old record read compatibility and unchanged key/envelope/generation formats.
+- `native/lifecycle/target.rs` and repair/restart tests: exclusive stage handles,
+  archive-before-delete, sharing/path refusal and actual child-process interruption.
+- `tools/ci_workspace_tests.py`, `run_native_tests.py`: compiled inventory partition,
+  independent exact-name native processes, bounded concurrency and measured duration.
 
-| Area | Existing implementation and remaining boundary |
-| --- | --- |
-| `crates/discovery` | Read-only Windows package inventory and conservative sanitized observations; exact publisher/runtime/home/policy qualification remains open. |
-| `crates/core`, `crates/platform` | Always-refuse guards and separate credential, launch, identity and recovery observations; no fixture can qualify an installation. |
-| `crates/vault`, `crates/vault-crypto` | Exact bytes/absence, composite identity, generations, authenticated envelopes and Windows DPAPI. macOS key protection and owner/two-user qualification remain open. |
-| `crates/vault-storage/src/engine.rs` and repair modules | Encrypted persistence, immutable generations, expected-parent publication, retention and encrypted recovery. This is not a live Desktop resource adapter. |
-| `coordinator.rs`, `journal.rs`, `journal_codec.rs`, `switch_tests.rs` | One write-ahead forward/restoration protocol and complete generation holds. Production Effects remain unavailable; do not expose test constructors. |
-| `native/lifecycle` and `lifecycle_model.rs` | Private Windows home/process/owned-family behavior; incomplete writer association and namespace evidence still block production mutation. |
-| `native/lifecycle/target.rs` and CA-04C tests | Synthetic target-resource replacement and authenticated cleanup. Torn/unverified staging repair and native durability remain explicit gates. Verify actual module paths in current source. |
-| `crates/runtime` | Raw bounded transport, terminal EOF and outbound method-shape classification, not schema validation or official-runtime execution. |
-| `app/` | Three synthetic static views and source accessibility/escaping tests, not a Tauri application or consent surface. |
-| `docs/macos`, `tools/macos_preparation.py` | Documentary native packet and seven-file source baseline; no native implementation or qualification. |
+All effects construction remains synthetic/test-only. No installation is qualified;
+no live capture/login/switch, official helper launch, renderer authority or release
+is enabled. See `../ca-04d-staging-recovery.md` and `../ci-partition-review.md`.
 
-Read the CA-03C storage, CA-04A journal, CA-04B lifecycle/native review and CA-04C
-resource/native review documents for detailed inherited contracts. Historical
-exact-source results remain in [validation](../validation.md) and their PRs, not
-copied into current-head proof. Keep the reviewed bounded activation behavior and
-stack-owned COM apartment; do not retry tests until green, change services or relax
-permissions. Signal receipt and process appearance are not exit/identity proof.
+## Joined preparation and new runtime slice
 
-## Validation and safe continuation
+PR #12's CA-05A framing, CA-06A synthetic HTML/tests and macOS documentary packet
+are retained. `preparation-handoff.md` is historical evidence for that review.
+CA-05B adds `runtime/src/json_object.rs` and adversarial tests, reusing the unchanged
+strict parser in the in-memory vault crate. Raw framing remains available and
+untrusted; the new object wrapper proves syntax only. See `../ca-05b-json-objects.md`.
+The scoped dependency review preserves all external versions and prior review bytes.
 
-Read live AGENTS.md and the relevant canonical specification symbols before changes.
-Use `tools/spec_index.py list/show/check`; preserve all 43 requirements, 34 complete
-acceptance scenarios and the empty catalog. Source hashes are evidence anchors, not
-reset targets or authority. Review dependencies before acquisition; no new packages
-are required by the preparation.
+The macOS v2 baseline adds the private staging-repair callback and retains its
+predecessor plus `../macos/ca-04d-interface-review.md`. It is source consistency,
+not permission for native coding or proof of macOS exclusion/Keychain behavior.
 
-Run the complete command set in [preparation-handoff.md](preparation-handoff.md),
-including existing source/projection/provenance/dependency/workflow checks and
-Rust formatting, debug/release workspace, doctests, optimized build and Clippy.
-The source suite has 143 tests with this preparation. Exact-name Windows proof
-retains all eleven CA-04B and twelve CA-04C behaviors in both profiles. Inherited
-two-user helpers remain NOT RUN unless separately executed under the documented
-procedure. Generic macOS builds are not macOS native-adapter tests.
+## Validation
 
-Inspect final-head run/job logs and the tested merge/tree, not a prior badge. The
-Linux direct-IP-isolated job remains mandatory and is not a filesystem/IPC sandbox
-or Windows/macOS isolation. Browser navigation was blocked before preview load;
-layout/keyboard/200% zoom and screen-reader checks are NOT RUN. Native macOS,
-ordinary-user owner-platform and physical-power-loss qualification are NOT RUN.
+Use the pinned Rust 1.90.0 toolchain and reviewed locked dependencies. Run dependency
+review before acquisition, then offline formatting, both workspace partitions, both
+native profiles, doctests, optimized compilation and Clippy. Run source/Python,
+specification/model/projection/provenance and workflow-contract checks. Commands and
+expected output are in the CA-04D procedure; do not count a workspace complement as
+complete without the matching native verifier.
 
-One integrator serializes review-branch pushes and owns shared interfaces, module
-wiring, manifests and planning. Independently reviewable protocol, presentation and
-macOS documentary work cannot bypass operational dependencies. Resolve CA-04D and
-review/reissue the shared interface baseline before macOS native coding. Never
-update hashes merely to silence drift. [Parallel work](parallel-work.md) describes
-eligible lanes; [open asks](open-asks.md) scopes missing owner evidence without
-requesting real authentication material.
+The native inventory is 27 distinct named behaviors per profile, including all CA-04B
+and CA-04C cases and four CA-04D cases. Child entry points are harnesses. Three owner-
+run two-user helpers remain NOT RUN. The Linux isolated job is actual direct-IP
+isolation evidence; portable macOS compilation is not Keychain/Desktop qualification.
 
-Re-read a branch before a non-force update and inspect any intervening commit.
-Verify the resulting ref and complete changed-file set. Use the connector index for
-supported publication actions. Update the single roadmap, validation and routing
-with current facts rather than appending conversation history. No merge, reset,
-force push, release, permissions change or live account operation is authorized.
+`../validation.md` preserves historical exact-source evidence. The current PR records
+its final head/test merge/tree/run and inspected logs. No old green badge transfers
+to a new SHA. Do not remove tests, relax lints, fabricate receipts or add error masking.
+
+## Next action and remaining inputs
+
+Complete owner review of CA-04D after current-head checks. Exact Q0, ordinary-user/
+two-user/unavailable-store, representative sync/path, namespace/directory-metadata,
+physical-power-loss and independent macOS evidence remain in `open-asks.md`.
+Successful explicit stage repair is not complete Q2 or a consumer release.
+
+CA-05A is merged; CA-05B syntax validation is in this review. Request/handshake
+correlation can be selected next; operational runtime/login still needs Q0/Q2.
+Use `parallel-work.md` only for explicit separate assignments with one integrator,
+disjoint write ownership, separate roots and final combined-head validation.
+
+GitHub: rediscover the named write/read actions, preserve base trees, re-read the
+review branch before a non-force advance and verify the full changed-file set.
+Do not merge, reset/force-push, publish a release, change permissions or touch accounts.
+Export only sanitized outcomes. Never request or commit real authentication material.

@@ -78,7 +78,7 @@ fn native_target_restart_child() {
     assert_eq!(home.file_name().unwrap(), "ca04c-synthetic-home");
     assert_eq!(home.parent(), root_path.parent());
     let mode = std::env::var("CA04C_RESTART_MODE").unwrap();
-    assert!(matches!(mode.as_str(), "forward" | "restore"));
+    assert!(matches!(mode.as_str(), "forward" | "restore" | "repair"));
     let point: usize = std::env::var("CA04C_RESTART_POINT")
         .unwrap()
         .parse()
@@ -110,13 +110,24 @@ fn native_target_restart_child() {
         let status = store.switch_status().unwrap();
         assert_eq!(status.len(), 1);
         let operation = status[0].operation_id;
-        store
-            .recover_switch(&root, &mut fx, operation, Choice::Restore)
-            .unwrap();
+        if mode != "repair" {
+            store
+                .recover_switch(&root, &mut fx, operation, Choice::Restore)
+                .unwrap();
+        }
         operation
     };
     fx.target.fail_at = (point != 0).then_some(point);
     fx.target.crash = true;
+    if mode == "repair" {
+        store
+            .repair_registered_staging(&root, &mut fx, operation)
+            .unwrap();
+        assert!(point == 0, "requested repair interruption was not executed");
+        assert_eq!(store.recovery(), Recovery::SwitchPending);
+        assert!((1..=64).contains(&fx.target.boundary));
+        std::process::exit(100 + fx.target.boundary as i32);
+    }
     for _ in 0..100 {
         let phase = store.switch_status().unwrap()[0].phase;
         if matches!(phase, SwitchPhase::Finished | SwitchPhase::Restored) {
@@ -130,7 +141,11 @@ fn native_target_restart_child() {
     panic!("native restart scenario did not terminate");
 }
 fn run_case(mode: &str, point: usize) -> usize {
-    let mut f = Fixture::new(1, 2);
+    let mut f = if mode == "repair" {
+        repair::interrupted().0
+    } else {
+        Fixture::new(1, 2)
+    };
     let request = f.request();
     if mode == "restore" {
         let operation = f.begin();
@@ -185,6 +200,14 @@ fn run_case(mode: &str, point: usize) -> usize {
         Some(A1)
     );
     let operation = status[0].operation_id;
+    if mode == "repair" {
+        assert_eq!(plain(&fx.target), values(A1, 1));
+        store
+            .repair_registered_staging(&root, &mut fx, operation)
+            .unwrap();
+        assert_eq!(store.recovery(), Recovery::SwitchPending);
+        assert_eq!(plain(&fx.target), values(A1, 1));
+    }
     let mut outcome = store.recover_switch(&root, &mut fx, operation, Choice::Restore);
     for _ in 0..100 {
         if outcome.is_err()
@@ -197,7 +220,7 @@ fn run_case(mode: &str, point: usize) -> usize {
         }
         outcome = store.advance_switch(&root, &mut fx, operation);
     }
-    let torn = point == 2 || (mode == "restore" && point == 9);
+    let torn = mode != "repair" && (point == 2 || (mode == "restore" && point == 9));
     if torn {
         assert!(
             outcome.is_err(),
@@ -214,6 +237,30 @@ fn run_case(mode: &str, point: usize) -> usize {
                 "only recorded live resource states may remain"
             );
         }
+        // Normal recovery still refuses unknown staging. The newly implemented
+        // explicit archive/repair action is separate and never silently selected.
+        store
+            .repair_registered_staging(&root, &mut fx, operation)
+            .unwrap();
+        assert_eq!(store.recovery(), Recovery::SwitchPending);
+        store
+            .recover_switch(&root, &mut fx, operation, Choice::Restore)
+            .unwrap();
+        for _ in 0..100 {
+            if matches!(
+                store.switch_status().unwrap()[0].phase,
+                SwitchPhase::Cancelled | SwitchPhase::Restored
+            ) {
+                break;
+            }
+            store.advance_switch(&root, &mut fx, operation).unwrap();
+        }
+        assert!(matches!(
+            store.switch_status().unwrap()[0].phase,
+            SwitchPhase::Cancelled | SwitchPhase::Restored
+        ));
+        assert_eq!(plain(&fx.target), values(A1, 1));
+        assert_eq!(std::fs::read_dir(&fx.home).unwrap().count(), 2);
     } else {
         outcome.unwrap();
         assert!(matches!(
@@ -239,7 +286,8 @@ fn run_case(mode: &str, point: usize) -> usize {
 pub(super) fn exercise(mode: &'static str) {
     let boundaries = run_case(mode, 0);
     assert_eq!(
-        boundaries, 17,
+        boundaries,
+        if mode == "repair" { 5 } else { 17 },
         "native boundary inventory changed; review and update proof"
     );
     let torn: usize = std::thread::scope(|scope| {
@@ -258,5 +306,13 @@ pub(super) fn exercise(mode: &'static str) {
             .map(|worker| worker.join().unwrap())
             .sum()
     });
-    assert_eq!(torn, if mode == "forward" { 1 } else { 2 });
+    assert_eq!(
+        torn,
+        match mode {
+            "forward" => 1,
+            "restore" => 2,
+            "repair" => 0,
+            _ => panic!("invalid test mode"),
+        }
+    );
 }

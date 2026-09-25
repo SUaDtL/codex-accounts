@@ -85,6 +85,10 @@ version = "0.1.0"
 [[package]]
 name = "codex-accounts-runtime"
 version = "0.1.0"
+dependencies = [
+ "codex-accounts-vault",
+ "zeroize",
+]
 
 [[package]]
 name = "codex-accounts-vault"

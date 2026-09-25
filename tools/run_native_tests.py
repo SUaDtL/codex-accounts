@@ -6,6 +6,8 @@ import platform
 import re
 import subprocess
 import tempfile
+import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -38,6 +40,18 @@ TARGET_CASES = (
     'ca04c_process_restart_forward_boundaries',
     'ca04c_process_restart_restoration_boundaries',
 )
+REPAIR_CASES = (
+    'ca04d_torn_stage_archived_before_explicit_restoration',
+    'ca04d_staging_repair_refuses_writer_links_and_unregistered_files',
+    'ca04d_staging_archive_failure_preserves_plaintext_and_live_state',
+    'ca04d_repair_process_restart_boundaries',
+)
+WORKERS = 2
+
+def inventory() -> tuple[tuple[str, str], ...]:
+    return tuple([(PREFIX, case) for case in CASES]
+                 + [(TARGET_PREFIX, case) for case in TARGET_CASES + REPAIR_CASES])
+
 MAX_OUTPUT = 1024 * 1024
 FAULTS = {b'AccessDenied', b'Disappeared', b'Incomplete', b'Changed', b'Bound',
           b'QuitUnavailable', b'Timeout', b'HelperStuck', b'QualificationMissing'}
@@ -67,40 +81,83 @@ def verify(output: bytes, returncode: int, cases: tuple[str, ...] = CASES, *, pr
         raise ValueError('Native result summary does not prove complete execution')
 
 
+def case_command(profile: str, prefix: str, case: str) -> list[str]:
+    if profile not in {'debug', 'release'} or (prefix, case) not in inventory():
+        raise ValueError('Unreviewed native invocation')
+    command = ['cargo', 'test', '-p', 'codex-accounts-vault-storage', '--lib']
+    if profile == 'release':
+        command += ['--release']
+    return command + ['--locked', '--offline', prefix + case, '--', '--exact',
+                      '--test-threads=1', '--format=pretty', '--nocapture']
+
+
+def run_case(profile: str, prefix: str, case: str) -> dict:
+    output_bytes = b''
+    started = time.monotonic()
+    try:
+        # Each case still has its own process and synthetic roots. No retry loop.
+        # The job limit and the existing child watchdogs bound native hangs.
+        with tempfile.TemporaryFile() as output:
+            result = subprocess.run(case_command(profile, prefix, case), cwd=ROOT,
+                                    stdout=output, stderr=output, timeout=180, check=False)
+            output.seek(0)
+            output_bytes = output.read(MAX_OUTPUT + 1)
+            verify(output_bytes, result.returncode, (case,), prefix=prefix)
+        passed = True
+    except (OSError, ValueError, subprocess.SubprocessError):
+        passed = False
+    lines = re.findall(rb'(?:lifecycle_tests|target_tests|target_restart_tests|target_repair_tests)\.rs:(\d{1,5}):', output_bytes)
+    return {'profile': profile, 'native_case': case,
+            'result': 'passed' if passed else 'failed',
+            'elapsed_seconds': round(time.monotonic() - started, 3),
+            'failure_source_lines': [] if passed else [int(n) for n in lines[:8]],
+            'failure_categories': [] if passed else failure_categories(output_bytes),
+            'desktop_qualification': 'not_established'}
+
+
+def run_profile(profile: str) -> bool:
+    # Build once before parallel Cargo invocations to avoid concurrent cold builds.
+    command = ['cargo', 'test', '-p', 'codex-accounts-vault-storage', '--lib',
+               '--no-run', '--locked', '--offline']
+    if profile == 'release':
+        command += ['--release']
+    try:
+        with tempfile.TemporaryFile() as output:
+            result = subprocess.run(command, cwd=ROOT, stdout=output, stderr=output,
+                                    timeout=180, check=False)
+        if result.returncode != 0:
+            return False
+    except (OSError, subprocess.SubprocessError):
+        return False
+    failed = False
+    # Start costly restarts first. Two cases maximum; never share mutable fixtures.
+    cases = sorted(inventory(), key=lambda item: ('restart' not in item[1], item[1]))
+    with ThreadPoolExecutor(max_workers=WORKERS) as executor:
+        futures = [executor.submit(run_case, profile, prefix, case) for prefix, case in cases]
+        for future in as_completed(futures):
+            try:
+                record = future.result()
+                print(json.dumps(record), flush=True)
+                failed |= record['result'] != 'passed'
+            except Exception:
+                # Infrastructure exceptions remain failure; finish collecting
+                # independent cases without exporting arbitrary exception text.
+                failed = True
+    return not failed
+
+
 def run() -> None:
     if platform.system() != 'Windows' or platform.machine().lower() not in {'amd64', 'x86_64'}:
         raise ValueError('Windows x64 is required; a portable skip is not a pass')
     failed = False
     for profile in ('debug', 'release'):
-        inventory = [(PREFIX, case) for case in CASES] + [(TARGET_PREFIX, case) for case in TARGET_CASES]
-        for prefix, case in inventory:
-            command = ['cargo', 'test', '-p', 'codex-accounts-vault-storage', '--lib']
-            if profile == 'release':
-                command += ['--release']
-            command += ['--locked', '--offline', prefix + case, '--', '--exact',
-                        '--test-threads=1', '--format=pretty', '--nocapture']
-            # Separate processes preserve other case evidence after a native abort.
-            # Raw output stays in a temporary local file, never an uploaded log.
-            output_bytes = b''
-            code = None
-            try:
-                with tempfile.TemporaryFile() as output:
-                    result = subprocess.run(command, cwd=ROOT, stdout=output, stderr=output,
-                                            timeout=180, check=False)
-                    code = result.returncode
-                    output.seek(0)
-                    output_bytes = output.read(MAX_OUTPUT + 1)
-                    verify(output_bytes, code, (case,), prefix=prefix)
-                passed = True
-            except (OSError, ValueError, subprocess.SubprocessError):
-                passed = False
-                failed = True
-            lines = re.findall(rb'(?:lifecycle_tests|target_tests|target_restart_tests)\.rs:(\d{1,5}):', output_bytes)
-            print(json.dumps({'profile': profile, 'native_case': case,
-                              'result': 'passed' if passed else 'failed',
-                              'failure_source_lines': [] if passed else [int(n) for n in lines[:8]],
-                              'failure_categories': [] if passed else failure_categories(output_bytes),
-                              'desktop_qualification': 'not_established'}), flush=True)
+        started = time.monotonic()
+        passed = run_profile(profile)
+        failed |= not passed
+        print(json.dumps({'native_profile': profile, 'result': 'passed' if passed else 'failed',
+                          'required_cases': len(inventory()), 'workers': WORKERS,
+                          'elapsed_seconds': round(time.monotonic() - started, 3),
+                          'desktop_qualification': 'not_established'}), flush=True)
     if failed:
         raise ValueError('One or more required native cases did not pass')
 

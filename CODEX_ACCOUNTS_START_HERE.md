@@ -1,22 +1,19 @@
 # Codex Accounts: start here
 
-Bootstrap revision **2.1.0** · Checkpoint **2026-09-25** · Repository **SUaDtL/codex-accounts**.
+Bootstrap revision **2.2.0** · Checkpoint **2026-09-25** · Repository **SUaDtL/codex-accounts**.
 This is session routing, not an application release or a second roadmap.
 
 ## Resume from live work, not the original bootstrap
 
-**Current preparation checkpoint:** CA-04C is owner-merged in PR #11 at
-`455baa2eeee614586b26d419ee961475fe1ad23b`. The owner selected independent CA-05
-protocol, CA-06 static presentation and macOS preparation. They are in
-[PR #12](https://github.com/SUaDtL/codex-accounts/pull/12), branch
-`feat/ca-05-06-macos-preparation`. No PR was open when this preparation began.
-The unfinished CA-04D checkout and branch were preserved, not imported or reset.
+Current review: **PR #13**, `feat/ca-04d-staging-recovery-ci`. It retains CA-04D
+staging repair and CI partitioning, integrates owner-merged PR #12 from main
+`d64d3e31712798b1b790c70c3830c6853a67c1a2`, and adds CA-05B strict JSON-object
+transport validation. Both histories are preserved; do not open a duplicate PR.
 
-Read [the preparation handoff](docs/maintainers/preparation-handoff.md) and
-`docs/next-pr.md` first. Earlier CA-04B/C checkpoints in other handoff records are
-historical. Refresh live refs and checks before choosing another packet. The
-preview is not a finished application; no native macOS or Desktop qualification
-is delivered. All production authority remains disabled.
+CA-05A framing, CA-06A static views and macOS documentary preparation are merged,
+not future work to recreate. Read `docs/next-pr.md` and the session handoff for
+current scope. No official schema or Desktop is qualified. All live account
+operations remain disabled; the static preview is not a finished application.
 
 ## Minimum reading order
 

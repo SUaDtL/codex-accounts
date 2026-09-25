@@ -28,12 +28,18 @@ class SpecificationTests(unittest.TestCase):
         table = spec_index.symbols(data)
         self.assertTrue(all(f"T-{i:02d}" in table for i in range(1, 35)))
 
-    def test_safe_crates_remain_dependency_free_with_scoped_native_boundary(self):
+    def test_safe_crates_keep_exact_dependency_and_native_boundaries(self):
         import tomllib
         for name in ["core", "platform", "runtime"]:
             path = ROOT / "crates" / name / "Cargo.toml"
             parsed = tomllib.loads(path.read_text())
-            self.assertNotIn("dependencies", parsed)
+            if name == "runtime":
+                self.assertEqual(parsed["dependencies"], {
+                    "codex-accounts-vault": {"path": "../vault", "version": "=0.1.0"},
+                    "zeroize": {"version": "=1.8.2", "default-features": False, "features": ["alloc"]},
+                })
+            else:
+                self.assertNotIn("dependencies", parsed)
             self.assertIs(parsed["package"]["publish"]["workspace"], True)
         workspace = tomllib.loads((ROOT / "Cargo.toml").read_text())
         self.assertFalse(workspace["workspace"]["package"]["publish"])

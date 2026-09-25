@@ -156,8 +156,15 @@ impl Drop for Mark {
         self.tag.zeroize();
     }
 }
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[repr(u8)]
+pub(crate) enum EvidenceKind {
+    Live = 0,
+    Staging = 1,
+}
 #[derive(Clone)]
 pub(crate) struct Evidence {
+    pub kind: EvidenceKind,
     pub id: Id,
     pub resources: Vec<Rule>,
 }
@@ -393,7 +400,8 @@ impl Journal {
         }
         let mut ids = BTreeSet::new();
         for e in &self.evidence {
-            if e.id == [0; 16]
+            if (e.kind == EvidenceKind::Staging && r.format < 3)
+                || e.id == [0; 16]
                 || !ids.insert(e.id)
                 || e.resources.is_empty()
                 || e.resources.len() > 16
@@ -404,6 +412,10 @@ impl Journal {
             let mut total = 0;
             for resource in &e.resources {
                 if resource.slot >= 16
+                    || (e.kind == EvidenceKind::Staging
+                        && (resource.blob.is_none()
+                            || (self.staging_intent | self.restore_intent) & (1 << resource.slot)
+                                == 0))
                     || !slots.insert(resource.slot)
                     || resource.required
                     || resource.json

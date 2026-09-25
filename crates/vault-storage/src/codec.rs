@@ -231,10 +231,11 @@ pub(crate) fn generation(
 }
 pub(crate) fn registry(r: &Registry) -> Result<Zeroizing<Vec<u8>>, StorageError> {
     r.validate()?;
-    let mut w = Writer::new(if r.format == 1 {
-        b"CAREG001"
-    } else {
-        b"CAREG002"
+    let mut w = Writer::new(match r.format {
+        1 => b"CAREG001",
+        2 => b"CAREG002",
+        3 => b"CAREG003",
+        _ => return Err(StorageError::Corrupt),
     });
     w.u64(r.revision);
     w.u8(u8::from(r.active_known));
@@ -263,28 +264,26 @@ pub(crate) fn registry(r: &Registry) -> Result<Zeroizing<Vec<u8>>, StorageError>
             w.id(g);
         }
     }
-    if r.format == 2 {
+    if r.format >= 2 {
         w.u32(r.rejected.len() as u32);
         for id in &r.rejected {
             w.id(id);
         }
         w.u32(r.journals.len() as u32);
         for j in &r.journals {
-            journal_codec::write(&mut w, j);
+            journal_codec::write(&mut w, j, r.format);
         }
     }
     w.finish()
 }
 pub(crate) fn read_registry(bytes: &[u8]) -> Result<Registry, StorageError> {
-    let format = if bytes.starts_with(b"CAREG001") { 1 } else { 2 };
-    let mut d = Reader::new(
-        bytes,
-        if format == 1 {
-            b"CAREG001"
-        } else {
-            b"CAREG002"
-        },
-    )?;
+    let (format, magic) = match bytes.get(..8) {
+        Some(b"CAREG001") => (1, b"CAREG001"),
+        Some(b"CAREG002") => (2, b"CAREG002"),
+        Some(b"CAREG003") => (3, b"CAREG003"),
+        _ => return Err(StorageError::Corrupt),
+    };
+    let mut d = Reader::new(bytes, magic)?;
     let revision = d.u64()?;
     let active_known = d.boolean()?;
     let active = d.option_id()?;
@@ -326,12 +325,12 @@ pub(crate) fn read_registry(bytes: &[u8]) -> Result<Registry, StorageError> {
     }
     let mut rejected = Vec::new();
     let mut journals = Vec::new();
-    if format == 2 {
+    if format >= 2 {
         for _ in 0..d.count(MAX_PROFILES)? {
             rejected.push(d.id()?);
         }
         for _ in 0..d.count(crate::journal::MAX_JOURNALS)? {
-            journals.push(journal_codec::read(&mut d)?);
+            journals.push(journal_codec::read(&mut d, format)?);
         }
     }
     d.end()?;

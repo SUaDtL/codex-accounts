@@ -230,7 +230,13 @@ impl<D: Files> Storage<D> {
         active: Option<Id>,
     ) -> Result<(), StorageError> {
         j.updated = now()?;
-        next.format = 2;
+        next.format = next.format.max(
+            if j.evidence.iter().any(|e| e.kind == EvidenceKind::Staging) {
+                3
+            } else {
+                2
+            },
+        );
         next.holds.retain(|h| h.id != j.id);
         next.holds.push(Hold {
             id: j.id,
@@ -508,8 +514,17 @@ impl<D: Files> Storage<D> {
     fn preserve_conflict(
         &mut self,
         root: &RootKey,
+        j: Journal,
+        s: Snapshot,
+    ) -> Result<(), SwitchError> {
+        self.preserve_evidence(root, j, s, EvidenceKind::Live)
+    }
+    fn preserve_evidence(
+        &mut self,
+        root: &RootKey,
         mut j: Journal,
         s: Snapshot,
+        kind: EvidenceKind,
     ) -> Result<(), SwitchError> {
         if s.resources.is_empty()
             || s.resources.len() > 16
@@ -528,8 +543,19 @@ impl<D: Files> Storage<D> {
             return Err(StorageError::InvalidData.into());
         }
         for e in &j.evidence {
-            let mut same = e.resources.len() == s.resources.len();
-            for resource in &e.resources {
+            if e.kind != kind {
+                continue;
+            }
+            // A partially deleted staging batch can retry using a subset of the
+            // already authenticated archive. Live conflict snapshots still need
+            // exact whole-set equality; their origin cannot authorize staging.
+            let compared: Vec<_> = e
+                .resources
+                .iter()
+                .filter(|r| kind == EvidenceKind::Live || s.resource(r.slot).is_ok())
+                .collect();
+            let mut same = compared.len() == s.resources.len();
+            for resource in compared {
                 let bytes = match &resource.blob {
                     Some(b) => {
                         let encrypted = Self::read_blob(&self.disk, b)?;
@@ -581,7 +607,11 @@ impl<D: Files> Storage<D> {
                 blob,
             });
         }
-        j.evidence.push(Evidence { id, resources });
+        j.evidence.push(Evidence {
+            kind,
+            id,
+            resources,
+        });
         let next = self.copy_registry()?;
         self.write_journal(root, j, next, writes, None)?;
         Ok(())
@@ -956,6 +986,11 @@ impl<D: Files> Storage<D> {
         Ok(())
     }
 }
+
+#[path = "stage_repair.rs"]
+mod stage_repair;
+#[cfg(test)]
+pub(crate) use stage_repair::StagingRepair;
 
 #[cfg(test)]
 #[path = "switch_tests.rs"]
