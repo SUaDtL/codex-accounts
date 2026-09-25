@@ -87,8 +87,12 @@ The hardlink test creates its hazard before taking restrictive directory handles
 It does not weaken the lock to make fixture setup succeed. Sync-root inventory
 uses stack-owned, balanced WinRT apartments and uncached factories, with the
 existing 100-query regression plus concurrent fresh-thread exit coverage. COM
-teardown no longer runs under the Windows TLS loader lock. See the source review
-for the API contracts and observed-versus-inferred failure distinction.
+teardown no longer runs under the Windows TLS loader lock. Only the documented
+CO_E_SERVER_STOPPING factory-activation result receives bounded handling: four
+attempts, three 50 ms pauses, then refusal on exhaustion. Other failures return
+immediately; no failed inventory becomes empty or bypasses path protection. These
+added pauses are bounded; they do not preempt a synchronous OS call. See the source
+review for contracts, regression cases and observed-versus-inferred evidence.
 
 ## Hosted CI and its limits
 
