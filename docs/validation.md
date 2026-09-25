@@ -1,5 +1,36 @@
 # Validation and evidence boundary
 
+## CA-04C review: current evidence boundary
+
+Base is owner-merged PR #10 at `62b600246add43d67a726ef4ad4975b6c8def03f`.
+The private synthetic target implementation, authenticated cleanup contract and
+native proof inventory are documented in `ca-04c-target-resources.md` and
+`ca-04c-native-review.md`. The final PR head must pass its own hosted checks;
+none of the CA-04B results below are inherited as CA-04C evidence.
+
+Local Windows development exercised actual protected synthetic files, the existing
+owned-job helper and seventeen forward plus seventeen restoration process-exit
+boundaries. The three torn-stage cases deliberately block rather than report clean
+recovery. These are named implementation behaviors, not whole requirement closure.
+The PR records final combined-head commands and hosted evidence; targeted development
+runs alone are not a pass for the final combined tree.
+
+The full Python suite belongs to the hosted Linux source lane. Two inherited fixtures
+error on local Windows (a Linux /proc reader and a control-character filename), so
+that local invocation is not recorded as a full Python pass. Their hosted checks
+remain unchanged. No compiler/native check that did not run is reported successful.
+
+The Windows job uses the same standard runner with a 30-minute bound for both-profile
+workspace and exact native evidence; the other Rust lanes retain 15 minutes. All
+inherited checks, failures and the aggregate gate remain mandatory. Current-head
+case proof requires all eleven CA-04B and all twelve CA-04C named behaviors in both
+profiles. Child entry points are harnesses, not additional behavior proofs.
+
+No production constructor, real credential/account/client operation, qualified
+catalog entry, metadata-durability or physical-power-loss claim is added. See
+`next-pr.md` for the remaining review and integration gates.
+
+
 ## Merged CA-04B / PR #9: final-source evidence
 
 CA-04B implements private Windows x64 owner/canonical-home locking, handle-bound

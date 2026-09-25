@@ -22,7 +22,7 @@ static CLOSE_RECEIVED: AtomicBool = AtomicBool::new(false);
 
 fn home() -> super::super::tests::Sandbox {
     let mut fixture = super::super::tests::Sandbox::new();
-    fixture.0.set_file_name("ca04b-home-測試");
+    fixture.0.set_file_name("ca04b-home-æ¸¬è©¦");
     let security = Security::new().unwrap();
     assert_ne!(
         unsafe { CreateDirectoryW(wide(&fixture.0).unwrap().as_ptr(), &security.attrs()) },
@@ -84,6 +84,7 @@ impl TestChild {
         let mut environment = BTreeMap::<String, OsString>::new();
         for name in [
             "SYSTEMROOT",
+            "SYSTEMDRIVE",
             "WINDIR",
             "TEMP",
             "TMP",
@@ -311,7 +312,7 @@ fn ca04b_home_mutex_unicode_alias_and_recursive_contention() {
         HomeLock::acquire(&fixture.0),
         Err(StorageError::Busy)
     ));
-    let alias = fixture.0.with_file_name("CA04B-HOME-測試");
+    let alias = fixture.0.with_file_name("CA04B-HOME-æ¸¬è©¦");
     assert!(matches!(HomeLock::acquire(&alias), Err(StorageError::Busy)));
     assert_eq!(format!("{lock:?}"), "HomeLock([REDACTED])");
     let other = home();

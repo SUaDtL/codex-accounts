@@ -198,6 +198,17 @@ impl std::fmt::Debug for HomeLock {
 }
 impl HomeLock {
     pub(super) fn acquire(path: &Path) -> Result<Self, StorageError> {
+        Self::acquire_with_leaf_share(path, FILE_SHARE_READ)
+    }
+    /// Synthetic mutation tests ONLY. A child rename opens its parent for write;
+    /// read-only lifecycle observation deliberately excludes that access. Keep
+    /// ancestor write/delete denial and leaf DELETE denial, the same canonical
+    /// mutex, owner/path checks and thread lifetime. No production caller exists.
+    #[cfg(test)]
+    pub(super) fn for_synthetic_target(path: &Path) -> Result<Self, StorageError> {
+        Self::acquire_with_leaf_share(path, FILE_SHARE_READ | FILE_SHARE_WRITE)
+    }
+    fn acquire_with_leaf_share(path: &Path, leaf_share: u32) -> Result<Self, StorageError> {
         validate_path(path)?;
         let security = Security::new()?;
         let mut paths: Vec<_> = path.ancestors().collect();
@@ -213,7 +224,11 @@ impl HomeLock {
             let file = open_file(
                 p,
                 FILE_LIST_DIRECTORY | FILE_READ_ATTRIBUTES | READ_CONTROL,
-                FILE_SHARE_READ,
+                if p == path {
+                    leaf_share
+                } else {
+                    FILE_SHARE_READ
+                },
                 OPEN_EXISTING,
                 None,
             )?;

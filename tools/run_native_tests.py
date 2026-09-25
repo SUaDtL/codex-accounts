@@ -1,4 +1,4 @@
-"""Run and verify the named CA-04B Windows cases; zero filtered tests is not evidence."""
+"""Run and verify the named CA-04B/CA-04C Windows cases; zero filtered tests is not evidence."""
 from __future__ import annotations
 
 import json
@@ -23,6 +23,21 @@ CASES = (
     'ca04b_owned_timeout_waits_after_termination_and_protects_unrelated_child',
     'ca04b_snapshot_and_known_descendants_never_become_home_authority',
 )
+TARGET_PREFIX = 'native::lifecycle::target_tests::'
+TARGET_CASES = (
+    'ca04c_exact_bytes_absence_and_empty_are_distinct',
+    'ca04c_expected_old_foreign_stage_and_invalid_slot_refuse',
+    'ca04c_sharing_hardlink_and_namespace_changes_refuse',
+    'ca04c_cleanup_requires_registered_authenticated_bytes',
+    'ca04c_journal_preserves_newest_source_and_committed_target',
+    'ca04c_midpoint_reopen_restores_with_separate_failures',
+    'ca04c_external_change_and_stale_parent_never_overwrite',
+    'ca04c_cleanup_failure_blocks_until_verified_retry',
+    'ca04c_changed_acl_and_oversized_input_refuse',
+    'ca04c_owned_helper_generation_survives_source_restoration',
+    'ca04c_process_restart_forward_boundaries',
+    'ca04c_process_restart_restoration_boundaries',
+)
 MAX_OUTPUT = 1024 * 1024
 FAULTS = {b'AccessDenied', b'Disappeared', b'Incomplete', b'Changed', b'Bound',
           b'QuitUnavailable', b'Timeout', b'HelperStuck', b'QualificationMissing'}
@@ -35,12 +50,12 @@ def failure_categories(output: bytes) -> list[str]:
     return sorted({value.decode('ascii') for value in values if value in FAULTS})
 
 
-def verify(output: bytes, returncode: int, cases: tuple[str, ...] = CASES) -> None:
+def verify(output: bytes, returncode: int, cases: tuple[str, ...] = CASES, *, prefix: str = PREFIX) -> None:
     if returncode != 0 or len(output) > MAX_OUTPUT:
         raise ValueError('Native execution failed or exceeded output bound')
     text = output.decode('utf-8', errors='strict')
     rows = re.findall(r'^test ([a-zA-Z0-9_:]+) \.\.\. (.+)$', text, re.M)
-    expected = {PREFIX + name for name in cases}
+    expected = {prefix + name for name in cases}
     names = [name for name, _ in rows]
     if (len(names) != len(expected) or set(names) != expected
             or any(result.strip() != 'ok' for _, result in rows)):
@@ -57,11 +72,12 @@ def run() -> None:
         raise ValueError('Windows x64 is required; a portable skip is not a pass')
     failed = False
     for profile in ('debug', 'release'):
-        for case in CASES:
+        inventory = [(PREFIX, case) for case in CASES] + [(TARGET_PREFIX, case) for case in TARGET_CASES]
+        for prefix, case in inventory:
             command = ['cargo', 'test', '-p', 'codex-accounts-vault-storage', '--lib']
             if profile == 'release':
                 command += ['--release']
-            command += ['--locked', '--offline', PREFIX + case, '--', '--exact',
+            command += ['--locked', '--offline', prefix + case, '--', '--exact',
                         '--test-threads=1', '--format=pretty', '--nocapture']
             # Separate processes preserve other case evidence after a native abort.
             # Raw output stays in a temporary local file, never an uploaded log.
@@ -74,12 +90,12 @@ def run() -> None:
                     code = result.returncode
                     output.seek(0)
                     output_bytes = output.read(MAX_OUTPUT + 1)
-                    verify(output_bytes, code, (case,))
+                    verify(output_bytes, code, (case,), prefix=prefix)
                 passed = True
             except (OSError, ValueError, subprocess.SubprocessError):
                 passed = False
                 failed = True
-            lines = re.findall(rb'lifecycle_tests\.rs:(\d{1,5}):', output_bytes)
+            lines = re.findall(rb'(?:lifecycle_tests|target_tests|target_restart_tests)\.rs:(\d{1,5}):', output_bytes)
             print(json.dumps({'profile': profile, 'native_case': case,
                               'result': 'passed' if passed else 'failed',
                               'failure_source_lines': [] if passed else [int(n) for n in lines[:8]],

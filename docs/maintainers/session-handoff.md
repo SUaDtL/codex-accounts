@@ -1,3 +1,8 @@
+> CA-04C implementation update: resume `feat/ca-04c-synthetic-target-resources`
+> and inspect its live PR/checks. The dated snapshot below predates that implementation.
+> `docs/next-pr.md` and `docs/ca-04c-target-resources.md` describe the current review
+> and remaining torn-stage/namespace/durability gates. Do not recreate merged work.
+
 # Session handoff after CA-04B
 
 Checkpoint: **2026-09-25**. This file replaces conversation reconstruction, not

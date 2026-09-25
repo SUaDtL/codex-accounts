@@ -35,7 +35,14 @@ pub(crate) trait Effects {
         expected: Option<&[u8]>,
         value: Option<&[u8]>,
     ) -> Result<(), Failure>;
-    fn cleanup(&mut self, operation: Id, registered: u16) -> Result<(), Failure>;
+    /// Cleanup authority includes independently authenticated generation contents.
+    /// A registered filename alone is not permission to delete changed plaintext.
+    fn cleanup(
+        &mut self,
+        operation: Id,
+        registered: u16,
+        allowed: &[CredentialSet],
+    ) -> Result<(), Failure>;
     fn start_helper(&mut self, operation: Id) -> Result<(), Failure>;
     fn observe(&mut self, operation: Id) -> Result<CredentialAcceptance, Failure>;
     /// Success means the exact owned helper AND descendants have exited, not
@@ -579,6 +586,22 @@ impl<D: Files> Storage<D> {
         self.write_journal(root, j, next, writes, None)?;
         Ok(())
     }
+    fn cleanup_staging(
+        &self,
+        root: &RootKey,
+        effects: &mut impl Effects,
+        j: &Journal,
+    ) -> Result<(), SwitchError> {
+        // The pre-helper target may differ from the newest captured target. Both
+        // remain held by the journal and can own unconsumed registered staging.
+        let allowed = [
+            self.read_generation(root, generation(&self.registry, j.source)?)?,
+            self.read_generation(root, generation(&self.registry, j.target)?)?,
+            self.read_generation(root, generation(&self.registry, j.original_target)?)?,
+        ];
+        effects.cleanup(j.id, j.staging_intent | j.restore_intent, &allowed)?;
+        Ok(())
+    }
     pub(crate) fn advance_switch(
         &mut self,
         root: &RootKey,
@@ -739,7 +762,7 @@ impl<D: Files> Storage<D> {
                 self.write_journal(root, j, next, vec![], Some(selected))?;
             }
             Committed => {
-                effects.cleanup(j.id, j.staging_intent)?;
+                self.cleanup_staging(root, effects, &j)?;
                 j.cleaned = true;
                 j.phase = RelaunchRequested;
                 self.save_journal(root, j)?;
@@ -786,8 +809,10 @@ impl<D: Files> Storage<D> {
         if j.write_intent == 0 {
             // Cancellation before any replacement never closes a user app or
             // changes the live bytes/active association merely to "restore" them.
-            if let Err(f) = effects.cleanup(j.id, j.staging_intent) {
-                return self.fail_switch(root, effects, j, f, true);
+            match self.cleanup_staging(root, effects, &j) {
+                Err(SwitchError::Refused(f)) => return self.fail_switch(root, effects, j, f, true),
+                Err(error) => return Err(error),
+                Ok(()) => {}
             }
             j.cleaned = true;
             j.phase = SwitchPhase::Cancelled;
@@ -831,7 +856,7 @@ impl<D: Files> Storage<D> {
         if j.committed {
             // The app might already have launched. No automatic relaunch, signal,
             // snapshot replay or rollback is performed from an uncertain result.
-            effects.cleanup(j.id, j.staging_intent)?;
+            self.cleanup_staging(root, effects, &j)?;
             j.cleaned = true;
             j.phase = if j.launch == DesktopLaunch::Opened {
                 SwitchPhase::AwaitingConfirmation
@@ -921,7 +946,7 @@ impl<D: Files> Storage<D> {
             self.save_journal(root, j)?;
         } else {
             self.exact_live(root, &j, &snapshot, false)?;
-            effects.cleanup(j.id, j.staging_intent)?;
+            self.cleanup_staging(root, effects, &j)?;
             j.cleaned = true;
             j.phase = SwitchPhase::Restored;
             let selected = j.source.profile;
