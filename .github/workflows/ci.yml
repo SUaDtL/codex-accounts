@@ -111,7 +111,7 @@ jobs:
       - name: Test workspace (Cargo offline)
         id: tests
         if: ${{ !cancelled() && steps.toolchain.outcome == 'success' && steps.dependency_review.outcome == 'success' && steps.dependencies.outcome == 'success' }}
-        run: cargo test --workspace --all-targets --no-fail-fast --locked --offline
+        run: python tools/ci_workspace_tests.py debug
       - name: Test documentation (Cargo offline)
         id: doctests
         if: ${{ !cancelled() && steps.toolchain.outcome == 'success' && steps.dependency_review.outcome == 'success' && steps.dependencies.outcome == 'success' }}
@@ -123,7 +123,7 @@ jobs:
       - name: Execute optimized tests (Cargo offline)
         id: release_tests
         if: ${{ !cancelled() && steps.toolchain.outcome == 'success' && steps.dependency_review.outcome == 'success' && steps.dependencies.outcome == 'success' }}
-        run: cargo test --workspace --all-targets --release --no-fail-fast --locked --offline
+        run: python tools/ci_workspace_tests.py release
       - name: Verify named Windows native execution
         id: native_tests
         if: ${{ !cancelled() && steps.toolchain.outcome == 'success' && steps.dependency_review.outcome == 'success' && steps.dependencies.outcome == 'success' && matrix.os == 'windows-latest' }}

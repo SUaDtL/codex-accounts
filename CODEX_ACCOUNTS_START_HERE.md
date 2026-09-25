@@ -5,15 +5,12 @@ This is session routing, not an application release or a second roadmap.
 
 ## Resume from live work, not the original bootstrap
 
-**CA-04C update:** implementation is open in [PR #11](https://github.com/SUaDtL/codex-accounts/pull/11).
-Resume that branch and its current checks; the dated CA-04B checkpoint below is
-historical. Read `docs/next-pr.md` before selecting any later packet.
-
-CA-04B is **merged in PR #9**, at `614eb1d68559b37ea4e32014214519b4d2a62e54`.
-Its final source head was `821ebdc26ee6081b5c74ff1da79763bef2f9ea6f`.
-**CA-04C is the next implementation packet**, not CA-02. It has not started at this
-checkpoint. No Desktop installation is qualified; live credential authority stays
-disabled. These are dated observations, not instructions to reset a newer branch.
+CA-04C is merged in PR #11 at `455baa2eeee614586b26d419ee961475fe1ad23b`.
+The current follow-on is **CA-04D: explicit staging recovery plus CI quality and
+efficiency**, on `feat/ca-04d-staging-recovery-ci`. Resolve its live PR and checks
+before editing; do not reuse the merged PR #11 branch or the old CA-02 bootstrap.
+No Desktop installation is qualified and live credential authority remains disabled.
+Read `docs/next-pr.md` for the selected scope and the next decision.
 
 The earlier Project kit (revision 1.0.0, September 22) has been superseded for
 routing. The repository's working roadmap already adopted that plan. Preserve old
@@ -25,7 +22,7 @@ specification/research inputs as provenance, not as replacement implementation.
 | --- | --- |
 | [AGENTS.md](AGENTS.md) | Repository execution and safety contract. |
 | [Session handoff](docs/maintainers/session-handoff.md) | Actual merged checkpoint, code map, known limits, test commands and continuation rules. |
-| [Next packet](docs/next-pr.md) | Selected CA-04C scope and acceptance; resolve against live open PRs. |
+| [Next packet](docs/next-pr.md) | Selected packet scope and acceptance; resolve against live open PRs. |
 | [Working roadmap](docs/implementation-plan.html) | Single maintained delivery sequence, decisions and requirement ownership. Read the selected packet, not the entire project history. |
 | [Parallel work](docs/maintainers/parallel-work.md) | Proposed independent lanes, write ownership and integration barriers. Listing a lane does not start it. |
 | [Open asks](docs/maintainers/open-asks.md) | Missing owner evidence/decisions and exactly what each blocks. |

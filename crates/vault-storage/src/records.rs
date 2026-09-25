@@ -206,7 +206,7 @@ impl Registry {
         {
             return Err(StorageError::InputLimit);
         }
-        if !matches!(self.format, 1 | 2)
+        if !matches!(self.format, 1..=3)
             || (self.format == 1 && (!self.journals.is_empty() || !self.rejected.is_empty()))
             || self.journals.len() > crate::journal::MAX_JOURNALS
             || self.blobs().len() > MAX_BLOBS

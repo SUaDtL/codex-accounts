@@ -1,35 +1,42 @@
 # Validation and evidence boundary
 
-## CA-04C review: current evidence boundary
+## CA-04D review: staging recovery and CI partitioning
 
-Base is owner-merged PR #10 at `62b600246add43d67a726ef4ad4975b6c8def03f`.
-The private synthetic target implementation, authenticated cleanup contract and
-native proof inventory are documented in `ca-04c-target-resources.md` and
-`ca-04c-native-review.md`. The final PR head must pass its own hosted checks;
-none of the CA-04B results below are inherited as CA-04C evidence.
+Base: owner-merged CA-04C / PR #11 at
+`455baa2eeee614586b26d419ee961475fe1ad23b`. Current implementation and reproduction
+are in `ca-04d-staging-recovery.md`; CI equivalence/timing review is in
+`ci-partition-review.md`. Final source head, tested merge/tree, completed run and
+measured timings are recorded on the actual review PR after log inspection, never
+inherited from the historical run below.
 
-Local Windows development exercised actual protected synthetic files, the existing
-owned-job helper and seventeen forward plus seventeen restoration process-exit
-boundaries. The three torn-stage cases deliberately block rather than report clean
-recovery. These are named implementation behaviors, not whole requirement closure.
-The PR records final combined-head commands and hosted evidence; targeted development
-runs alone are not a pass for the final combined tree.
+The candidate adds typed encrypted staging evidence and explicit staging-only repair.
+Normal cleanup remains restrictive. Five portable behaviors cover provenance/codec,
+guards, encrypted write faults, retries and capacity. Four new named Windows cases
+add exclusive-handle/archival/refusal and five repair-process interruption points.
+All earlier native and encrypted-store fault behaviors remain mandatory.
 
-The full Python suite belongs to the hosted Linux source lane. Two inherited fixtures
-error on local Windows (a Linux /proc reader and a control-character filename), so
-that local invocation is not recorded as a full Python pass. Their hosted checks
-remain unchanged. No compiler/native check that did not run is reported successful.
+Windows workspace execution proves its compiled complement excludes exactly the 27
+named native cases. The independent verifier must execute all 27 in each profile.
+Do not label the workspace complement alone as complete. Three inherited two-user
+helpers remain NOT RUN, excluded from pass totals. Python's FIFO fixture is explicitly
+platform-specific; the Linux source lane runs the full suite. The Unicode and mocked
+/proc fixtures are corrected, not disabled. No new case is ignored.
 
-The Windows job uses the same standard runner with a 30-minute bound for both-profile
-workspace and exact native evidence; the other Rust lanes retain 15 minutes. All
-inherited checks, failures and the aggregate gate remain mandatory. Current-head
-case proof requires all eleven CA-04B and all twelve CA-04C named behaviors in both
-profiles. Child entry points are harnesses, not additional behavior proofs.
+No Desktop qualification, real credentials, production effects, directory-metadata
+or physical-power-loss guarantee is added. Check current exact-head results before
+claiming this review is ready. The old encrypted registry formats remain readable;
+staging evidence uses explicit CAREG003. Envelope/generation/key formats are unchanged.
 
-No production constructor, real credential/account/client operation, qualified
-catalog entry, metadata-durability or physical-power-loss claim is added. See
-`next-pr.md` for the remaining review and integration gates.
+## Merged CA-04C / PR #11: historical exact-source evidence
 
+Source `b51e460cbd2a9d82bd24f3344d4f9d83c06c4d64` passed all six jobs in
+[run 36117748297](https://github.com/SUaDtL/codex-accounts/actions/runs/36117748297).
+Test merge `2e7decc441cbf516c620e7155bc0c93990a31e46` and owner merge share tree
+`25e5f0ebb19f0b9b793ae22ddb7111698e680a70`. Source: 118 Python passes. Windows:
+190 workspace passes per debug/release profile, three doctests, and 46 exact-name
+executions of 23 behaviors. Three two-user helpers were NOT RUN. These are historical
+records, not evidence for CA-04D. CA-04C's three torn-stage cases blocked automatic
+recovery; CA-04D adds explicit repair without deleting that refusal proof.
 
 ## Merged CA-04B / PR #9: final-source evidence
 
@@ -185,14 +192,9 @@ do not prove effective official identity, process quiescence or live operation s
 
 ## Next eligible implementation
 
-CA-04B review and final-source checks are recorded on merged PR #9. CA-04C is
-implemented for review in PR #11: a private target-resource adapter exercised against
-synthetic homes through the existing journal. Resume its exact-head checks and review
-using `next-pr.md`; do not start a duplicate implementation. Native owned helper
-construction/private stdio for the official runtime remains separately gated CA-05 work.
-No fixture supplies effective home, qualified policy, user consent or authority to
-mutate live resources. Full Q0/Q1/Q2, macOS, login, UI and release remain open.
+Finish the CA-04D review and its exact-head evidence. Follow `next-pr.md` for the
+remaining native qualification gates and separately selectable CA-05A protocol
+preparation. No automatic runtime/login/UI integration or phase advancement.
 
-New sessions start at [the root entry point](../CODEX_ACCOUNTS_START_HERE.md).
-[The handoff](maintainers/session-handoff.md), [parallel work](maintainers/parallel-work.md)
-and [open asks](maintainers/open-asks.md) route continuation without another roadmap.
+The root entry point, session handoff and open-asks register route continuation.
+The repository implementation plan remains the only working roadmap.

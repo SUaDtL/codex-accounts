@@ -405,6 +405,77 @@ impl Target {
         }
         self.validate()
     }
+    /// Explicit recovery only. Normal cleanup never adopts unknown plaintext.
+    /// All staged objects stay exclusively pinned until their ciphertext is
+    /// committed to the existing journal and verified by the core callback.
+    pub(super) fn preserve_then_remove(
+        &mut self,
+        operation: Id,
+        registered: u16,
+        preserve: &mut dyn FnMut(
+            Vec<Resource>,
+        ) -> Result<(), crate::engine::coordinator::SwitchError>,
+    ) -> Result<(), crate::engine::coordinator::SwitchError> {
+        use crate::{engine::coordinator::SwitchError, journal::Failure};
+        let refusal = |error| {
+            SwitchError::Refused(match error {
+                StorageError::ExternalChange | StorageError::UnsafePath => Failure::ExternalChange,
+                StorageError::InputLimit | StorageError::InvalidData => Failure::InvalidData,
+                StorageError::Busy => Failure::Busy,
+                _ => Failure::Cleanup,
+            })
+        };
+        let stages = self.inventory(operation, registered).map_err(refusal)?;
+        let mut held = Vec::new();
+        let mut resources = Vec::new();
+        let mut total = 0usize;
+        for (slot, path) in stages {
+            let (file, bytes, identity) = self
+                .pin(&path, GENERIC_READ | GENERIC_WRITE | DELETE, 0)
+                .map_err(refusal)?
+                .ok_or(Failure::ExternalChange)?;
+            total += bytes.len();
+            if total > 4 * LIMIT {
+                return Err(StorageError::InputLimit.into());
+            }
+            resources.push(
+                Resource::present(
+                    ResourceId::new(slot).map_err(StorageError::from)?,
+                    bytes.to_vec(),
+                )
+                .map_err(StorageError::from)?,
+            );
+            held.push((file, bytes, identity));
+        }
+        if held.is_empty() {
+            return Ok(());
+        }
+        self.point().map_err(refusal)?;
+        preserve(resources)?;
+        self.point().map_err(refusal)?;
+        for (mut file, bytes, identity) in held {
+            self.validate().map_err(refusal)?;
+            if stamp(&file).map_err(refusal)? != identity
+                || self.read_plain(&mut file).map_err(refusal)?.as_slice() != bytes.as_slice()
+            {
+                return Err(Failure::ExternalChange.into());
+            }
+            self.point().map_err(refusal)?;
+            self.dispose(&file).map_err(refusal)?;
+            self.point().map_err(refusal)?;
+            drop(file);
+            self.point().map_err(refusal)?;
+        }
+        if !self
+            .inventory(operation, registered)
+            .map_err(refusal)?
+            .is_empty()
+        {
+            return Err(Failure::ExternalChange.into());
+        }
+        self.validate().map_err(refusal)?;
+        Ok(())
+    }
     fn cleanup_candidate(
         &self,
         slot: u8,

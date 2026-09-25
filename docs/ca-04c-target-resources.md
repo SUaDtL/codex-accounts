@@ -47,9 +47,9 @@ not rolled back merely because cleanup or launch failed.
 A process can die immediately after creating a stage but before writing its full
 contents. Such an unverified stage is not silently deleted, adopted as a generation
 or overwritten. The restart tests require a visible conflict and unchanged recorded
-live resources in those cases. A separately reviewed encrypted staging-evidence
-repair path is still needed before production integration. This is a named remaining
-recovery gate, not permission to manufacture receipts or relax cleanup validation.
+live resources in those cases. CA-04D adds a separately invoked encrypted staging-evidence repair path; see
+`ca-04d-staging-recovery.md`. This does not relax normal cleanup or qualify production
+integration. Missing ownership/path/live-state evidence still blocks repair.
 
 ## Native evidence
 

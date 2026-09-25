@@ -33,12 +33,12 @@ python tools/run_native_tests.py
 if ($LASTEXITCODE -ne 0) { throw 'Named native execution failed' }
 ```
 
-For the recorded CA-04B source, expect **22 passing JSON records**: eleven behaviors
-in debug and release, each with `desktop_qualification: "not_established"`. An
-additional packet may add cases; consult the live verifier and its procedure.
-This is native OS evidence only, not Q0 or a Desktop-switch qualification. It does
-not close OA-03, OA-04 or OA-05. Follow the lifecycle procedure's cleanup instructions;
-never delete arbitrary test-looking directories or force-close user applications.
+For the CA-04D review inventory, expect **54 passing case records** (27 named
+behaviors in each profile), plus two profile/timing summaries. Each states
+`desktop_qualification: "not_established"`. Consult the live verifier if a later
+packet adds cases. This is native OS evidence only, not Q0 or a Desktop-switch
+qualification; it does not close OA-03, OA-04 or OA-05. Follow parent-owned fixture
+cleanup; never delete arbitrary test-looking directories or force-close user apps.
 
 For OA-01, the exact build and invocation sequence is already maintained in the Q0
 procedure. The expected report has `qualified: false` and
