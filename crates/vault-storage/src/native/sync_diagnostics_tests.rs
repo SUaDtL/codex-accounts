@@ -6,6 +6,9 @@ thread_local! {
 }
 pub(super) fn record(stage: &'static str, code: i32) {
     LAST.set(Some((stage, code)));
+    // Only fixed stage names and numeric HRESULTs from synthetic native tests.
+    // Rust captures this on failure; no returned paths or OS error text is emitted.
+    eprintln!("sync API refusal: stage={stage}; hresult={code:08x}");
 }
 pub(super) fn last() -> Option<(&'static str, i32)> {
     LAST.get()

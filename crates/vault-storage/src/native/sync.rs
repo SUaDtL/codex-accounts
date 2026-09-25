@@ -162,7 +162,10 @@ fn native_inventory_thread_exit_balances_com_before_tls_teardown() {
             std::thread::spawn(|| {
                 for _ in 0..8 {
                     registered_sync_check(&[]).unwrap_or_else(|error| {
-                        panic!("fresh thread inventory: {error:?}; {:?}", diagnostics::last())
+                        panic!(
+                            "fresh thread inventory: {error:?}; {:?}",
+                            diagnostics::last()
+                        )
                     });
                 }
             })
