@@ -1,13 +1,16 @@
-# Next bounded slice after CA-04B review: CA-04C
+# CA-04C: private synthetic target-resource adapter
 
-Parent: CA-04 / Q2. CA-04A and storage are merged through PR #7; CI assurance through
-PR #8. CA-04B is PR #9 on `feat/ca-04b-native-lifecycle`, based on observed main
-`27afd3381958b68154947e7f8d0092b214c226c6`. Inspect its live final head, complete diff,
-review state and CI before choosing the next base. Do not assume PR #9 merged,
-reset history, stack unnoticed dependencies or repeat completed code.
+Parent: CA-04 / Q2. **Selected next implementation packet; not started.**
+Checkpoint: 2026-09-25. CA-04B is merged through [PR #9](https://github.com/SUaDtL/codex-accounts/pull/9)
+at observed main `614eb1d68559b37ea4e32014214519b4d2a62e54`. Its final source head
+`821ebdc26ee6081b5c74ff1da79763bef2f9ea6f` passed all six jobs in run 36108485791.
+The snapshot is not a reset target or a claim that later code has passed.
 
-If CA-04B remains incomplete or has failed current-head checks, finish that PR
-before starting this packet. Publishing this pointer is not automatic advancement.
+Read [the handoff](maintainers/session-handoff.md), live AGENTS.md, current refs,
+open PRs, reviews and checks before selecting a base. Resume a matching CA-04C PR
+if present. If another prerequisite is unresolved, inspect it; do not repeat merged
+code, overwrite branch movement or stack unnoticed work. This documentation refresh
+does not implement CA-04C or automatically advance the product.
 
 ## Deliverable
 
@@ -83,3 +86,16 @@ physical-power-loss/directory-metadata and complete product acceptance remain op
 CI follow-ups still include Windows/macOS network isolation, current advisory
 automation, measured decision-path coverage, SBOM/provenance and clean unsigned
 payload comparison. Main protection is an owner setting; do not change it here.
+
+## Delegation within this packet
+
+The primary implementer owns the private target adapter and coordinator integration.
+After agreeing its private operation/fixture contract, an independent test worker
+may own separately assigned adversarial test modules. The integrator alone changes
+module wiring, journal/codec/recovery interfaces, manifests/reviews and named CI
+inventory. No shared branch pushes or shared mutable test homes.
+
+See [parallel work](maintainers/parallel-work.md) for the proposed allocation and
+join barriers. Optional protocol/UI/CI/macOS preparation is separately selected
+work, not part of this packet by implication. [Open asks](maintainers/open-asks.md)
+identifies owner evidence that blocks real integration but not these synthetic tests.

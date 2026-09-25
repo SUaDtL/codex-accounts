@@ -28,7 +28,7 @@ cancellation, conflict preservation and journaled restoration. Its external effe
 remain synthetic-only; no public switch entry point exists. See
 [the journal contract](docs/ca-04a-journal.md).
 
-CA-04B in PR #9 adds private Windows owner/canonical-home kernel locks, retained
+CA-04B, merged through PR #9, adds private Windows owner/canonical-home kernel locks, retained
 process start/owner/image observations, bounded descendant tracking, normal-window
 quit and independently proven owned-job exit. Native tests create only fresh
 synthetic directories, hidden windows and owned children. These primitives do not
@@ -46,6 +46,12 @@ credential CLI/MCP/HTTP interface, automatic rotation, host patch, self-updater 
 broad history migration belongs in this product.
 
 ## Start here
+
+New sessions: read [CODEX_ACCOUNTS_START_HERE.md](CODEX_ACCOUNTS_START_HERE.md),
+[the handoff](docs/maintainers/session-handoff.md) and [parallel-work boundaries](docs/maintainers/parallel-work.md).
+The [open-asks register](docs/maintainers/open-asks.md) separates owner evidence from
+safe implementation work. CA-04C is next at the post-CA-04B checkpoint; refresh live
+refs/open PRs before execution. The original CA-02 Project routing is superseded.
 
 The normative [specification](docs/local-codex-switcher-spec.html) owns behavior
 through its canonical `artifact-model`; the visible projection is checked against
