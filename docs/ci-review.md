@@ -7,7 +7,39 @@ This is a CI and test-evidence review, not an independent cryptographic audit,
 line-by-line review of all native code, measured line/branch coverage, or release
 qualification. The product specification is unchanged.
 
-## Verified starting state
+## CA-04B follow-through / PR #9
+
+Updated September 25, 2026, against the owner-merged PR #8 baseline
+`27afd3381958b68154947e7f8d0092b214c226c6`. The original review below remains a
+historical assessment; this table records subsequent dispositions without claiming
+that PR #8 itself delivered them.
+
+| Finding | Current scoped disposition |
+| --- | --- |
+| CI-01, main enforcement | Read-only recheck still reports `protected: false` and required-check enforcement off. Owner configuration is not performed by this PR. |
+| CI-04, optimized execution | Standard Ubuntu, Windows and macOS now execute optimized workspace tests as well as compiling targets and running debug/doctests/Clippy. |
+| CI-06, native coverage | Eleven exact named Windows behavior cases are required in both profiles. The verifier refuses zero/missing/ignored/duplicate/failed results; child-test entry points are not behavior evidence. |
+| CI-08, network isolation | A separate standard Ubuntu lane rebuilds in an empty target directory inside a child network namespace, after privilege/capability drop and IPv4/IPv6/topology checks. This blocks direct IP networking, not filesystem/Unix-socket attacks; Windows/macOS isolation and full runtime T-02 remain open. |
+| CI-09, action runtime | Scoped review adopts exact Node 24 checkout and upload-artifact pins. Authentication is not persisted; only committed public source/digests are retained for seven days. No full action-dependency audit or release provenance is claimed. |
+| CI-10, evidence handoff | The working roadmap, validation record and next pointer reflect PR #9 and its actual source. Final head and checked-out merge/tree evidence are recorded on the PR, not inferred from older runs. |
+
+Run 36107357329 passed for source head
+`078dc4c4a9ebfc6a7fe937e1a85b892b30c8bdff`; documentation closeout requires its
+own final-head run. Earlier Windows failures are preserved: fixed diagnostic stages
+isolated factory activation `CO_E_SERVER_STOPPING`, repaired through bounded exact-
+error handling plus immediate-refusal/exhaustion regressions, not deleted tests,
+weakened cloud/ACL checks or a rerun-until-green policy. Details and references are
+in `ca-04b-native-review.md`.
+
+CA-04B now supplies native home locking and process/owned-job primitives with
+synthetic children. Exact Desktop home/writer association, publisher/policy bindings,
+ordinary-user isolation, unavailable stores, representative sync providers,
+physical-power-loss/directory metadata, independent macOS and live integration stay
+open. Refreshed advisory tooling, measured decision-path coverage, SBOM/provenance,
+clean unsigned payload comparison and installed release checks remain future work.
+CA-04C is next only after CA-04B review; no automatic product-phase advance occurs.
+
+## Verified starting state (PR #8 baseline)
 
 PR #7 merged the later head `bfe30a0eee174dfe107e5b7edc07d5c637408e28`, not the
 unfinished `43902b9...` draft described in its stale conversation text. Main run
@@ -31,7 +63,7 @@ The tracked workflow directory contained only `ci.yml`; the preparation workflow
 was already removed. There is no implemented application packaging/deployment
 pipeline in that directory. The application directory is still a boundary document.
 
-## Findings and disposition
+## Findings and disposition at PR #8
 
 | ID / priority | Finding | Disposition in PR #8 |
 | --- | --- | --- |
@@ -53,7 +85,7 @@ the reviewed event/command/job contract. A malicious editor who changes both tes
 and their checks is outside that assurance. Protected review and trusted maintainers
 remain necessary. A gate pass is never a Desktop qualification receipt.
 
-## Coverage inventory: what the existing suite actually establishes
+## Coverage inventory at the PR #8 baseline
 
 | Layer / relevant scenarios | Present evidence | Remaining gap |
 | --- | --- | --- |
@@ -108,12 +140,13 @@ fixtures, vaults, paths, keys or raw runtime output as CI artifacts.
 No CD is added now. Packaging, signing, SBOM/provenance, reproducibility and installed
 acceptance belong to CA-07 after the operational product exists. No self-updater,
 release publication or deployment is implied by an optimized build. The next product
-packet remains CA-04B; CI-08/09 and unclosed native evidence remain explicit backlog,
-not reasons to recreate already-merged CA-04A.
+packet at the original review was CA-04B. The follow-through table above records
+its implementation and the bounded CI-08/09 disposition; unclosed native evidence
+is not a reason to recreate already-merged CA-04A.
 
 ## Verification and rollback
 
-Run each prerequisite command individually; stop acquisition if review fails:
+Current commands: run each prerequisite individually; stop acquisition if review fails:
 
 ```console
 python tools/check_dependencies.py
@@ -125,16 +158,19 @@ cargo fmt --all -- --check
 cargo test --workspace --all-targets --no-fail-fast --locked --offline
 cargo test --workspace --doc --no-fail-fast --locked --offline
 cargo build --workspace --all-targets --release --locked --offline
+cargo test --workspace --all-targets --release --no-fail-fast --locked --offline
 cargo clippy --workspace --all-targets --locked --offline -- -D warnings
 ```
 
 Expected documentation tests: one public metadata example and two compile-fail
 private-dispatch examples. No native test on an unsupported host is reported passed.
-Final PR #8 evidence is bound to its actual final head in the PR and validation record;
-baseline results above are not transferred. Local container/Python execution failed
-before commands started during this review; hosted results are reported separately.
+Historical PR #8 and current PR #9 evidence are bound separately in their PRs and
+the validation record; baseline results are not transferred. Local execution was
+unavailable during PR #8 but resumed for CA-04B. Hosted native execution is distinct
+from local portable tests. See `ca-04b-lifecycle.md` for the named Windows command
+and the standard-runner isolation boundary.
 
-Rollback is an owner-reviewed follow-up/revert of CI-only changes, preserving product
+Rollback of the CI changes is an owner-reviewed follow-up/revert, preserving product
 and vault data. A required-check rename/removal also requires a deliberate matching
 settings update; do not disable all checks to resolve an expected-name mismatch.
 

@@ -40,7 +40,7 @@ class DependencyAcquisitionContractTests(unittest.TestCase):
         self.reject("${{ !cancelled() && steps.checkout.outcome == 'success' }}", "${{ success() }}")
 
     def test_missing_documentation_release_or_host_check_refuses(self) -> None:
-        for identifier in ["doctests", "release_build", "host"]:
+        for identifier in ["doctests", "release_build", "release_tests", "native_tests", "isolated", "source_evidence", "source_upload", "host"]:
             with self.subTest(identifier=identifier):
                 self.reject(f"id: {identifier}\n", f"id: disabled_{identifier}\n")
 
@@ -54,7 +54,7 @@ class DependencyAcquisitionContractTests(unittest.TestCase):
 
     def test_aggregate_gate_cannot_skip_failed_jobs(self) -> None:
         self.reject("    if: ${{ always() }}\n", "    if: ${{ success() }}\n")
-        self.reject("needs: [source-and-python, rust-models]", "needs: [source-and-python]")
+        self.reject("needs: [source-and-python, rust-models, isolated-build]", "needs: [source-and-python]")
 
     def test_outcomes_cannot_be_replaced_by_literal_success(self) -> None:
         self.reject("${{ toJSON(needs) }}", "success")
@@ -66,7 +66,7 @@ class DependencyAcquisitionContractTests(unittest.TestCase):
             ("  pull_request:\n", "  pull_request:\n    paths: ['README.md']\n"),
             ("contents: read", "contents: write"),
             ("persist-credentials: false", "persist-credentials: true"),
-            ("@11bd71901bbe5b1630ceea73d27597364c9af683", "@main"),
+            ("@3d3c42e5aac5ba805825da76410c181273ba90b1", "@main"),
         ]:
             with self.subTest(old=old):
                 self.reject(old, new)
@@ -74,6 +74,25 @@ class DependencyAcquisitionContractTests(unittest.TestCase):
     def test_matrix_cannot_silently_lose_windows_or_fail_fast(self) -> None:
         self.reject("ubuntu-24.04, windows-latest, macos-latest", "ubuntu-24.04, macos-latest")
         self.reject("fail-fast: false", "fail-fast: true")
+
+    def test_native_evidence_cannot_be_omitted_or_changed_to_literal_success(self) -> None:
+        self.reject("run: python tools/run_native_tests.py", "run: echo success")
+        self.reject(" && matrix.os == 'windows-latest'", " && matrix.os == 'ubuntu-24.04'")
+        self.reject("          CI_MATRIX_OS: ${{ matrix.os }}", "          CI_MATRIX_OS: ubuntu-24.04")
+
+    def test_isolated_check_cannot_fallback_to_connected_host(self) -> None:
+        self.reject("run: python3 tools/ci_isolated.py", "run: cargo test --offline")
+        self.reject("rust-models, isolated-build]", "rust-models]")
+
+    def test_artifact_is_exact_source_only_and_pinned(self) -> None:
+        for old, new in [("/ca-source-evidence/", "/"), ("retention-days: 7", "retention-days: 90"),
+                         ("include-hidden-files: false", "include-hidden-files: true"),
+                         ("if-no-files-found: error", "if-no-files-found: ignore"),
+                         ("@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a", "@main")]:
+            self.reject(old, new)
+
+    def test_unreviewed_extra_steps_refuse(self) -> None:
+        self.reject("    steps:\n", "    steps:\n      - run: echo bypass\n")
 
     def test_persistent_temporary_workflow_and_toolchain_drift_refuse(self) -> None:
         with tempfile.TemporaryDirectory() as folder:

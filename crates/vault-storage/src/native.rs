@@ -878,3 +878,7 @@ pub(crate) fn open_vault(create: bool) -> Result<Vault, StorageError> {
 #[cfg(test)]
 #[path = "native_tests.rs"]
 mod tests;
+
+// Private native primitives; no qualified production caller or public executor.
+#[allow(dead_code)]
+mod lifecycle;

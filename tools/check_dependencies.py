@@ -1,4 +1,4 @@
-"""Verify the inherited and scoped CA-04A dependency reviews before build acquisition."""
+"""Verify inherited scoped dependency reviews before build acquisition."""
 from __future__ import annotations
 
 import hashlib
@@ -15,14 +15,17 @@ def check(root: Path = ROOT) -> dict[str, int | str]:
     inherited = json.loads((root / 'docs/ca-02-dependencies.json').read_text(encoding='utf-8'))
     crypto = json.loads((root / 'docs/ca-03b-dependencies.json').read_text(encoding='utf-8'))
     storage = json.loads((root / 'docs/ca-03c-dependencies.json').read_text(encoding='utf-8'))
-    review = json.loads((root / 'docs/ca-04a-dependencies.json').read_text(encoding='utf-8'))
-    required = {'docs/ca-02-dependencies.json', 'docs/ca-03b-dependencies.json', 'docs/ca-03c-dependencies.json'}
+    journal = json.loads((root / 'docs/ca-04a-dependencies.json').read_text(encoding='utf-8'))
+    review = json.loads((root / 'docs/ca-04b-dependencies.json').read_text(encoding='utf-8'))
+    required = {'docs/ca-02-dependencies.json', 'docs/ca-03b-dependencies.json', 'docs/ca-03c-dependencies.json', 'docs/ca-04a-dependencies.json'}
     if set(review['predecessor_sha256']) != required:
         raise ValueError('Prior review set changed')
     for path, expected_hash in review['predecessor_sha256'].items():
         if hashlib.sha256((root / path).read_bytes()).hexdigest() != expected_hash:
             raise ValueError('Prior review bytes changed')
     if (inherited['schema'] != 'codex-accounts/dependency-review/v1'
+            or journal['schema'] != 'codex-accounts/dependency-review/v1'
+            or journal['status'] != 'source_reviewed'
             or review['schema'] != 'codex-accounts/dependency-review/v1'
             or review['status'] != 'source_reviewed'
             or storage['schema'] != 'codex-accounts/dependency-review/v1'
@@ -33,7 +36,7 @@ def check(root: Path = ROOT) -> dict[str, int | str]:
     if hashlib.sha256(lock_bytes).hexdigest() != review['lock_sha256']:
         raise ValueError('Reviewed lock bytes changed')
     actual_packages = [p for p in lock['package'] if 'source' in p]
-    expected_packages = inherited['packages'] + crypto['packages'] + storage['packages'] + review['packages']
+    expected_packages = inherited['packages'] + crypto['packages'] + storage['packages'] + journal['packages'] + review['packages']
     keyed = lambda items: {(p['name'], p['version']): (p['source'], p['checksum']) for p in items}
     actual, expected = keyed(actual_packages), keyed(expected_packages)
     if (len(actual) != len(actual_packages) or len(expected) != len(expected_packages)
@@ -53,5 +56,14 @@ def check(root: Path = ROOT) -> dict[str, int | str]:
     return {'reviewed_packages': len(expected), 'lock_review': 'passed'}
 
 
+def observed_inputs(root: Path = ROOT) -> dict[str, str]:
+    """Diagnostics only: hashes never authorize acquisition or update a review."""
+    paths = ['Cargo.lock', 'Cargo.toml', 'docs/ca-04a-dependencies.json']
+    paths += [str(p.relative_to(root)).replace('\\', '/')
+              for p in sorted((root / 'crates').glob('*/Cargo.toml'))]
+    return {p: hashlib.sha256((root / p).read_bytes()).hexdigest() for p in paths}
+
+
 if __name__ == '__main__':
+    print(json.dumps({'observed_source_inputs_not_approval': observed_inputs()}, sort_keys=True), flush=True)
     print(json.dumps(check(), sort_keys=True))

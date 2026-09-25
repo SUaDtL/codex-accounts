@@ -1,7 +1,8 @@
 //! Read-only sync-location evidence. API failure is not evidence of absence.
 use super::*;
 
-// A thread-affine guard: never uninitialize COM on a different thread.
+// Stack-owned and thread-affine: never run COM teardown in a TLS destructor.
+// Windows holds its loader lock while Rust thread-local destructors execute.
 struct Apartment(std::marker::PhantomData<std::rc::Rc<()>>);
 impl Apartment {
     fn enter() -> Result<Self, StorageError> {
@@ -12,39 +13,67 @@ impl Apartment {
                 windows::Win32::System::WinRT::RO_INIT_MULTITHREADED,
             )
         }
-        .map_err(|_| StorageError::UnsafePath)?;
+        .map_err(|e| api_error("initialize", e))?;
         Ok(Self(std::marker::PhantomData))
     }
 }
 impl Drop for Apartment {
     fn drop(&mut self) {
-        // SAFETY: successful same-thread initialization is owned by this guard.
+        // SAFETY: same-thread stack guard, after all scoped WinRT interfaces drop,
+        // before thread exit acquires the loader lock. Never stored in thread_local!.
         unsafe { windows::Win32::System::WinRT::RoUninitialize() };
     }
 }
-thread_local! {
-    // Keep the owning thread's MTA alive across an entire storage session.
-    // Nested queries must not repeatedly tear down process COM infrastructure.
-    // The same-thread TLS destructor balances the one successful initialization.
-    static APARTMENT: Result<Apartment, StorageError> = Apartment::enter();
+fn api_error(_stage: &'static str, _error: windows::core::Error) -> StorageError {
+    #[cfg(test)]
+    diagnostics::record(_stage, _error.code().0);
+    StorageError::UnsafePath
+}
+
+// COM may reject activation while its object server is stopping. Retry only
+// that explicit transient result, without dropping this call's apartment. This
+// is not a path-check retry or an assumption that a failed inventory is empty.
+const ACTIVATION_ATTEMPTS: usize = 4;
+const ACTIVATION_PAUSE: std::time::Duration = std::time::Duration::from_millis(50);
+fn activate_registered<T>(
+    mut activate: impl FnMut() -> windows::core::Result<T>,
+    mut pause: impl FnMut(std::time::Duration),
+) -> windows::core::Result<T> {
+    for _ in 1..ACTIVATION_ATTEMPTS {
+        match activate() {
+            Err(error) if error.code().0 == CO_E_SERVER_STOPPING => pause(ACTIVATION_PAUSE),
+            result => return result,
+        }
+    }
+    // Exhaustion returns the actual error. No additional wait or fallback.
+    activate()
 }
 
 pub(super) fn registered_sync_check(ancestors: &[File]) -> Result<(), StorageError> {
     use windows::core::{Interface, HSTRING};
     use windows::Storage::{IStorageItem, Provider::IStorageProviderSyncRootManagerStatics};
-    APARTMENT.with(|value| value.as_ref().map(|_| ()).map_err(|e| *e))?;
+    // Declared first, dropped last on every return and unwind. Nested successful
+    // initializations (including S_FALSE) each retain their own balancing guard.
+    let _apartment = Apartment::enter()?;
     // This must succeed positively. A failed enumeration is NEVER no registered roots.
     // Microsoft documents both legacy and modern registrations in this inventory.
     // Request the registered factory directly: the generated static helper caches
     // an agile factory across apartment teardown. This scoped factory and every
-    // derived interface are released before the thread-owned apartment. There is no
+    // derived interface are released before the stack-owned apartment. There is no
     // generated helper's DLL-search fallback for a missing registered class.
-    let factory: IStorageProviderSyncRootManagerStatics = unsafe {
-        windows::Win32::System::WinRT::RoGetActivationFactory(&HSTRING::from(
-            "Windows.Storage.Provider.StorageProviderSyncRootManager",
-        ))
-    }
-    .map_err(|_| StorageError::UnsafePath)?;
+    let factory: IStorageProviderSyncRootManagerStatics = activate_registered(
+        || {
+            // SAFETY: documented fixed registered class, generated SDK interface;
+            // every attempt stays inside the same initialized stack apartment.
+            unsafe {
+                windows::Win32::System::WinRT::RoGetActivationFactory(&HSTRING::from(
+                    "Windows.Storage.Provider.StorageProviderSyncRootManager",
+                ))
+            }
+        },
+        std::thread::sleep,
+    )
+    .map_err(|e| api_error("factory", e))?;
     // SAFETY: use the generated SDK vtable and output type. The live factory
     // owns the call; null-initialized output is converted only after success.
     let roots: windows_collections::IVectorView<
@@ -54,17 +83,17 @@ pub(super) fn registered_sync_check(ancestors: &[File]) -> Result<(), StorageErr
         (factory.vtable().GetCurrentSyncRoots)(factory.as_raw(), &mut output)
             .and_then(|| windows::core::Type::from_abi(output))
     }
-    .map_err(|_| StorageError::UnsafePath)?;
-    let count = roots.Size().map_err(|_| StorageError::UnsafePath)?;
+    .map_err(|e| api_error("inventory", e))?;
+    let count = roots.Size().map_err(|e| api_error("count", e))?;
     if count > 128 {
         return Err(StorageError::InputLimit);
     }
     let ids = ancestors.iter().map(stamp).collect::<Result<Vec<_>, _>>()?;
     for i in 0..count {
-        let root = roots.GetAt(i).map_err(|_| StorageError::UnsafePath)?;
-        let folder = root.Path().map_err(|_| StorageError::UnsafePath)?;
-        let item: IStorageItem = folder.cast().map_err(|_| StorageError::UnsafePath)?;
-        let path = item.Path().map_err(|_| StorageError::UnsafePath)?;
+        let root = roots.GetAt(i).map_err(|e| api_error("root", e))?;
+        let folder = root.Path().map_err(|e| api_error("folder", e))?;
+        let item: IStorageItem = folder.cast().map_err(|e| api_error("item", e))?;
+        let path = item.Path().map_err(|e| api_error("path", e))?;
         if path.is_empty() || path.len() > 240 {
             return Err(StorageError::UnsafePath);
         }
@@ -99,7 +128,7 @@ pub(super) fn registered_sync_check(ancestors: &[File]) -> Result<(), StorageErr
             return Err(StorageError::UnsafePath);
         }
     }
-    if roots.Size().map_err(|_| StorageError::UnsafePath)? != count {
+    if roots.Size().map_err(|e| api_error("recount", e))? != count {
         return Err(StorageError::ExternalChange);
     }
     Ok(())
@@ -134,13 +163,110 @@ pub(super) fn cloud_check(f: &File, ancestors: &[File]) -> Result<(), StorageErr
 #[cfg(test)]
 #[path = "creation_checks.rs"]
 mod creation_checks;
+#[cfg(test)]
+#[path = "sync_diagnostics_tests.rs"]
+mod diagnostics;
 
 #[cfg(test)]
 #[test]
 fn native_repeated_inventory_retains_the_owned_thread_apartment() {
-    // Every query gets an uncached factory and a fresh successful inventory.
-    // The thread retains its apartment until all queries and interfaces end.
+    // Explicit stack ownership retains the apartment across this nested batch.
+    // Every query still gets an uncached factory and independently balanced guard.
+    let _apartment = Apartment::enter().expect("owned batch apartment");
     for _ in 0..100 {
         registered_sync_check(&[]).expect("independent registered-root inventory");
     }
+}
+
+#[cfg(test)]
+#[test]
+fn native_inventory_thread_exit_balances_com_before_tls_teardown() {
+    // Exercise concurrent fresh thread lifetimes, not merely a reused test thread.
+    // No COM object or apartment crosses a thread boundary or survives its stack.
+    let children: Vec<_> = (0..8)
+        .map(|_| {
+            std::thread::spawn(|| {
+                for _ in 0..8 {
+                    registered_sync_check(&[]).unwrap_or_else(|error| {
+                        panic!(
+                            "fresh thread inventory: {error:?}; {:?}",
+                            diagnostics::last()
+                        )
+                    });
+                }
+            })
+        })
+        .collect();
+    let mut completed = true;
+    for child in children {
+        completed &= child.join().is_ok();
+    }
+    assert!(completed, "all inventory threads must complete");
+}
+
+#[cfg(test)]
+#[test]
+fn native_activation_stopping_is_bounded_and_never_assumed_empty() {
+    use windows::core::{Error, HRESULT};
+    let mut calls = 0;
+    let mut pauses = vec![];
+    let result = activate_registered(
+        || {
+            calls += 1;
+            if calls < 3 {
+                Err(Error::from_hresult(HRESULT(CO_E_SERVER_STOPPING)))
+            } else {
+                Ok(42)
+            }
+        },
+        |duration| pauses.push(duration),
+    );
+    assert_eq!(result.unwrap(), 42);
+    assert_eq!(calls, 3);
+    assert_eq!(pauses, vec![ACTIVATION_PAUSE; 2]);
+
+    let mut calls = 0;
+    let mut pauses = 0;
+    let result: windows::core::Result<()> = activate_registered(
+        || {
+            calls += 1;
+            Err(Error::from_hresult(HRESULT(CO_E_SERVER_STOPPING)))
+        },
+        |duration| {
+            assert_eq!(duration, ACTIVATION_PAUSE);
+            pauses += 1;
+        },
+    );
+    assert_eq!(result.unwrap_err().code().0, CO_E_SERVER_STOPPING);
+    assert_eq!(calls, ACTIVATION_ATTEMPTS);
+    assert_eq!(pauses, ACTIVATION_ATTEMPTS - 1);
+}
+
+#[cfg(test)]
+#[test]
+fn native_activation_other_failures_are_immediate_and_preserved() {
+    use windows::core::{Error, HRESULT};
+    // Access denied, class missing, invalid function, changed apartment, unknown.
+    for code in [
+        0x80070005u32,
+        0x80040154,
+        0x80070001,
+        0x80010106,
+        0x8000ffff,
+    ] {
+        let mut calls = 0;
+        let result: windows::core::Result<()> = activate_registered(
+            || {
+                calls += 1;
+                Err(Error::from_hresult(HRESULT(code as i32)))
+            },
+            |_| panic!("only server-stopping permits a bounded pause"),
+        );
+        assert_eq!(result.unwrap_err().code().0, code as i32);
+        assert_eq!(calls, 1);
+    }
+    assert_eq!(
+        activate_registered(|| Ok(7), |_| panic!("no pause")).unwrap(),
+        7
+    );
 }

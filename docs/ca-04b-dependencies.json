@@ -1,0 +1,30 @@
+{
+  "schema": "codex-accounts/dependency-review/v1",
+  "packet": "CA-04B",
+  "status": "source_reviewed",
+  "review_date": "2026-09-24",
+  "predecessor_sha256": {
+    "docs/ca-02-dependencies.json": "ceaffa36b058d90fef01df21634610938aa47755edd8b6a15f7adc7257f6cc5f",
+    "docs/ca-03b-dependencies.json": "0071f27fcdd6dd9aba04aee06e9cb75b2177be7fae7999980f05a19c31563c7d",
+    "docs/ca-03c-dependencies.json": "81d4e34248cfc53265d0e087d287c5a5a00f3b793202bedf967b4796146bdf15",
+    "docs/ca-04a-dependencies.json": "3c613e03a967aff766c1bd2e34d1a00d31cfcb02210bb360289d30ffe7efdd56"
+  },
+  "lock_sha256": "31f90842816b6672a9c6aac58f49b55ac984a844e5153cc2efc53fd92155b15b",
+  "manifest_sha256": {
+    "Cargo.toml": "c009495e6fa55854b3befc954791c171e3ce971341afaa45a4d50086ea3f1478",
+    "crates/core/Cargo.toml": "209eb46bb52c2f4fb11dcd931e4274927be939318b5e3f5fdbe881de96b8788e",
+    "crates/platform/Cargo.toml": "1e17352db76845b523486cf2cd6c844e7fb06582e25a2df8f437f7b5675f3846",
+    "crates/runtime/Cargo.toml": "d8a1fac06ff9db18903e3ccb238ab2a1028e7dd3f10bd09e0227e17dd88f0f41",
+    "crates/discovery/Cargo.toml": "79841e868232a145681c654a4d4cf5c8f8269daf0e5c3e52a5d4ca554381d01a",
+    "crates/vault/Cargo.toml": "dc5ac46edfd6dbea78ad8588cf124cbd602958d49537624cccbf207ef4cd1229",
+    "crates/vault-crypto/Cargo.toml": "d48fbb2861c50086613bbde5caa9d6971385a3a8c1664d45e9b2a4426ccc4e8f",
+    "crates/vault-storage/Cargo.toml": "fbc1b139e656239d9b230832c5aa6f7804f06c57bf64dffd15c9c46e02dd0d69"
+  },
+  "packages": [],
+  "scope": "Only five SDK features of exact windows-sys 0.61.2: ToolHelp, JobObjects, WindowsAndMessaging, Gdi and LibraryLoader. All 58 external versions/checksums, Cargo.lock and four predecessor review documents are unchanged. Native effects remain private inside the existing native module; no public executor or production credential authority.",
+  "source_review": {
+    "native": "See ca-04b-native-review.md. Inspected version-identified publisher ToolHelp and JobObjects declarations, exact cached windows-sys 0.61.2 declarations and the cited Microsoft API contracts. This is a scoped API/feature review, not a full upstream or native security audit.",
+    "advisories": "Versions unchanged. Previous scoped advisory evidence is historical; no new cargo-audit or current advisory-clear claim.",
+    "source_hash_evidence": "The changed manifest SHA-256 was measured by source job 107530217084 on head a742905903205cae3b8601abdeec560aecd3b52e and independently rechecked on the recovered exact source tree. Hash output alone did not approve acquisition."
+  }
+}

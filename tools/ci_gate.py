@@ -9,11 +9,14 @@ from typing import Any
 
 MAX_INPUT_BYTES = 65536
 REQUIRED = {
-    "source": ("checkout", "revision", "spec", "dependency_review", "workflow_contract", "python"),
+    "source": ("checkout", "revision", "spec", "dependency_review", "workflow_contract", "python",
+               "source_evidence", "source_upload"),
     "rust": ("checkout", "revision", "dependency_review", "toolchain", "dependencies",
-             "compiler", "host", "format", "tests", "doctests", "release_build", "clippy"),
-    "jobs": ("source-and-python", "rust-models"),
+             "compiler", "host", "format", "tests", "doctests", "release_build", "release_tests", "clippy"),
+    "jobs": ("source-and-python", "rust-models", "isolated-build"),
+    "isolated": ("checkout", "revision", "dependency_review", "toolchain", "dependencies", "isolated"),
 }
+REQUIRED["rust-windows"] = REQUIRED["rust"] + ("native_tests",)
 
 
 def _unique_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
@@ -63,6 +66,11 @@ def main() -> int:
     scope = sys.argv[1]
     if scope == "host":
         passed = host_matches(os.environ.get("CI_MATRIX_OS", ""), platform.system(), platform.machine())
+    elif scope == "rust":
+        lane = os.environ.get("CI_MATRIX_OS", "")
+        selected = "rust-windows" if lane == "windows-latest" else "rust"
+        passed = host_matches(lane, platform.system(), platform.machine()) and assess(
+            selected, os.environ.get("CI_RESULTS", ""))
     else:
         passed = assess(scope, os.environ.get("CI_RESULTS", ""))
     # Never echo result JSON, exception text, environment values or arbitrary input.
