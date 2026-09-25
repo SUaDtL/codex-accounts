@@ -1,6 +1,6 @@
 # Validation and evidence boundary
 
-## Current review: CA-04B / PR #9
+## Merged CA-04B / PR #9: final-source evidence
 
 CA-04B implements private Windows x64 owner/canonical-home locking, handle-bound
 process identity and normal-quit observations, retained descendant tracking and
@@ -8,25 +8,34 @@ owned-job exit evidence. The journal, credential formats and public mutation
 boundary remain unchanged. All effects tests use newly created synthetic objects
 and exclusively owned children. No official Desktop or real credential is used.
 
-PR #9 continues from merged main `27afd3381958b68154947e7f8d0092b214c226c6`.
-Existing published work was recovered from its exact committed-source artifact,
-whose tree matched `7fa24f2b7c4d8f98be77e304094ad68ede7f35d5`; no older source
-archive replaced that work. Local toolchain/dependency acquisition was checked
-separately and is not counted as validation.
+Owner merged PR #9 on 2026-09-25 as
+`614eb1d68559b37ea4e32014214519b4d2a62e54`. The final PR source head was
+`821ebdc26ee6081b5c74ff1da79763bef2f9ea6f`, not the earlier pre-documentation head.
 
-| Executed evidence before documentation closeout | Observed result |
+| Final-source evidence | Observed result |
 | --- | --- |
-| Local source | 114 Python tests, specification/model/projection/provenance, workflow contract and exact 58-package dependency review passed. All 43 requirements and 34 acceptance IDs remain; zero qualified records. |
-| Local Linux execution | Pinned Rust 1.90.0 formatting, workspace all-target debug and optimized tests, three doctests and Clippy with `-D warnings` passed against recovered CA-04B code. Windows-only effects were not executed locally. |
-| Hosted source head | `078dc4c4a9ebfc6a7fe937e1a85b892b30c8bdff`, tree `3bb00602d5d94b8626fccbec5d38e2b1e0cd80a8`. Run [36107357329](https://github.com/SUaDtL/codex-accounts/actions/runs/36107357329) completed successfully: source, three Rust lanes, isolated Linux and aggregate CI gate. |
-| Inspected Windows job | `107982842804`: **176 workspace tests passed in debug and again in release**, including 87 storage/lifecycle cases, plus three doctests. Named verification separately executed all eleven CA-04B behaviors in each profile: **22 passing records**, not 22 new distinct behaviors. Formatting, optimized compilation and Clippy passed. |
-| Tested GitHub merge | `a4c9f1f3776a655ec2436f0a46ef547a1cfc8ea9`, whose tree equals the stated source tree. This is a CI test merge, not an assistant merge. |
-| Native limits | Windows Server 2025 x64 build 26100, not owner Windows 11 or ordinary-user qualification. Three inherited two-user helpers were ignored / NOT RUN, excluded from pass counts. Workspace counts include three child-test entry points, not extra behavior proofs. |
+| Final run | [36108485791](https://github.com/SUaDtL/codex-accounts/actions/runs/36108485791): source, three Rust lanes, isolated Linux and aggregate CI gate all completed successfully |
+| Tested merge / tree | `65147ae9dfdb5752b3a24371d4358d9e836c2ed2` / `85b0bb90d2166a17814068c184b1c07726466f32`; owner merge has the same tree |
+| Source job `107986355627` | 114 Python tests; spec/model/projection/provenance, workflow and exact 58-package review passed. All 43 requirements and 34 acceptance IDs retained; zero qualified records |
+| Windows job `107986355847` | 176 workspace passes in each debug/release profile, including 87 storage/lifecycle cases; three doctests; formatting, optimized compilation and Clippy passed |
+| Named Windows proof | Eleven behaviors in each profile: 22 passing execution records, not 22 distinct tests or qualification receipts |
+| Ubuntu `107986355639` and macOS `107986355732` | All applicable checks passed; Windows-only verifier not run on these hosts |
+| Isolated Ubuntu `107986355470` | Fresh-target compilation, 129 workspace passes per profile, three doctests and Clippy passed inside the checked privilege-dropped, direct-IP-isolated namespace |
+| Aggregate `107987551146` | CI gate passed after all prerequisite jobs succeeded |
+| Limits | Server 2025 x64 build 26100, not owner Windows 11 or ordinary-user qualification. Three two-user helpers ignored / NOT RUN. Workspace counts include child-test entry points |
 
-These records bind only the stated source. The documentation-closeout commit must
-have its own completed checks; final head, tested merge, run and inspected logs are
-recorded on PR #9 before readiness. No older green result is transferred to a later
-head, and native success does not close a complete T-01 through T-34 scenario.
+The final source, Windows and isolated-Linux logs were inspected during CA-04B
+closeout. Earlier run 36107357329 at `078dc4c4a9ebfc6a7fe937e1a85b892b30c8bdff`
+is preserved on PR #9 but is not substituted for the final-source run above.
+Local CA-04B checks recorded 114 Python passes, source checks, formatting, doctests
+and Clippy; Linux debug/release tests also ran before final documentation closeout.
+An additional final-tree local debug run hit the execution tool's 45-second limit
+and was not counted as a pass. Windows native evidence was hosted, not local.
+
+These are exact-source historical records, not inherited results for later commits.
+The bootstrap/concurrency documentation increment changes no Rust, dependency,
+workflow or product authority. Its own final-head checks belong to its documentation
+PR. No full T-01 through T-34 scenario or platform qualification is closed here.
 
 ### Failure repair and safety review
 
@@ -145,9 +154,13 @@ do not prove effective official identity, process quiescence or live operation s
 
 ## Next eligible implementation
 
-After CA-04B review and verified final-head checks, CA-04C is the next bounded
+CA-04B review and final-source checks are recorded on merged PR #9. CA-04C is the next bounded
 product slice: a private target-resource adapter exercised against synthetic homes
 through the existing journal. See `next-pr.md`. It has not started. Native owned
 helper construction/private stdio for the official runtime remains CA-05 work.
 No fixture supplies effective home, qualified policy, user consent or authority to
 mutate live resources. Full Q0/Q1/Q2, macOS, login, UI and release remain open.
+
+New sessions start at [the root entry point](../CODEX_ACCOUNTS_START_HERE.md).
+[The handoff](maintainers/session-handoff.md), [parallel work](maintainers/parallel-work.md)
+and [open asks](maintainers/open-asks.md) route continuation without another roadmap.
