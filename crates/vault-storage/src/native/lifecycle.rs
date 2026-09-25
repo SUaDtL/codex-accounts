@@ -9,3 +9,8 @@ mod process;
 #[cfg(test)]
 #[path = "lifecycle_tests.rs"]
 mod tests;
+
+// Test-only construction; never a production filesystem authority.
+mod target;
+#[cfg(test)]
+mod target_tests;

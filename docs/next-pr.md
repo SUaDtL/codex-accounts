@@ -1,16 +1,24 @@
 # CA-04C: private synthetic target-resource adapter
 
-Parent: CA-04 / Q2. **Selected next implementation packet; not started.**
-Checkpoint: 2026-09-25. CA-04B is merged through [PR #9](https://github.com/SUaDtL/codex-accounts/pull/9)
-at observed main `614eb1d68559b37ea4e32014214519b4d2a62e54`. Its final source head
-`821ebdc26ee6081b5c74ff1da79763bef2f9ea6f` passed all six jobs in run 36108485791.
-The snapshot is not a reset target or a claim that later code has passed.
+Parent: CA-04 / Q2. **Implemented in the CA-04C review branch; not merged or qualified by this record.**
+Base: owner-merged PR #10, `62b600246add43d67a726ef4ad4975b6c8def03f`, which contains
+CA-04B and the refreshed session handoff. Inspect the live matching PR and exact-head
+checks before resuming. Do not restart this implementation from the earlier snapshot.
 
-Read [the handoff](maintainers/session-handoff.md), live AGENTS.md, current refs,
-open PRs, reviews and checks before selecting a base. Resume a matching CA-04C PR
-if present. If another prerequisite is unresolved, inspect it; do not repeat merged
-code, overwrite branch movement or stack unnoticed work. This documentation refresh
-does not implement CA-04C or automatically advance the product.
+Current implementation and safe reproduction: [CA-04C target resources](ca-04c-target-resources.md).
+The private adapter, authenticated staging cleanup and twelve named native behaviors
+are implemented. Complete current-head hosted validation and review first. No fixture
+qualifies a Desktop installation or automatically advances CA-05.
+
+Before production integration, separately address encrypted repair of torn/unverified
+staging, namespace-writer exclusion/association and qualified directory-metadata and
+power-loss durability. Keep each unresolved gate visible; do not silently discard a
+stage, loosen cleanup, invent evidence or expose a test constructor. CA-05's bounded
+runtime/stdio work still requires its own selection and the established dependencies.
+
+Read [the handoff](maintainers/session-handoff.md), live AGENTS.md, refs, open PRs,
+reviews and checks. Resume the existing CA-04C PR if it needs work. The deliverable
+below remains the review checklist, not a claim of full Q2 or release acceptance.
 
 ## Deliverable
 

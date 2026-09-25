@@ -84,6 +84,7 @@ impl TestChild {
         let mut environment = BTreeMap::<String, OsString>::new();
         for name in [
             "SYSTEMROOT",
+            "SYSTEMDRIVE",
             "WINDIR",
             "TEMP",
             "TMP",

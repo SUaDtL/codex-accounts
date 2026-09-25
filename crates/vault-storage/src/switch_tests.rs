@@ -175,7 +175,7 @@ impl Effects for Synthetic {
         drop(w);
         self.point("after-replace")
     }
-    fn cleanup(&mut self, op: Id, mask: u16) -> Result<(), Failure> {
+    fn cleanup(&mut self, op: Id, mask: u16, _: &[CredentialSet]) -> Result<(), Failure> {
         self.point("before-cleanup")?;
         let mut w = self.0.borrow_mut();
         if w.helper.is_some() {
