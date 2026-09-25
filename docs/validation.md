@@ -1,5 +1,27 @@
 # Validation and evidence boundary
 
+## CA-05A / CA-06A / macOS preparation review
+
+PR #12 starts from owner-merged CA-04C at `455baa2eeee614586b26d419ee961475fe1ad23b`.
+See `maintainers/preparation-handoff.md` for the exact source/test surface and
+`next-pr.md` for current routing. The local combined preparation passed 143 Python
+source tests. Hosted final-head results belong to the PR; earlier green runs are
+not inherited. First protocol-only run 36126434474 passed Ubuntu tests/Clippy and
+isolated Linux but failed formatting, subsequently corrected in source.
+
+Fourteen new runtime integration tests and sixteen presentation plus nine macOS
+source checks do not close any full requirement or T-xx scenario. Browser navigation
+was blocked before load: browser layout/keyboard/zoom and screen-reader validation
+are NOT RUN. The macOS packet contains documentary facts and drift checks only;
+all native behavior and exact Desktop qualification are NOT RUN. No credential,
+helper, login, refresh, live command integration or renderer consent is introduced.
+No dependency, manifest, workflow, native implementation or qualified catalog change.
+
+The CA-04C review record and earlier records below are historical implementation
+evidence; CA-04C was subsequently merged in PR #11. They do not establish this PR's
+combined-head success or macOS behavior.
+
+
 ## CA-04C review: current evidence boundary
 
 Base is owner-merged PR #10 at `62b600246add43d67a726ef4ad4975b6c8def03f`.
@@ -183,15 +205,16 @@ digest; all 43 requirements and 34 acceptance IDs remain. That amendment is not 
 qualification record. Native discovery and structural identity/generation evidence
 do not prove effective official identity, process quiescence or live operation safety.
 
-## Next eligible implementation
+## Current continuation
 
-CA-04B review and final-source checks are recorded on merged PR #9. CA-04C is
-implemented for review in PR #11: a private target-resource adapter exercised against
-synthetic homes through the existing journal. Resume its exact-head checks and review
-using `next-pr.md`; do not start a duplicate implementation. Native owned helper
-construction/private stdio for the official runtime remains separately gated CA-05 work.
-No fixture supplies effective home, qualified policy, user consent or authority to
-mutate live resources. Full Q0/Q1/Q2, macOS, login, UI and release remain open.
+CA-04B/C are owner-merged. Review the independent CA-05A/CA-06A/macOS preparations
+in PR #12 against their final combined source and completed checks. The separate
+unfinished CA-04D staging-repair continuation is not part of this review. Follow
+`next-pr.md`; do not duplicate an existing matching PR. Official-runtime ownership,
+schema validation, production helper/login/refresh and native consent remain gated.
+Resolve CA-04D and review the final shared interfaces before macOS native coding.
+No fixture supplies effective home, qualified policy, consent or mutation authority.
+Full Q0/Q1/Q2, operational CA-05/CA-06, macOS qualification and release remain open.
 
 New sessions start at [the root entry point](../CODEX_ACCOUNTS_START_HERE.md).
 [The handoff](maintainers/session-handoff.md), [parallel work](maintainers/parallel-work.md)
