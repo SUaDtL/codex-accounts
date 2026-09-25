@@ -1,0 +1,16 @@
+{
+  "packet_format": "codex-accounts/macos-preparation/v1",
+  "base_commit": "455baa2eeee614586b26d419ee961475fe1ad23b",
+  "platform": "macos-aarch64",
+  "evidence": "source-baseline-only",
+  "native_status": "not-run",
+  "interfaces": {
+    "crates/core/src/lib.rs": "47e99644151a0cd407151fbc46a1f518efe08e717b65d16ecb535a97262b0b39",
+    "crates/platform/src/lib.rs": "71a741688484a953a6be5d0e759631b64081981681983fe7045b31bae467cfd4",
+    "crates/vault-crypto/src/keys.rs": "f3f0746562f24b6d3c797554558541bc57575289d251cf83cc3fb51fca53f11c",
+    "crates/vault-storage/src/engine.rs": "7398a315ccaebc1642e156a0a9195a08c0978463087f3252ddafa0d9e5ab3258",
+    "crates/vault-storage/src/coordinator.rs": "02e059652c7a960ba0ab511ecf9b19e521d251741dfdd32f5088d0e51fb9da33",
+    "crates/vault-storage/src/journal.rs": "693e31ca309d57ad97915e19ca09e34e06c08b583e2e15cd0cc0bafac13c276d",
+    "crates/vault-storage/src/lifecycle_model.rs": "50fca4ea0099793a36322ca9ad689778e692df56331850959b3982b9c4525060"
+  }
+}

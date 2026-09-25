@@ -1,7 +1,7 @@
 //! Synthetic byte-stream tests only. No executable, adapter, or credential IO.
 use codex_accounts_runtime::{
-    ClientMessageKind, FrameDecoder, FrameError, Method, MAX_FRAME_BYTES,
-    MAX_PENDING_BYTES, MAX_QUEUED_FRAMES,
+    ClientMessageKind, FrameDecoder, FrameError, Method, MAX_FRAME_BYTES, MAX_PENDING_BYTES,
+    MAX_QUEUED_FRAMES,
 };
 
 fn assert_poisoned(decoder: &mut FrameDecoder) {
@@ -19,7 +19,10 @@ fn every_two_chunk_split_preserves_utf8_and_order() {
         d.feed(&stream[..split]).unwrap();
         d.feed(&stream[split..]).unwrap();
         d.finish().unwrap();
-        assert_eq!(d.next_frame().unwrap().as_bytes(), "{\"synthetic\":\"雪🦀é\"}".as_bytes());
+        assert_eq!(
+            d.next_frame().unwrap().as_bytes(),
+            "{\"synthetic\":\"雪🦀é\"}".as_bytes()
+        );
         // A CR is preserved as untrusted payload, not normalized or interpreted.
         assert_eq!(d.next_frame().unwrap().as_bytes(), b"{\"synthetic\":2}\r");
         assert!(d.next_frame().is_none());
@@ -126,8 +129,11 @@ fn every_error_invalidates_an_earlier_queued_frame() {
 #[test]
 fn invalid_utf8_variants_are_rejected_at_each_split() {
     for body in [
-        vec![0xc0, 0xaf], vec![0xed, 0xa0, 0x80], vec![0xf4, 0x90, 0x80, 0x80],
-        vec![0xe2, 0x82], vec![0x80],
+        vec![0xc0, 0xaf],
+        vec![0xed, 0xa0, 0x80],
+        vec![0xf4, 0x90, 0x80, 0x80],
+        vec![0xe2, 0x82],
+        vec![0x80],
     ] {
         for split in 0..=body.len() {
             let mut d = FrameDecoder::default();
@@ -157,8 +163,16 @@ fn framing_never_promotes_json_shaped_hostility_to_validated_protocol() {
     // Deliberately NOT an official protocol schema. Even malformed JSON, duplicate
     // keys and privileged-shaped messages remain UntrustedFrame, never responses.
     for body in [
-        "{\"id\":1,\"id\":2}", "{\"method\":\"exec\"}", "[1,2]", "null", "{broken}",
-        "{\"synthetic\":\"\\n\"}", "\u{feff}{}", "\0", "\r", " ",
+        "{\"id\":1,\"id\":2}",
+        "{\"method\":\"exec\"}",
+        "[1,2]",
+        "null",
+        "{broken}",
+        "{\"synthetic\":\"\\n\"}",
+        "\u{feff}{}",
+        "\0",
+        "\r",
+        " ",
     ] {
         let mut d = FrameDecoder::default();
         d.feed(body.as_bytes()).unwrap();
@@ -171,35 +185,81 @@ fn framing_never_promotes_json_shaped_hostility_to_validated_protocol() {
 
 #[test]
 fn all_allowlist_entries_have_one_outbound_message_kind() {
-    for method in [Method::Initialize, Method::Initialized, Method::AccountRead,
-        Method::LoginStart, Method::LoginCancel, Method::RateLimitsRead] {
+    for method in [
+        Method::Initialize,
+        Method::Initialized,
+        Method::AccountRead,
+        Method::LoginStart,
+        Method::LoginCancel,
+        Method::RateLimitsRead,
+    ] {
         assert_eq!(Method::from_allowlist(method.wire_name()), Some(method));
-        let kind = if method == Method::Initialized { ClientMessageKind::Notification }
-            else { ClientMessageKind::Request };
-        assert_eq!(Method::classify_client(method.wire_name(), kind), Some(method));
-        let other = if kind == ClientMessageKind::Request { ClientMessageKind::Notification }
-            else { ClientMessageKind::Request };
+        let kind = if method == Method::Initialized {
+            ClientMessageKind::Notification
+        } else {
+            ClientMessageKind::Request
+        };
+        assert_eq!(
+            Method::classify_client(method.wire_name(), kind),
+            Some(method)
+        );
+        let other = if kind == ClientMessageKind::Request {
+            ClientMessageKind::Notification
+        } else {
+            ClientMessageKind::Request
+        };
         assert_eq!(Method::classify_client(method.wire_name(), other), None);
     }
 }
 
 #[test]
 fn lookalikes_and_unqualified_extensions_are_not_allowlisted() {
-    for method in [Method::Initialize, Method::Initialized, Method::AccountRead,
-        Method::LoginStart, Method::LoginCancel, Method::RateLimitsRead] {
-        for candidate in [format!(" {}", method.wire_name()), format!("{} ", method.wire_name()),
-            format!("{}\0", method.wire_name()), format!("{}\n", method.wire_name()),
-            format!("{}/extra", method.wire_name()), method.wire_name().to_uppercase(),
-            format!("{}\u{200b}", method.wire_name())] {
+    for method in [
+        Method::Initialize,
+        Method::Initialized,
+        Method::AccountRead,
+        Method::LoginStart,
+        Method::LoginCancel,
+        Method::RateLimitsRead,
+    ] {
+        for candidate in [
+            format!(" {}", method.wire_name()),
+            format!("{} ", method.wire_name()),
+            format!("{}\0", method.wire_name()),
+            format!("{}\n", method.wire_name()),
+            format!("{}/extra", method.wire_name()),
+            method.wire_name().to_uppercase(),
+            format!("{}\u{200b}", method.wire_name()),
+        ] {
             assert_eq!(Method::from_allowlist(&candidate), None);
         }
     }
-    for name in ["account%2Fread", "аccount/read", "account//read", "account\\read",
-        "config/read", "configRequirements/read", "account/token/refresh", "account/logout",
-        "thread/start", "turn/start", "command/exec", "fs/read", "mcp/call", "", "read"] {
+    for name in [
+        "account%2Fread",
+        "аccount/read",
+        "account//read",
+        "account\\read",
+        "config/read",
+        "configRequirements/read",
+        "account/token/refresh",
+        "account/logout",
+        "thread/start",
+        "turn/start",
+        "command/exec",
+        "fs/read",
+        "mcp/call",
+        "",
+        "read",
+    ] {
         assert_eq!(Method::from_allowlist(name), None);
-        assert_eq!(Method::classify_client(name, ClientMessageKind::Request), None);
-        assert_eq!(Method::classify_client(name, ClientMessageKind::Notification), None);
+        assert_eq!(
+            Method::classify_client(name, ClientMessageKind::Request),
+            None
+        );
+        assert_eq!(
+            Method::classify_client(name, ClientMessageKind::Notification),
+            None
+        );
     }
     assert_eq!(Method::from_allowlist(&"x".repeat(MAX_FRAME_BYTES)), None);
 }
@@ -221,6 +281,9 @@ fn chunk_schedules_preserve_drain_semantics() {
             pos = end;
         }
         d.finish().unwrap();
-        assert_eq!(results, vec!["一".as_bytes(), b"two", "🦀".as_bytes(), b"four"]);
+        assert_eq!(
+            results,
+            vec!["一".as_bytes(), b"two", "🦀".as_bytes(), b"four"]
+        );
     }
 }
