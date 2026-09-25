@@ -65,6 +65,29 @@ Primary lifetime contracts inspected September 24, 2026:
 - https://learn.microsoft.com/en-us/windows/win32/api/roapi/nf-roapi-rouninitialize
 - https://learn.microsoft.com/en-us/windows/win32/api/combaseapi/nf-combaseapi-couninitialize
 
+### Stopping-server activation handling
+
+The resumed Windows run 36106651127 at head
+`4ee65d02845d7a974a53bec3444ba72e869c62be` isolated the remaining failures to
+`RoGetActivationFactory`: HRESULT `0x80080008` (`CO_E_SERVER_STOPPING`). This is
+an object-server lifecycle failure, not proof that a path is in a sync root or that
+no sync roots exist. The trace does not identify which system component stopped.
+
+The activation call now permits at most four attempts, with three 50 ms pauses,
+only for this exact HRESULT. The stack apartment remains initialized throughout.
+All other activation errors return immediately; exhaustion returns the actual
+failure; enumeration/path failures are not retried or converted to empty results.
+The complete positive inventory and path/security validation still follow a
+successful activation. There is no service restart, cached absence, ACL repair,
+class-loading fallback, test retry or new API/dependency. The 150 ms bound applies
+to added pauses, not preemption of an individual synchronous OS call.
+
+Native tests prove exact attempt/pause counts, preserved failure on exhaustion,
+and immediate access-denied/class-missing/other-error refusal. Existing concurrent
+fresh-thread and complete storage suites remain enabled in both debug and release.
+Microsoft's documented error definition (reviewed September 25, 2026):
+https://learn.microsoft.com/en-us/windows/win32/com/com-error-codes-2
+
 ## Reviewed Actions and source evidence
 
 Checkout uses GitHub's v7.0.1 commit

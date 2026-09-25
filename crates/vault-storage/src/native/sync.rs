@@ -30,6 +30,25 @@ fn api_error(_stage: &'static str, _error: windows::core::Error) -> StorageError
     StorageError::UnsafePath
 }
 
+// COM may reject activation while its object server is stopping. Retry only
+// that explicit transient result, without dropping this call's apartment. This
+// is not a path-check retry or an assumption that a failed inventory is empty.
+const ACTIVATION_ATTEMPTS: usize = 4;
+const ACTIVATION_PAUSE: std::time::Duration = std::time::Duration::from_millis(50);
+fn activate_registered<T>(
+    mut activate: impl FnMut() -> windows::core::Result<T>,
+    mut pause: impl FnMut(std::time::Duration),
+) -> windows::core::Result<T> {
+    for _ in 1..ACTIVATION_ATTEMPTS {
+        match activate() {
+            Err(error) if error.code().0 == CO_E_SERVER_STOPPING => pause(ACTIVATION_PAUSE),
+            result => return result,
+        }
+    }
+    // Exhaustion returns the actual error. No additional wait or fallback.
+    activate()
+}
+
 pub(super) fn registered_sync_check(ancestors: &[File]) -> Result<(), StorageError> {
     use windows::core::{Interface, HSTRING};
     use windows::Storage::{IStorageItem, Provider::IStorageProviderSyncRootManagerStatics};
@@ -42,11 +61,18 @@ pub(super) fn registered_sync_check(ancestors: &[File]) -> Result<(), StorageErr
     // an agile factory across apartment teardown. This scoped factory and every
     // derived interface are released before the stack-owned apartment. There is no
     // generated helper's DLL-search fallback for a missing registered class.
-    let factory: IStorageProviderSyncRootManagerStatics = unsafe {
-        windows::Win32::System::WinRT::RoGetActivationFactory(&HSTRING::from(
-            "Windows.Storage.Provider.StorageProviderSyncRootManager",
-        ))
-    }
+    let factory: IStorageProviderSyncRootManagerStatics = activate_registered(
+        || {
+            // SAFETY: documented fixed registered class, generated SDK interface;
+            // every attempt stays inside the same initialized stack apartment.
+            unsafe {
+                windows::Win32::System::WinRT::RoGetActivationFactory(&HSTRING::from(
+                    "Windows.Storage.Provider.StorageProviderSyncRootManager",
+                ))
+            }
+        },
+        std::thread::sleep,
+    )
     .map_err(|e| api_error("factory", e))?;
     // SAFETY: use the generated SDK vtable and output type. The live factory
     // owns the call; null-initialized output is converted only after success.
@@ -176,4 +202,71 @@ fn native_inventory_thread_exit_balances_com_before_tls_teardown() {
         completed &= child.join().is_ok();
     }
     assert!(completed, "all inventory threads must complete");
+}
+
+#[cfg(test)]
+#[test]
+fn native_activation_stopping_is_bounded_and_never_assumed_empty() {
+    use windows::core::{Error, HRESULT};
+    let mut calls = 0;
+    let mut pauses = vec![];
+    let result = activate_registered(
+        || {
+            calls += 1;
+            if calls < 3 {
+                Err(Error::from_hresult(HRESULT(CO_E_SERVER_STOPPING)))
+            } else {
+                Ok(42)
+            }
+        },
+        |duration| pauses.push(duration),
+    );
+    assert_eq!(result.unwrap(), 42);
+    assert_eq!(calls, 3);
+    assert_eq!(pauses, vec![ACTIVATION_PAUSE; 2]);
+
+    let mut calls = 0;
+    let mut pauses = 0;
+    let result: windows::core::Result<()> = activate_registered(
+        || {
+            calls += 1;
+            Err(Error::from_hresult(HRESULT(CO_E_SERVER_STOPPING)))
+        },
+        |duration| {
+            assert_eq!(duration, ACTIVATION_PAUSE);
+            pauses += 1;
+        },
+    );
+    assert_eq!(result.unwrap_err().code().0, CO_E_SERVER_STOPPING);
+    assert_eq!(calls, ACTIVATION_ATTEMPTS);
+    assert_eq!(pauses, ACTIVATION_ATTEMPTS - 1);
+}
+
+#[cfg(test)]
+#[test]
+fn native_activation_other_failures_are_immediate_and_preserved() {
+    use windows::core::{Error, HRESULT};
+    // Access denied, class missing, invalid function, changed apartment, unknown.
+    for code in [
+        0x80070005u32,
+        0x80040154,
+        0x80070001,
+        0x80010106,
+        0x8000ffff,
+    ] {
+        let mut calls = 0;
+        let result: windows::core::Result<()> = activate_registered(
+            || {
+                calls += 1;
+                Err(Error::from_hresult(HRESULT(code as i32)))
+            },
+            |_| panic!("only server-stopping permits a bounded pause"),
+        );
+        assert_eq!(result.unwrap_err().code().0, code as i32);
+        assert_eq!(calls, 1);
+    }
+    assert_eq!(
+        activate_registered(|| Ok(7), |_| panic!("no pause")).unwrap(),
+        7
+    );
 }
