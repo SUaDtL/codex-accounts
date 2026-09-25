@@ -1,14 +1,26 @@
 //! Bounded transport primitives, not an executable runtime adapter.
-//! JSON validation, handshake/IDs, native ownership and helper lifecycle are Q3.
+//! Strict JSON-object validation is opt-in; schema/IDs and lifecycle remain Q3.
+//! LF delimits raw UTF-8 payloads; CR is preserved, not normalized.
+//! Successful EOF is terminal. Classification below grants no invocation authority.
 //! No caller may treat a decoded byte frame as a valid JSON-RPC response.
 #![forbid(unsafe_code)]
 
 use std::collections::VecDeque;
 use std::fmt;
+use zeroize::{Zeroize, Zeroizing};
+
+mod json_object;
+pub use json_object::{JsonFrameError, JsonObjectDecoder, JsonObjectFrame};
 
 pub const MAX_FRAME_BYTES: usize = 1024 * 1024;
 pub const MAX_PENDING_BYTES: usize = 4 * 1024 * 1024;
 pub const MAX_QUEUED_FRAMES: usize = 32;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ClientMessageKind {
+    Request,
+    Notification,
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Method {
@@ -30,6 +42,19 @@ impl Method {
             Self::LoginCancel => "account/login/cancel",
             Self::RateLimitsRead => "account/rateLimits/read",
         }
+    }
+
+    /// Outbound message classification, not a schema validator or permission to
+    /// perform IO. Qualified schema, handshake, IDs and coordinator policy still
+    /// gate every use. This is not a server-message dispatcher.
+    pub fn classify_client(name: &str, kind: ClientMessageKind) -> Option<Self> {
+        let method = Self::from_allowlist(name)?;
+        let expected = if method == Self::Initialized {
+            ClientMessageKind::Notification
+        } else {
+            ClientMessageKind::Request
+        };
+        (kind == expected).then_some(method)
     }
 
     /// Policy classification, not permission to invoke a method.
@@ -55,11 +80,12 @@ pub enum FrameError {
     InvalidUtf8,
     EmptyFrame,
     Truncated,
+    Closed,
     Poisoned,
 }
 
 /// Raw, untrusted frame. Debug output never contains its body.
-pub struct UntrustedFrame(Vec<u8>);
+pub struct UntrustedFrame(Zeroizing<Vec<u8>>);
 
 impl UntrustedFrame {
     pub fn as_bytes(&self) -> &[u8] {
@@ -75,10 +101,11 @@ impl fmt::Debug for UntrustedFrame {
 
 #[derive(Default)]
 pub struct FrameDecoder {
-    partial: Vec<u8>,
+    partial: Zeroizing<Vec<u8>>,
     ready: VecDeque<UntrustedFrame>,
     queued_bytes: usize,
     poisoned: bool,
+    finished: bool,
 }
 
 impl fmt::Debug for FrameDecoder {
@@ -91,6 +118,9 @@ impl FrameDecoder {
     pub fn feed(&mut self, input: &[u8]) -> Result<(), FrameError> {
         if self.poisoned {
             return Err(FrameError::Poisoned);
+        }
+        if self.finished {
+            return self.fail(FrameError::Closed);
         }
         for &byte in input {
             if byte == b'\n' {
@@ -135,15 +165,15 @@ impl FrameDecoder {
         if !self.partial.is_empty() {
             return self.fail(FrameError::Truncated);
         }
+        self.finished = true;
         Ok(())
     }
 
     fn fail(&mut self, error: FrameError) -> Result<(), FrameError> {
         self.poisoned = true;
-        self.partial.fill(0);
-        self.partial.clear();
+        self.partial.zeroize();
         for frame in &mut self.ready {
-            frame.0.fill(0);
+            frame.0.zeroize();
         }
         self.ready.clear();
         self.queued_bytes = 0;

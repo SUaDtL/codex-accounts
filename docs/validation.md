@@ -1,5 +1,47 @@
 # Validation and evidence boundary
 
+## PR #13 integration and CA-05B validation boundary
+
+This review combines CA-04D source `345533eacd4ed4ed288fa7a4580dd4e408106ede`
+with main `d64d3e31712798b1b790c70c3830c6853a67c1a2` (owner-merged PR #12).
+Only the review branch is advanced; both parents are retained in its integration
+commit. Five conflicting documentation files are reconciled with both code tracks
+preserved. macOS source drift is resolved through the scoped CA-04D interface review,
+not by declaring any native case passed.
+
+CA-05B adds strict syntax validation, zeroizing frame owners, eleven adversarial
+runtime tests and a private-constructor compile-fail doctest. All 23 inherited
+runtime tests remain. See `ca-05b-json-objects.md` and `ca-05b-dependencies.json`.
+Only internal dependency edges change; all 58 external package records are retained.
+
+Final exact-head local/hosted outcomes, tested merge/tree and inspected job logs
+are recorded on PR #13. A local targeted pass is not a combined-head or native
+qualification. Browser/keyboard/zoom/screen-reader and macOS native checks remain
+NOT RUN; three two-user helpers remain NOT RUN. Physical-power-loss and exact
+Desktop qualification are not claimed. All prior evidence below is historical.
+
+## Merged PR #12: preparation evidence (historical)
+
+PR #12 starts from owner-merged CA-04C at `455baa2eeee614586b26d419ee961475fe1ad23b`.
+See `maintainers/preparation-handoff.md` for the exact source/test surface and
+`next-pr.md` for current routing. The local combined preparation passed 143 Python
+source tests. Hosted final-head results belong to the PR; earlier green runs are
+not inherited. First protocol-only run 36126434474 passed Ubuntu tests/Clippy and
+isolated Linux but failed formatting, subsequently corrected in source.
+
+Fourteen new runtime integration tests and sixteen presentation plus nine macOS
+source checks do not close any full requirement or T-xx scenario. Browser navigation
+was blocked before load: browser layout/keyboard/zoom and screen-reader validation
+are NOT RUN. The macOS packet contains documentary facts and drift checks only;
+all native behavior and exact Desktop qualification are NOT RUN. No credential,
+helper, login, refresh, live command integration or renderer consent is introduced.
+No dependency, manifest, workflow, native implementation or qualified catalog change.
+
+The CA-04C review record and earlier records below are historical implementation
+evidence; CA-04C was subsequently merged in PR #11. They do not establish this PR's
+combined-head success or macOS behavior.
+
+
 ## CA-04D review: staging recovery and CI partitioning
 
 Base: owner-merged CA-04C / PR #11 at
@@ -10,7 +52,7 @@ measured timings are recorded on the actual review PR after log inspection, neve
 inherited from the historical run below.
 
 The candidate adds typed encrypted staging evidence and explicit staging-only repair.
-Normal cleanup remains restrictive. Five portable behaviors cover provenance/codec,
+Normal cleanup remains restrictive. Six portable behaviors cover provenance/codec,
 guards, encrypted write faults, retries and capacity. Four new named Windows cases
 add exclusive-handle/archival/refusal and five repair-process interruption points.
 All earlier native and encrypted-store fault behaviors remain mandatory.
@@ -193,8 +235,7 @@ do not prove effective official identity, process quiescence or live operation s
 ## Next eligible implementation
 
 Finish the CA-04D review and its exact-head evidence. Follow `next-pr.md` for the
-remaining native qualification gates and separately selectable CA-05A protocol
-preparation. No automatic runtime/login/UI integration or phase advancement.
+remaining native qualification gates and the CA-05B continuation. No automatic runtime/login/UI integration or phase advancement.
 
 The root entry point, session handoff and open-asks register route continuation.
 The repository implementation plan remains the only working roadmap.

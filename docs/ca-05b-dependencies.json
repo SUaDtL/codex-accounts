@@ -1,0 +1,32 @@
+{
+  "schema": "codex-accounts/dependency-review/v1",
+  "packet": "CA-05B",
+  "status": "source_reviewed",
+  "review_date": "2026-09-25",
+  "predecessor_sha256": {
+    "docs/ca-02-dependencies.json": "ceaffa36b058d90fef01df21634610938aa47755edd8b6a15f7adc7257f6cc5f",
+    "docs/ca-03b-dependencies.json": "0071f27fcdd6dd9aba04aee06e9cb75b2177be7fae7999980f05a19c31563c7d",
+    "docs/ca-03c-dependencies.json": "81d4e34248cfc53265d0e087d287c5a5a00f3b793202bedf967b4796146bdf15",
+    "docs/ca-04a-dependencies.json": "3c613e03a967aff766c1bd2e34d1a00d31cfcb02210bb360289d30ffe7efdd56",
+    "docs/ca-04b-dependencies.json": "ffdec4f5fbaecb40d4992964702e212fd5c5c112cfa3791566168f16463dfae9"
+  },
+  "lock_sha256": "1d71678254832ccec84dbd186c992c936aaa8cc9ac2d7313ffd310344b01d9fc",
+  "manifest_sha256": {
+    "Cargo.toml": "c009495e6fa55854b3befc954791c171e3ce971341afaa45a4d50086ea3f1478",
+    "crates/core/Cargo.toml": "209eb46bb52c2f4fb11dcd931e4274927be939318b5e3f5fdbe881de96b8788e",
+    "crates/platform/Cargo.toml": "1e17352db76845b523486cf2cd6c844e7fb06582e25a2df8f437f7b5675f3846",
+    "crates/runtime/Cargo.toml": "dfca21f707c06379d81e17f9973bf32deedd87ded12c0e5e28311ddac11e4eeb",
+    "crates/discovery/Cargo.toml": "79841e868232a145681c654a4d4cf5c8f8269daf0e5c3e52a5d4ca554381d01a",
+    "crates/vault/Cargo.toml": "dc5ac46edfd6dbea78ad8588cf124cbd602958d49537624cccbf207ef4cd1229",
+    "crates/vault-crypto/Cargo.toml": "d48fbb2861c50086613bbde5caa9d6971385a3a8c1664d45e9b2a4426ccc4e8f",
+    "crates/vault-storage/Cargo.toml": "fbc1b139e656239d9b230832c5aa6f7804f06c57bf64dffd15c9c46e02dd0d69"
+  },
+  "packages": [],
+  "scope": "Only runtime-to-vault (=0.1.0 local path) and runtime-to-zeroize (=1.8.2 alloc, no default features) edges. All 58 external package/version/source/checksum records and five predecessor reviews are unchanged. No native feature, build script or executable added.",
+  "source_review": {
+    "parser": "Reuses unchanged crates/vault/src/strict_json.rs: bounded deserialize visitor, decoded duplicate keys, 64 container depth, object root, full-input consumption, fixed DataError. No deserialized Values, last-key-wins map, auth-schema or identity extraction in the runtime wrapper. Parser scratch wiping remains best effort, not guaranteed.",
+    "ownership": "Zeroizing wraps partial and queued/drained frame byte owners using the already reviewed alloc-only package. No new zeroize feature or upstream package source. Same-process memory access, allocator copies and parser scratch are not excluded.",
+    "advisories": "No versions changed; prior license/source/advisory evidence remains historical. No new full upstream audit or current advisory-clear claim.",
+    "review_scope": "Source assessment for PR #13, not owner approval, native qualification or permission to execute the official runtime."
+  }
+}

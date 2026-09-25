@@ -1,12 +1,12 @@
-# Session handoff: CA-04D review
+# Session handoff: PR #13 integration and CA-05B
 
 ## Live-state checkpoint
 
-CA-04C / PR #11 is owner-merged at `455baa2eeee614586b26d419ee961475fe1ad23b`.
-Current branch: `feat/ca-04d-staging-recovery-ci`. Inspect its actual open PR, current
-head, reviews and completed checks before editing. Do not reuse the merged branch
-or reset to a bootstrap snapshot. `../next-pr.md` owns packet routing and
-`../implementation-plan.html` remains the only working roadmap.
+PR #12 is owner-merged on main at `d64d3e31712798b1b790c70c3830c6853a67c1a2`.
+PR #13 retains CA-04D from `345533eacd4ed4ed288fa7a4580dd4e408106ede`, integrates
+that main, and adds CA-05B. Reuse `feat/ca-04d-staging-recovery-ci`; inspect its
+actual head/reviews/checks. `../next-pr.md` owns routing and
+`../implementation-plan.html` is the only working roadmap.
 
 ## Existing implementation and this increment
 
@@ -26,6 +26,19 @@ in place. Reuse them rather than rebuilding foundations. CA-04D adds:
 All effects construction remains synthetic/test-only. No installation is qualified;
 no live capture/login/switch, official helper launch, renderer authority or release
 is enabled. See `../ca-04d-staging-recovery.md` and `../ci-partition-review.md`.
+
+## Joined preparation and new runtime slice
+
+PR #12's CA-05A framing, CA-06A synthetic HTML/tests and macOS documentary packet
+are retained. `preparation-handoff.md` is historical evidence for that review.
+CA-05B adds `runtime/src/json_object.rs` and adversarial tests, reusing the unchanged
+strict parser in the in-memory vault crate. Raw framing remains available and
+untrusted; the new object wrapper proves syntax only. See `../ca-05b-json-objects.md`.
+The scoped dependency review preserves all external versions and prior review bytes.
+
+The macOS v2 baseline adds the private staging-repair callback and retains its
+predecessor plus `../macos/ca-04d-interface-review.md`. It is source consistency,
+not permission for native coding or proof of macOS exclusion/Keychain behavior.
 
 ## Validation
 
@@ -52,8 +65,8 @@ two-user/unavailable-store, representative sync/path, namespace/directory-metada
 physical-power-loss and independent macOS evidence remain in `open-asks.md`.
 Successful explicit stage repair is not complete Q2 or a consumer release.
 
-CA-05A schema-independent protocol preparation is separately selectable; operational
-runtime/login still needs Q0/Q2. Do not infer that a future adapter is approved.
+CA-05A is merged; CA-05B syntax validation is in this review. Request/handshake
+correlation can be selected next; operational runtime/login still needs Q0/Q2.
 Use `parallel-work.md` only for explicit separate assignments with one integrator,
 disjoint write ownership, separate roots and final combined-head validation.
 
