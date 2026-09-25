@@ -185,10 +185,11 @@ do not prove effective official identity, process quiescence or live operation s
 
 ## Next eligible implementation
 
-CA-04B review and final-source checks are recorded on merged PR #9. CA-04C is the next bounded
-product slice: a private target-resource adapter exercised against synthetic homes
-through the existing journal. See `next-pr.md`. It has not started. Native owned
-helper construction/private stdio for the official runtime remains CA-05 work.
+CA-04B review and final-source checks are recorded on merged PR #9. CA-04C is
+implemented for review in PR #11: a private target-resource adapter exercised against
+synthetic homes through the existing journal. Resume its exact-head checks and review
+using `next-pr.md`; do not start a duplicate implementation. Native owned helper
+construction/private stdio for the official runtime remains separately gated CA-05 work.
 No fixture supplies effective home, qualified policy, user consent or authority to
 mutate live resources. Full Q0/Q1/Q2, macOS, login, UI and release remain open.
 
