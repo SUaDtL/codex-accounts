@@ -1,76 +1,55 @@
-# Session handoff: PR #13 integration and CA-05B
+# Session handoff: CA-05C/CA-05D on PR #14
 
 ## Live-state checkpoint
 
-PR #12 is owner-merged on main at `d64d3e31712798b1b790c70c3830c6853a67c1a2`.
-PR #13 retains CA-04D from `345533eacd4ed4ed288fa7a4580dd4e408106ede`, integrates
-that main, and adds CA-05B. Reuse `feat/ca-04d-staging-recovery-ci`; inspect its
-actual head/reviews/checks. `../next-pr.md` owns routing and
-`../implementation-plan.html` is the only working roadmap.
+PR #13 is owner-merged as `85aff5e32e6619d7250bf7d4dbfcffefbc016043`.
+Its final source `0ab969c4b05ffc25820f2f6c538ff510bcfa34ae` passed all six jobs in
+run 36186587877, with tree `d58404dfcf67aa3f3c9b59aae36fed708f46c5d6`.
+Those results are historical, not the current slice's proof. Resume branch
+`feat/ca-05c-session-correlation` and its live review, not the merged branch.
+`../next-pr.md` owns packet routing; `../implementation-plan.html` is the only plan.
 
-## Existing implementation and this increment
+CA-05C source `db7fcfced20c3fab1f602991fd6e56712ec016b6` passed run 36192783799.
+CA-05D extends that same open PR #14; this historical pass is not the new head's
+proof. `session_login.rs` adds bounded login IDs, early completion and a separate
+cancellation lane using the existing request allocator and sent/response checks.
+Thirty new Rust cases and four Python boundary checks join normal CI; old tests
+remain intact. Read `../ca-05d-login-sequencing.md` before extending the driver.
 
-The discovery, protected vault/immutable generations, encrypted storage, write-ahead
-coordinator, CA-04B home/process ownership and CA-04C synthetic target adapter remain
-in place. Reuse them rather than rebuilding foundations. CA-04D adds:
+## Existing code and this increment
 
-- `crates/vault-storage/src/stage_repair.rs`: private explicit repair, guard/live-state
-  validation, encrypted evidence callback and pending restoration boundary.
-- `journal.rs`, `journal_codec.rs`, `codec.rs`: typed Live/Staging evidence in CAREG003;
-  old record read compatibility and unchanged key/envelope/generation formats.
-- `native/lifecycle/target.rs` and repair/restart tests: exclusive stage handles,
-  archive-before-delete, sharing/path refusal and actual child-process interruption.
-- `tools/ci_workspace_tests.py`, `run_native_tests.py`: compiled inventory partition,
-  independent exact-name native processes, bounded concurrency and measured duration.
+Preserve the merged discovery, protected vault, immutable generations, encrypted
+storage, write-ahead coordinator, CA-04B/C native primitives and CA-04D explicit
+staging repair. CAREG003 and its prior-format compatibility are unchanged.
+The compiled workspace/native CI partition and two-worker verifier are unchanged.
+CA-05A framing, CA-05B strict JSON, CA-06A static pages and macOS source preparation
+are retained. Do not replace any of them with a second foundation or older archive.
 
-All effects construction remains synthetic/test-only. No installation is qualified;
-no live capture/login/switch, official helper launch, renderer authority or release
-is enabled. See `../ca-04d-staging-recovery.md` and `../ci-partition-review.md`.
+CA-05C adds `runtime/src/session.rs` and `session_tests.rs`: real bounded non-login
+state transitions with test-only construction, local session-owned request tickets,
+monotonic deadline checks and fixed terminal errors. They are normalized internal
+events, not parsed official messages. See `../ca-05c-session-sequencing.md` for exact
+contracts, bounds and the scheduler/clock/IO limitations. No production construction,
+credential IO, helper launch, login or qualification is enabled.
 
-## Joined preparation and new runtime slice
+## Validation and handoff
 
-PR #12's CA-05A framing, CA-06A synthetic HTML/tests and macOS documentary packet
-are retained. `preparation-handoff.md` is historical evidence for that review.
-CA-05B adds `runtime/src/json_object.rs` and adversarial tests, reusing the unchanged
-strict parser in the in-memory vault crate. Raw framing remains available and
-untrusted; the new object wrapper proves syntax only. See `../ca-05b-json-objects.md`.
-The scoped dependency review preserves all external versions and prior review bytes.
+Use pinned Rust 1.90.0, unchanged dependency review and offline builds. New runtime
+cases join ordinary debug/release suites and isolated Linux automatically. All 27
+named Windows behaviors remain separately required in each profile. A workspace
+complement alone is not complete native evidence. Three two-user helpers remain
+NOT RUN. macOS compilation is not Keychain/Desktop qualification. Browser/keyboard/
+zoom/screen-reader, exact Desktop and power-loss trials remain separate.
 
-The macOS v2 baseline adds the private staging-repair callback and retains its
-predecessor plus `../macos/ca-04d-interface-review.md`. It is source consistency,
-not permission for native coding or proof of macOS exclusion/Keychain behavior.
+The current PR owns exact final source/test merge/tree/run and inspected logs;
+`../validation.md` preserves evidence boundaries. No pass from PR #13 transfers.
+No new dependencies, workflow skip, native binding or changed shared-source digest
+is part of CA-05C. The macOS v2 baseline remains unchanged and still source-only.
 
-## Validation
-
-Use the pinned Rust 1.90.0 toolchain and reviewed locked dependencies. Run dependency
-review before acquisition, then offline formatting, both workspace partitions, both
-native profiles, doctests, optimized compilation and Clippy. Run source/Python,
-specification/model/projection/provenance and workflow-contract checks. Commands and
-expected output are in the CA-04D procedure; do not count a workspace complement as
-complete without the matching native verifier.
-
-The native inventory is 27 distinct named behaviors per profile, including all CA-04B
-and CA-04C cases and four CA-04D cases. Child entry points are harnesses. Three owner-
-run two-user helpers remain NOT RUN. The Linux isolated job is actual direct-IP
-isolation evidence; portable macOS compilation is not Keychain/Desktop qualification.
-
-`../validation.md` preserves historical exact-source evidence. The current PR records
-its final head/test merge/tree/run and inspected logs. No old green badge transfers
-to a new SHA. Do not remove tests, relax lints, fabricate receipts or add error masking.
-
-## Next action and remaining inputs
-
-Complete owner review of CA-04D after current-head checks. Exact Q0, ordinary-user/
-two-user/unavailable-store, representative sync/path, namespace/directory-metadata,
-physical-power-loss and independent macOS evidence remain in `open-asks.md`.
-Successful explicit stage repair is not complete Q2 or a consumer release.
-
-CA-05A is merged; CA-05B syntax validation is in this review. Request/handshake
-correlation can be selected next; operational runtime/login still needs Q0/Q2.
-Use `parallel-work.md` only for explicit separate assignments with one integrator,
-disjoint write ownership, separate roots and final combined-head validation.
-
-GitHub: rediscover the named write/read actions, preserve base trees, re-read the
-review branch before a non-force advance and verify the full changed-file set.
-Do not merge, reset/force-push, publish a release, change permissions or touch accounts.
-Export only sanitized outcomes. Never request or commit real authentication material.
+After review, separately selected CA-05E can implement the private synthetic
+transport-driver boundary and real deadline/IO scheduling, including bounded stderr
+discard and cancellation. Official schema, browser opener, owned-helper stop/reap,
+newest-generation capture and recovery integration remain separate reviewed work.
+Do not expose test constructors, treat normalized values as proof or change the
+unchanged native inventory. Only publish this review branch non-forced; verify the
+full combined diff and return its actual head/checks. No merge or live account action.

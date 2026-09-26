@@ -5,15 +5,16 @@ This is session routing, not an application release or a second roadmap.
 
 ## Resume from live work, not the original bootstrap
 
-Current review: **PR #13**, `feat/ca-04d-staging-recovery-ci`. It retains CA-04D
-staging repair and CI partitioning, integrates owner-merged PR #12 from main
-`d64d3e31712798b1b790c70c3830c6853a67c1a2`, and adds CA-05B strict JSON-object
-transport validation. Both histories are preserved; do not open a duplicate PR.
+Current review: **PR #14**, branch `feat/ca-05c-session-correlation`, contains
+CA-05C and CA-05D. CA-05D adds bounded login-ID correlation, completion reordering
+and cancellation on the existing sealed sequencer. Resume this PR; do not open a
+duplicate. Main remains owner-merged PR #13 at
+`85aff5e32e6619d7250bf7d4dbfcffefbc016043`. Refresh actual refs and checks.
 
-CA-05A framing, CA-06A static views and macOS documentary preparation are merged,
-not future work to recreate. Read `docs/next-pr.md` and the session handoff for
-current scope. No official schema or Desktop is qualified. All live account
-operations remain disabled; the static preview is not a finished application.
+CA-04D, CA-05A/B, CA-06A static views and macOS documentary preparation are retained.
+Production constructors, official wire schemas, helper/login/credential IO and
+qualification remain unavailable. `docs/next-pr.md` owns the bounded next step;
+old Project snapshots and an earlier head's green result do not override live work.
 
 ## Minimum reading order
 
