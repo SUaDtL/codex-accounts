@@ -1,41 +1,41 @@
-# Current packet: CA-05C non-login session sequencing
+# Current packet: CA-05D on PR #14
 
-Base: owner-merged PR #13 at `85aff5e32e6619d7250bf7d4dbfcffefbc016043`.
-Resume `feat/ca-05c-session-correlation` and its actual open PR. PR #13 is closed;
-keep this bounded continuation together in one follow-on review. Refresh refs,
-reviews and checks before another edit. No reset, force push or automatic merge.
+Resume PR #14, `feat/ca-05c-session-correlation`. CA-05C parent:
+`db7fcfced20c3fab1f602991fd6e56712ec016b6`. Main remains owner-merged PR #13,
+`85aff5e32e6619d7250bf7d4dbfcffefbc016043`. Preserve the matching branch, inspect
+actual head/reviews/checks and use non-force publication. Do not open a duplicate.
 
-## Implemented for review
+## Implemented increment
 
-`crates/runtime/src/session.rs` adds sealed normalized-event sequencing: initialize
-request/send/response then initialized-send order, session-local request correlation,
-bounded account signals, absolute 10/15/30-second deadlines, credit/lifetime caps
-and sticky terminal errors. No production constructor or official wire schema.
-Twenty-four Rust tests and four Python boundary checks join the existing CI lanes.
+CA-05D extends the existing sealed sequencer with bounded login-ID matching, early
+completion buffering and all completion/cancel orderings. The start reply uses the
+existing request deadline; interactive login has one 600-second deadline. Cancel
+has a separate fixed five-second protocol-cleanup bound and distinct acknowledgement,
+error and timeout evidence. Neither a success report nor cancel acknowledgement
+means helper exit, credential capture or committed onboarding. Constructors stay
+test-only; no actual login, official schema, URL or credential IO is introduced.
 
-Read live AGENTS.md, SPEC-PROTOCOL, S-011/S-012, F-017/F-019, T-24/T-25/T-26/T-31,
-`ca-05c-session-sequencing.md`, the session implementation/tests and CA-05B framing.
-Existing storage, recovery, native and CI-partition code is unchanged.
+Read live AGENTS.md, SPEC-PROTOCOL, F-017/F-019, S-011/S-012, T-24/T-25/T-26/T-31,
+`ca-05d-login-sequencing.md`, `runtime/src/session.rs`, `session_login.rs` and tests.
+Reuse CA-05C allocation/ownership and the existing coordinator. No dependency,
+native, shared storage, workflow or qualification-catalog changes belong here.
 
 ## Finish this review
 
-Validate pinned formatting, runtime/workspace debug and release, doctests, Clippy,
-source/Python/dependency/projection checks and every inherited hosted job, including
-all 54 exact-name Windows native executions and isolated Linux. Review the full diff
-for authority leakage, deadline resets, ID reuse and false EOF/helper-exit claims.
-Record completed results for the actual final head and tested tree on the PR.
-Old passes do not transfer. Keep native/owner omissions explicit.
+Verify pinned formatting, runtime/workspace debug and release, doctests, optimized
+build, Clippy, source/Python/dependency/projection checks and all inherited hosted
+jobs, including 54 exact-name Windows native executions and isolated Linux. Review
+cancel races, ID bounds, original-error retention, no deadline resets and no fake
+helper/credential receipts. Only the final head/tested tree and completed logs can
+establish current execution. All owner/native qualification omissions remain open.
 
 ## Next eligible slice
 
-CA-05D can add bounded login-ID correlation, early-completion ordering, cancellation
-acknowledgement and ten-minute timeout as a separately selected normalized-event
-slice. Reuse CA-05C sequencing, not a second transport or credential transaction.
-No official wire schema, browser URL or helper may be invented to make those tests
-look integrated. Version-bound decoding, independently drained private stdio,
-real scheduling/suspend behavior and owned-helper stop/reap/capture still require
-their own reviewed adapter and exact Q0/Q2 evidence.
-
-The safe collection procedures and remaining platform/owner inputs are in
-`maintainers/open-asks.md`. No native permission change, user-app force-close,
-credential operation, release or product qualification is part of this packet.
+CA-05E can implement a private synthetic transport-driver boundary: independently
+bounded input/output and discarded stderr, real scheduling/cancellation behavior,
+private reader ownership and refusal/EOF tests using owned synthetic endpoints.
+Keep production construction disabled; do not fabricate an official schema or use
+real auth. Exact version decoding, native helper ownership, stop/reap/capture and
+onboarding recovery integration require their own reviewed dependencies and Q0/Q2
+evidence. The native evidence collection steps remain in `maintainers/open-asks.md`.
+No automatic phase advance, merge, release, permission change or live account action.

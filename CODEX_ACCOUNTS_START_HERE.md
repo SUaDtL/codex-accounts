@@ -5,16 +5,16 @@ This is session routing, not an application release or a second roadmap.
 
 ## Resume from live work, not the original bootstrap
 
-PR #13 is owner-merged at `85aff5e32e6619d7250bf7d4dbfcffefbc016043`.
-Current continuation: **CA-05C**, bounded non-login handshake, request-ticket
-correlation and deadlines, on `feat/ca-05c-session-correlation`. Resolve its live PR
-and checks before editing. A merged PR cannot accept another slice; do not reopen
-or reset the old CA-04D branch.
+Current review: **PR #14**, branch `feat/ca-05c-session-correlation`, contains
+CA-05C and CA-05D. CA-05D adds bounded login-ID correlation, completion reordering
+and cancellation on the existing sealed sequencer. Resume this PR; do not open a
+duplicate. Main remains owner-merged PR #13 at
+`85aff5e32e6619d7250bf7d4dbfcffefbc016043`. Refresh actual refs and checks.
 
 CA-04D, CA-05A/B, CA-06A static views and macOS documentary preparation are retained.
-Production session construction, official wire schemas, helper/login/credential IO
-and qualification remain unavailable. Read `docs/next-pr.md` for the bounded next
-step, not an older Project snapshot or a previous PR's green result.
+Production constructors, official wire schemas, helper/login/credential IO and
+qualification remain unavailable. `docs/next-pr.md` owns the bounded next step;
+old Project snapshots and an earlier head's green result do not override live work.
 
 ## Minimum reading order
 

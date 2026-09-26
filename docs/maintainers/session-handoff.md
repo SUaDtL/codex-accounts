@@ -1,4 +1,4 @@
-# Session handoff: CA-05C continuation
+# Session handoff: CA-05C/CA-05D on PR #14
 
 ## Live-state checkpoint
 
@@ -8,6 +8,13 @@ run 36186587877, with tree `d58404dfcf67aa3f3c9b59aae36fed708f46c5d6`.
 Those results are historical, not the current slice's proof. Resume branch
 `feat/ca-05c-session-correlation` and its live review, not the merged branch.
 `../next-pr.md` owns packet routing; `../implementation-plan.html` is the only plan.
+
+CA-05C source `db7fcfced20c3fab1f602991fd6e56712ec016b6` passed run 36192783799.
+CA-05D extends that same open PR #14; this historical pass is not the new head's
+proof. `session_login.rs` adds bounded login IDs, early completion and a separate
+cancellation lane using the existing request allocator and sent/response checks.
+Thirty new Rust cases and four Python boundary checks join normal CI; old tests
+remain intact. Read `../ca-05d-login-sequencing.md` before extending the driver.
 
 ## Existing code and this increment
 
@@ -39,9 +46,10 @@ The current PR owns exact final source/test merge/tree/run and inspected logs;
 No new dependencies, workflow skip, native binding or changed shared-source digest
 is part of CA-05C. The macOS v2 baseline remains unchanged and still source-only.
 
-After this review, separately selected CA-05D can implement login-correlation and
-cancellation ordering without production schemas/IO. Operational integration still
-requires the exact Q0/Q2 and native evidence in `open-asks.md`, actual deadline
-scheduling and owned-helper reaping/capture. No fixture or caller boolean authorizes
-those operations. Publish only the observed review branch non-forced; verify every
-changed file and stop after the PR handoff. No merge, release or live account action.
+After review, separately selected CA-05E can implement the private synthetic
+transport-driver boundary and real deadline/IO scheduling, including bounded stderr
+discard and cancellation. Official schema, browser opener, owned-helper stop/reap,
+newest-generation capture and recovery integration remain separate reviewed work.
+Do not expose test constructors, treat normalized values as proof or change the
+unchanged native inventory. Only publish this review branch non-forced; verify the
+full combined diff and return its actual head/checks. No merge or live account action.

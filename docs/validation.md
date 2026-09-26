@@ -1,6 +1,21 @@
 # Validation and evidence boundary
 
-## CA-05C: current execution boundary
+## CA-05D: current PR #14 execution boundary
+
+CA-05D continues CA-05C source `db7fcfced20c3fab1f602991fd6e56712ec016b6` on
+`feat/ca-05c-session-correlation`. Thirty new deterministic Rust tests and four
+Python checks extend the actual sealed sequencer. All 58 old runtime cases remain;
+the combined runtime has 88 ordinary tests and four compile-fail doctests.
+
+Login reports, cancellation acknowledgements and deadline checks are normalized
+protocol evidence only. No constructor, real IO, helper, credential operation,
+native API, dependency, workflow or catalog authority is added. Final source,
+tested merge/tree and inspected completed checks belong to the updated PR #14.
+Its earlier CA-05C run 36192783799 is historical, not proof of this changed head.
+All inherited workspace/native checks and owner qualification omissions remain.
+See `ca-05d-login-sequencing.md` for exact behavior and cancellation limits.
+
+## CA-05C: preceding PR #14 increment
 
 Base is owner-merged PR #13 at `85aff5e32e6619d7250bf7d4dbfcffefbc016043`.
 The selected branch is `feat/ca-05c-session-correlation`; its final head, tested
@@ -262,6 +277,6 @@ do not prove effective official identity, process quiescence or live operation s
 
 ## Next eligible implementation
 
-Finish the CA-05C review and inspect its exact-head checks. `next-pr.md` selects the
+Finish the combined CA-05C/CA-05D review and inspect its exact-head checks. `next-pr.md` selects the
 bounded follow-on, not automatic runtime/login/UI integration. The single roadmap,
 root entry point, handoff and open-asks register retain the remaining gates.

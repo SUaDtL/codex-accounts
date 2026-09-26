@@ -1,5 +1,8 @@
 # CA-05C: bounded non-login session sequencing
 
+CA-05D now extends this same PR with a separately selected sealed login lane;
+see `ca-05d-login-sequencing.md`. The non-login contract below remains unchanged.
+
 ## Scope and construction
 
 Continue from owner-merged PR #13, `85aff5e32e6619d7250bf7d4dbfcffefbc016043`.

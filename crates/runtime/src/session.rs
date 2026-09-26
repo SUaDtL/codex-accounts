@@ -1,6 +1,9 @@
 //! CA-05C normalized-event sequencing, NOT wire decoding or execution authority.
 #![forbid(unsafe_code)]
 use crate::Method;
+#[path = "session_login.rs"]
+mod login;
+pub use login::{CancellationState, LoginCompletion, LoginId};
 use std::{
     fmt,
     sync::Arc,
@@ -18,6 +21,10 @@ pub enum SessionPhase {
     AwaitInitializeResponse,
     AwaitInitialized,
     Ready,
+    AwaitLoginStart,
+    AwaitLoginCompletion,
+    LoginReported,
+    LoginCancelling,
     Closed,
     Stopped,
 }
@@ -44,6 +51,10 @@ pub enum SessionError {
     TransportFailure,
     Cancelled,
     IncompleteEof,
+    LoginIdInvalid,
+    LoginTimeout,
+    LoginFailed,
+    CancellationTimeout,
     Closed,
 }
 
@@ -104,7 +115,8 @@ struct Pending {
     sent: bool,
 }
 
-/// Bounded non-login state machine. Production construction is deliberately absent
+/// Bounded session state machine with a separately selected sealed login lane.
+/// Production construction is deliberately absent
 /// until the version-bound decoder/driver, policy and native lifecycle are reviewed.
 /// Tests execute these exact transitions without inventing an official wire schema.
 ///
@@ -127,6 +139,7 @@ pub struct ProtocolSession {
     next: u64,
     pending: Vec<Pending>,
     notifications: usize,
+    login: Option<login::LoginFlow>,
 }
 impl fmt::Debug for ProtocolSession {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -152,6 +165,7 @@ impl ProtocolSession {
             next: 1,
             pending: Vec::new(),
             notifications: 0,
+            login: None,
         })
     }
     /// Snapshot only, not a current deadline check or permission to run operations.
@@ -173,10 +187,15 @@ impl ProtocolSession {
         self.phase = SessionPhase::Stopped;
         self.pending.clear();
         self.notifications = 0;
+        self.stop_login(error);
         Err(first)
     }
     fn check(&mut self, now: Instant) -> Result<(), SessionError> {
         if let Some(error) = self.failure {
+            // Cancel intent is sticky, but its shutdown deadline still advances.
+            if self.phase == SessionPhase::LoginCancelling {
+                let _ = self.check_cancellation(now);
+            }
             return Err(error);
         }
         if self.phase == SessionPhase::Closed {
@@ -187,10 +206,13 @@ impl ProtocolSession {
         }
         self.last = now;
         // Fixed precedence; all boundaries expire at equality, before an event.
-        if now >= self.total_deadline {
+        if self.login_budget_expired(now) {
+            return self.begin_cancellation(SessionError::LoginTimeout, now);
+        }
+        if !self.login_started() && now >= self.total_deadline {
             return self.stop(SessionError::TotalTimeout);
         }
-        if self.phase != SessionPhase::Ready && now >= self.initialize_deadline {
+        if self.initializing() && now >= self.initialize_deadline {
             return self.stop(SessionError::InitializationTimeout);
         }
         if self.pending.iter().any(|p| now >= p.request.deadline) {
@@ -199,17 +221,26 @@ impl ProtocolSession {
         Ok(())
     }
     /// Earliest absolute deadline. Progress, queue draining and new requests never
-    /// extend the initialization or total budget (30s INCLUDING initialization).
+    /// extend any budget. Non-login total is 30s INCLUDING initialization; the
+    /// dedicated login lane uses its separately bounded interactive deadline.
     pub fn poll(&mut self, now: Instant) -> Result<Instant, SessionError> {
         self.check(now)?;
-        let mut next = self.total_deadline;
-        if self.phase != SessionPhase::Ready {
+        let mut next = self.login_deadline().unwrap_or(self.total_deadline);
+        if self.initializing() {
             next = next.min(self.initialize_deadline);
         }
         for pending in &self.pending {
             next = next.min(pending.request.deadline);
         }
         Ok(next)
+    }
+    fn initializing(&self) -> bool {
+        matches!(
+            self.phase,
+            SessionPhase::AwaitInitialize
+                | SessionPhase::AwaitInitializeResponse
+                | SessionPhase::AwaitInitialized
+        )
     }
     pub fn reserve(&mut self, method: Method, now: Instant) -> Result<IssuedRequest, SessionError> {
         self.check(now)?;
@@ -231,12 +262,6 @@ impl ProtocolSession {
         ) {
             return self.stop(SessionError::Sequence);
         }
-        if self.pending.len() == MAX_PENDING {
-            return self.stop(SessionError::PendingLimit);
-        }
-        if self.next > MAX_ISSUED {
-            return self.stop(SessionError::IssuedLimit);
-        }
         let deadline = if method == Method::Initialize {
             self.initialize_deadline
         } else {
@@ -245,11 +270,24 @@ impl ProtocolSession {
             };
             deadline.min(self.total_deadline)
         };
+        let request = self.issue(method, deadline)?;
+        if method == Method::Initialize {
+            self.phase = SessionPhase::AwaitInitializeResponse;
+        }
+        Ok(request)
+    }
+    fn issue(&mut self, method: Method, deadline: Instant) -> Result<IssuedRequest, SessionError> {
+        if self.pending.len() == MAX_PENDING {
+            return self.stop(SessionError::PendingLimit);
+        }
+        if self.next > MAX_ISSUED {
+            return self.stop(SessionError::IssuedLimit);
+        }
         let id = RequestId {
             owner: self.owner.clone(),
             sequence: self.next,
         };
-        self.next += 1; // MAX_ISSUED checked first; no wrap, reset or re-use.
+        self.next += 1; // Lifetime cap checked first; never wrap or reuse a ticket.
         self.pending.push(Pending {
             request: IssuedRequest {
                 id: id.clone(),
@@ -258,20 +296,35 @@ impl ProtocolSession {
             },
             sent: false,
         });
-        if method == Method::Initialize {
-            self.phase = SessionPhase::AwaitInitializeResponse;
-        }
         Ok(IssuedRequest {
             id,
             method,
             deadline,
         })
     }
-    pub fn sent(&mut self, id: &RequestId, now: Instant) -> Result<(), SessionError> {
-        self.check(now)?;
+    fn matching_sent(&mut self, id: &RequestId) -> Result<usize, SessionError> {
         let Some(index) = self.pending.iter().position(|p| &p.request.id == id) else {
             return self.stop(SessionError::Correlation);
         };
+        if !self.pending[index].sent {
+            return self.stop(SessionError::UnsentResponse);
+        }
+        Ok(index)
+    }
+    pub fn sent(&mut self, id: &RequestId, now: Instant) -> Result<(), SessionError> {
+        if self.phase == SessionPhase::LoginCancelling {
+            self.check_cancellation(now)?;
+        } else {
+            self.check(now)?;
+        }
+        let Some(index) = self.pending.iter().position(|p| &p.request.id == id) else {
+            return self.stop(SessionError::Correlation);
+        };
+        if self.phase == SessionPhase::LoginCancelling
+            && self.pending[index].request.method != Method::LoginCancel
+        {
+            return self.stop(SessionError::Sequence);
+        }
         if self.pending[index].sent {
             return self.stop(SessionError::DuplicateSend);
         }
@@ -287,11 +340,12 @@ impl ProtocolSession {
         now: Instant,
     ) -> Result<Method, SessionError> {
         self.check(now)?;
-        let Some(index) = self.pending.iter().position(|p| &p.request.id == id) else {
-            return self.stop(SessionError::Correlation);
-        };
-        if !self.pending[index].sent {
-            return self.stop(SessionError::UnsentResponse);
+        let index = self.matching_sent(id)?;
+        if matches!(
+            self.pending[index].request.method,
+            Method::LoginStart | Method::LoginCancel
+        ) {
+            return self.stop(SessionError::Sequence);
         }
         if outcome == ResponseOutcome::Error {
             return self.stop(SessionError::RemoteError);
@@ -325,12 +379,16 @@ impl ProtocolSession {
         if !initializing
             && !matches!(
                 self.phase,
-                SessionPhase::AwaitInitialized | SessionPhase::Ready
+                SessionPhase::AwaitInitialized
+                    | SessionPhase::Ready
+                    | SessionPhase::AwaitLoginStart
+                    | SessionPhase::AwaitLoginCompletion
+                    | SessionPhase::LoginReported
             )
         {
             return self.stop(SessionError::Sequence);
         }
-        if self.notifications == MAX_NOTIFICATIONS {
+        if self.notifications + self.early_login_notifications() == MAX_NOTIFICATIONS {
             return self.stop(SessionError::NotificationLimit);
         }
         self.notifications += 1;
@@ -345,20 +403,36 @@ impl ProtocolSession {
         Ok(present)
     }
     pub fn unexpected_server_request(&mut self, now: Instant) -> Result<(), SessionError> {
+        if self.phase == SessionPhase::LoginCancelling {
+            self.check_cancellation(now)?;
+            return self.stop(SessionError::UnexpectedServerRequest);
+        }
         self.check(now)?;
         self.stop(SessionError::UnexpectedServerRequest)
     }
     pub fn invalid_message(&mut self, now: Instant) -> Result<(), SessionError> {
+        if self.phase == SessionPhase::LoginCancelling {
+            self.check_cancellation(now)?;
+            return self.stop(SessionError::InvalidMessage);
+        }
         self.check(now)?;
         self.stop(SessionError::InvalidMessage)
     }
     pub fn transport_failed(&mut self, now: Instant) -> Result<(), SessionError> {
+        if self.phase == SessionPhase::LoginCancelling {
+            self.check_cancellation(now)?;
+            return self.stop(SessionError::TransportFailure);
+        }
         self.check(now)?;
         self.stop(SessionError::TransportFailure)
     }
     pub fn cancel(&mut self, now: Instant) -> Result<(), SessionError> {
         self.check(now)?;
-        self.stop(SessionError::Cancelled)
+        if self.login.is_some() {
+            self.begin_cancellation(SessionError::Cancelled, now)
+        } else {
+            self.stop(SessionError::Cancelled)
+        }
     }
     /// Clean protocol EOF is not a helper-exit, credential or Desktop observation.
     /// Require handshake, all replies and all buffered signals drained first.
@@ -366,8 +440,16 @@ impl ProtocolSession {
         if self.phase == SessionPhase::Closed {
             return Ok(());
         }
+        if self.phase == SessionPhase::LoginCancelling {
+            self.check_cancellation(now)?;
+            return self.stop(SessionError::IncompleteEof);
+        }
         self.check(now)?;
-        if self.phase != SessionPhase::Ready || !self.pending.is_empty() || self.notifications != 0
+        if !matches!(
+            self.phase,
+            SessionPhase::Ready | SessionPhase::LoginReported
+        ) || !self.pending.is_empty()
+            || self.notifications != 0
         {
             return self.stop(SessionError::IncompleteEof);
         }
