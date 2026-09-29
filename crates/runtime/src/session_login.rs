@@ -414,3 +414,6 @@ impl ProtocolSession {
 #[cfg(test)]
 #[path = "session_login_tests.rs"]
 mod tests;
+
+#[path = "driver.rs"]
+mod driver;
