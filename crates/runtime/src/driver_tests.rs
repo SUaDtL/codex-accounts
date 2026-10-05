@@ -1,3 +1,4 @@
+#![forbid(unsafe_code)]
 //! Synthetic channel peers, never an official schema, OS pipe or helper process.
 use super::*;
 use std::{sync::mpsc::sync_channel, thread};
@@ -38,7 +39,15 @@ fn harness(session: &ProtocolSession) -> (TransportDriver, Peer, io::CancelHandl
         closed: false,
         first_error: None,
     };
-    (driver, Peer { input, output, error }, cancel)
+    (
+        driver,
+        Peer {
+            input,
+            output,
+            error,
+        },
+        cancel,
+    )
 }
 fn bytes(input: &[u8]) -> Zeroizing<Vec<u8>> {
     Zeroizing::new(input.to_vec())
@@ -62,7 +71,9 @@ fn ready(session: &mut ProtocolSession) {
 }
 fn initialize(session: &mut ProtocolSession, driver: &mut TransportDriver) -> IssuedRequest {
     let request = session.reserve(Method::Initialize, Instant::now()).unwrap();
-    driver.queue_request(session, &request, bytes(SAMPLE)).unwrap();
+    driver
+        .queue_request(session, &request, bytes(SAMPLE))
+        .unwrap();
     request
 }
 fn large_object(size: usize) -> Zeroizing<Vec<u8>> {
@@ -98,26 +109,45 @@ fn complete_handshake_receipts_and_eof_remain_protocol_only() {
     assert!(matches!(peer.input.try_read().unwrap(), ReadStep::Data(_)));
     assert!(peer.output.try_write(SAMPLE).unwrap());
     let frame = take_frame(&mut driver, &mut session);
-    assert_eq!(frame.bytes(&driver, &session).unwrap(), &SAMPLE[..SAMPLE.len() - 1]);
+    assert_eq!(
+        frame.bytes(&driver, &session).unwrap(),
+        &SAMPLE[..SAMPLE.len() - 1]
+    );
     // Test-only normalized mapping: these bytes are NOT an official RPC response.
-    session.response(request.id(), ResponseOutcome::Success, Instant::now()).unwrap();
+    session
+        .response(request.id(), ResponseOutcome::Success, Instant::now())
+        .unwrap();
     drop(frame);
-    driver.queue_initialized(&mut session, bytes(SAMPLE)).unwrap();
+    driver
+        .queue_initialized(&mut session, bytes(SAMPLE))
+        .unwrap();
     assert_eq!(session.phase(), SessionPhase::AwaitInitialized);
     written(&mut driver, &mut session, Method::Initialized);
     assert_eq!(session.phase(), SessionPhase::Ready);
-    let account = session.reserve(Method::AccountRead, Instant::now()).unwrap();
-    driver.queue_request(&mut session, &account, bytes(SAMPLE)).unwrap();
+    let account = session
+        .reserve(Method::AccountRead, Instant::now())
+        .unwrap();
+    driver
+        .queue_request(&mut session, &account, bytes(SAMPLE))
+        .unwrap();
     written(&mut driver, &mut session, Method::AccountRead);
     assert!(peer.output.try_write(SAMPLE).unwrap());
     let frame = take_frame(&mut driver, &mut session);
-    session.response(account.id(), ResponseOutcome::Success, Instant::now()).unwrap();
+    session
+        .response(account.id(), ResponseOutcome::Success, Instant::now())
+        .unwrap();
     drop(frame);
     driver.close_input(&mut session).unwrap();
     peer.output.close();
     peer.error.close();
-    assert!(matches!(driver.next(&mut session).unwrap(), DriverEvent::Closed));
-    assert!(matches!(driver.next(&mut session).unwrap(), DriverEvent::Closed));
+    assert!(matches!(
+        driver.next(&mut session).unwrap(),
+        DriverEvent::Closed
+    ));
+    assert!(matches!(
+        driver.next(&mut session).unwrap(),
+        DriverEvent::Closed
+    ));
     assert_eq!(session.phase(), SessionPhase::Closed);
 }
 
@@ -159,7 +189,10 @@ fn cancellation_is_not_lost_when_both_data_queues_and_wake_are_full() {
     }
     assert!(!peer.output.try_write(SAMPLE).unwrap());
     cancel.request();
-    assert_eq!(driver.next(&mut session).unwrap_err().primary, SessionError::Cancelled);
+    assert_eq!(
+        driver.next(&mut session).unwrap_err().primary,
+        SessionError::Cancelled
+    );
     assert!(matches!(peer.input.try_read().unwrap(), ReadStep::Eof));
 }
 
@@ -170,7 +203,10 @@ fn expiry_precedes_already_queued_data_and_cancel_intent() {
     assert!(peer.output.try_write(SAMPLE).unwrap());
     cancel.request();
     session.initialize_deadline = Instant::now();
-    assert_eq!(driver.next(&mut session).unwrap_err().primary, SessionError::InitializationTimeout);
+    assert_eq!(
+        driver.next(&mut session).unwrap_err().primary,
+        SessionError::InitializationTimeout
+    );
 }
 
 #[test]
@@ -189,7 +225,10 @@ fn stderr_is_independent_binary_discard_not_protocol_or_diagnostics() {
     drop(frame);
     peer.output.close();
     peer.error.close();
-    assert!(matches!(driver.next(&mut session).unwrap(), DriverEvent::Closed));
+    assert!(matches!(
+        driver.next(&mut session).unwrap(),
+        DriverEvent::Closed
+    ));
     assert_eq!(driver.stderr_total, canary.len() * io::QUEUE_CHUNKS);
 }
 
@@ -226,7 +265,10 @@ fn continuous_stderr_cannot_extend_a_protocol_deadline() {
             }
             panic!("synthetic producer did not observe closure");
         });
-        assert_eq!(driver.next(&mut session).unwrap_err().primary, SessionError::InitializationTimeout);
+        assert_eq!(
+            driver.next(&mut session).unwrap_err().primary,
+            SessionError::InitializationTimeout
+        );
         producer.join().unwrap();
     });
 }
@@ -236,14 +278,19 @@ fn blocked_input_times_out_and_never_acknowledges_a_partial_frame() {
     let mut session = ProtocolSession::for_test(Instant::now()).unwrap();
     let (mut driver, peer, _cancel) = harness(&session);
     let request = session.reserve(Method::Initialize, Instant::now()).unwrap();
-    driver.queue_request(&mut session, &request, large_object(MAX_FRAME_BYTES)).unwrap();
+    driver
+        .queue_request(&mut session, &request, large_object(MAX_FRAME_BYTES))
+        .unwrap();
     for _ in 0..io::QUEUE_CHUNKS {
         assert_eq!(driver.write_step(&mut session).unwrap(), (true, None));
     }
     assert!(!session.pending[0].sent);
     assert_eq!(driver.write_step(&mut session).unwrap(), (false, None));
     session.initialize_deadline = Instant::now() + Duration::from_millis(40);
-    assert_eq!(driver.next(&mut session).unwrap_err().primary, SessionError::InitializationTimeout);
+    assert_eq!(
+        driver.next(&mut session).unwrap_err().primary,
+        SessionError::InitializationTimeout
+    );
     let mut delivered = 0;
     while let ReadStep::Data(chunk) = peer.input.try_read().unwrap() {
         delivered += chunk.bytes.len();
@@ -259,7 +306,9 @@ fn released_input_credit_wakes_writer_and_only_full_delivery_marks_sent() {
     let request = session.reserve(Method::Initialize, Instant::now()).unwrap();
     let output = large_object(MAX_FRAME_BYTES);
     let expected = output.len();
-    driver.queue_request(&mut session, &request, output).unwrap();
+    driver
+        .queue_request(&mut session, &request, output)
+        .unwrap();
     thread::scope(|scope| {
         let consumer = scope.spawn(move || {
             let end = Instant::now() + Duration::from_secs(10);
@@ -309,7 +358,9 @@ fn outbound_shapes_reject_before_any_write_and_do_not_echo_canaries() {
         let mut session = ProtocolSession::for_test(Instant::now()).unwrap();
         let (mut driver, peer, _cancel) = harness(&session);
         let request = session.reserve(Method::Initialize, Instant::now()).unwrap();
-        let error = driver.queue_request(&mut session, &request, invalid).unwrap_err();
+        let error = driver
+            .queue_request(&mut session, &request, invalid)
+            .unwrap_err();
         assert_eq!(error.fault, DriverFault::InvalidOutput);
         assert!(matches!(peer.input.try_read().unwrap(), ReadStep::Eof));
         assert!(!format!("{driver:?} {error:?}").contains("SYNTHETIC_OUTPUT"));
@@ -321,10 +372,22 @@ fn duplicate_outbound_queue_and_early_initialized_cannot_bypass_order() {
     let mut session = ProtocolSession::for_test(Instant::now()).unwrap();
     let (mut driver, _peer, _cancel) = harness(&session);
     let request = initialize(&mut session, &mut driver);
-    assert_eq!(driver.queue_request(&mut session, &request, bytes(SAMPLE)).unwrap_err().fault, DriverFault::OutputBusy);
+    assert_eq!(
+        driver
+            .queue_request(&mut session, &request, bytes(SAMPLE))
+            .unwrap_err()
+            .fault,
+        DriverFault::OutputBusy
+    );
     let mut session = ProtocolSession::for_test(Instant::now()).unwrap();
     let (mut driver, _peer, _cancel) = harness(&session);
-    assert_eq!(driver.queue_initialized(&mut session, bytes(SAMPLE)).unwrap_err().fault, DriverFault::Binding);
+    assert_eq!(
+        driver
+            .queue_initialized(&mut session, bytes(SAMPLE))
+            .unwrap_err()
+            .fault,
+        DriverFault::Binding
+    );
 }
 
 #[test]
@@ -347,7 +410,10 @@ fn a_leased_frame_cannot_create_an_unbounded_consumer_queue() {
     let (mut driver, peer, _cancel) = harness(&session);
     assert!(peer.output.try_write(b"{}\n{}\n").unwrap());
     let frame = take_frame(&mut driver, &mut session);
-    assert_eq!(driver.next(&mut session).unwrap_err().fault, DriverFault::OutstandingFrame);
+    assert_eq!(
+        driver.next(&mut session).unwrap_err().fault,
+        DriverFault::OutstandingFrame
+    );
     assert_eq!(frame.bytes(&driver, &session), Err(DriverFault::Binding));
 }
 
@@ -379,7 +445,10 @@ fn exact_inbound_frame_limit_crosses_many_queue_refills() {
     thread::scope(|scope| {
         let producer = scope.spawn(move || send_all(&peer.output, &large_object(MAX_FRAME_BYTES)));
         let frame = take_frame(&mut driver, &mut session);
-        assert_eq!(frame.bytes(&driver, &session).unwrap().len(), MAX_FRAME_BYTES);
+        assert_eq!(
+            frame.bytes(&driver, &session).unwrap().len(),
+            MAX_FRAME_BYTES
+        );
         producer.join().unwrap();
     });
 }
@@ -389,9 +458,13 @@ fn inbound_one_byte_over_limit_is_not_truncated_into_success() {
     let mut session = ProtocolSession::for_test(Instant::now()).unwrap();
     let (mut driver, peer, _cancel) = harness(&session);
     thread::scope(|scope| {
-        let producer = scope.spawn(move || send_all(&peer.output, &large_object(MAX_FRAME_BYTES + 1)));
+        let producer =
+            scope.spawn(move || send_all(&peer.output, &large_object(MAX_FRAME_BYTES + 1)));
         let error = driver.next(&mut session).unwrap_err();
-        assert_eq!(error.fault, DriverFault::InvalidFrame(JsonFrameError::Transport(crate::FrameError::FrameTooLarge)));
+        assert_eq!(
+            error.fault,
+            DriverFault::InvalidFrame(JsonFrameError::Transport(crate::FrameError::FrameTooLarge))
+        );
         producer.join().unwrap();
     });
 }
@@ -402,7 +475,10 @@ fn truncated_stdout_eof_refuses_even_if_stderr_is_still_open() {
     let (mut driver, mut peer, _cancel) = harness(&session);
     assert!(peer.output.try_write(b"{\"synthetic\":").unwrap());
     peer.output.close();
-    assert_eq!(driver.next(&mut session).unwrap_err().fault, DriverFault::InvalidFrame(JsonFrameError::Transport(crate::FrameError::Truncated)));
+    assert_eq!(
+        driver.next(&mut session).unwrap_err().fault,
+        DriverFault::InvalidFrame(JsonFrameError::Transport(crate::FrameError::Truncated))
+    );
 }
 
 #[test]
@@ -417,7 +493,10 @@ fn one_stream_eof_never_fakes_completion_of_the_other_stream() {
             peer.error.close();
         }
         session.total_deadline = Instant::now() + Duration::from_millis(40);
-        assert_eq!(driver.next(&mut session).unwrap_err().primary, SessionError::TotalTimeout);
+        assert_eq!(
+            driver.next(&mut session).unwrap_err().primary,
+            SessionError::TotalTimeout
+        );
     }
 }
 
@@ -429,7 +508,10 @@ fn both_streams_eof_with_unanswered_request_is_incomplete() {
     written(&mut driver, &mut session, Method::Initialize);
     peer.output.close();
     peer.error.close();
-    assert_eq!(driver.next(&mut session).unwrap_err().primary, SessionError::IncompleteEof);
+    assert_eq!(
+        driver.next(&mut session).unwrap_err().primary,
+        SessionError::IncompleteEof
+    );
 }
 
 #[test]
@@ -445,12 +527,18 @@ fn foreign_session_reader_and_stream_swaps_refuse_even_without_data() {
             1 => std::mem::swap(&mut driver.stdout, &mut driver.stderr),
             _ => std::mem::swap(&mut driver.stdin, &mut foreign.stdin),
         }
-        assert_eq!(driver.next(&mut session).unwrap_err().fault, DriverFault::Binding);
+        assert_eq!(
+            driver.next(&mut session).unwrap_err().fault,
+            DriverFault::Binding
+        );
     }
     let session = ProtocolSession::for_test(Instant::now()).unwrap();
     let mut other = ProtocolSession::for_test(Instant::now()).unwrap();
     let (mut driver, _peer, _cancel) = harness(&session);
-    assert_eq!(driver.next(&mut other).unwrap_err().fault, DriverFault::Binding);
+    assert_eq!(
+        driver.next(&mut other).unwrap_err().fault,
+        DriverFault::Binding
+    );
 }
 
 #[test]
@@ -471,16 +559,29 @@ fn cancellation_drives_matching_cancel_write_and_retains_ack_as_secondary() {
     let start = session.start_login(Instant::now()).unwrap();
     session.sent(start.id(), Instant::now()).unwrap();
     let login = session.login_id_for_test(b"SYNTHETIC_LOGIN_ID").unwrap();
-    session.login_start_response(start.id(), &login, Instant::now()).unwrap();
+    session
+        .login_start_response(start.id(), &login, Instant::now())
+        .unwrap();
     let (mut driver, peer, cancel) = harness(&session);
     cancel.request();
-    assert!(matches!(driver.next(&mut session).unwrap(), DriverEvent::CancellationRequired));
-    let request = session.reserve_login_cancel(Instant::now()).unwrap().unwrap();
-    driver.queue_request(&mut session, &request, bytes(SAMPLE)).unwrap();
+    assert!(matches!(
+        driver.next(&mut session).unwrap(),
+        DriverEvent::CancellationRequired
+    ));
+    let request = session
+        .reserve_login_cancel(Instant::now())
+        .unwrap()
+        .unwrap();
+    driver
+        .queue_request(&mut session, &request, bytes(SAMPLE))
+        .unwrap();
     written(&mut driver, &mut session, Method::LoginCancel);
     assert!(peer.output.try_write(SAMPLE).unwrap());
     let frame = take_frame(&mut driver, &mut session);
-    assert_eq!(session.login_cancel_response(request.id(), ResponseOutcome::Success, Instant::now()), Err(SessionError::Cancelled));
+    assert_eq!(
+        session.login_cancel_response(request.id(), ResponseOutcome::Success, Instant::now()),
+        Err(SessionError::Cancelled)
+    );
     drop(frame);
     let error = driver.next(&mut session).unwrap_err();
     assert_eq!(error.primary, SessionError::Cancelled);
@@ -497,14 +598,24 @@ fn cancellation_wait_has_its_own_real_wakeup_and_never_resets_primary() {
     session.sent(start.id(), Instant::now()).unwrap();
     let (mut driver, _peer, cancel) = harness(&session);
     cancel.request();
-    assert!(matches!(driver.next(&mut session).unwrap(), DriverEvent::CancellationRequired));
-    assert_eq!(session.cancellation_state(), CancellationState::WaitingForId);
-    session.login.as_mut().unwrap().cancel_deadline = Some(Instant::now() + Duration::from_millis(40));
+    assert!(matches!(
+        driver.next(&mut session).unwrap(),
+        DriverEvent::CancellationRequired
+    ));
+    assert_eq!(
+        session.cancellation_state(),
+        CancellationState::WaitingForId
+    );
+    session.login.as_mut().unwrap().cancel_deadline =
+        Some(Instant::now() + Duration::from_millis(40));
     cancel.request();
     let error = driver.next(&mut session).unwrap_err();
     assert_eq!(error.primary, SessionError::Cancelled);
     assert_eq!(error.cancellation, CancellationState::TimedOut);
-    assert_eq!(error.cancellation_error, Some(SessionError::CancellationTimeout));
+    assert_eq!(
+        error.cancellation_error,
+        Some(SessionError::CancellationTimeout)
+    );
 }
 
 #[test]
@@ -515,7 +626,10 @@ fn cancelled_login_with_hostile_frame_keeps_primary_and_transport_failure_separa
     session.sent(start.id(), Instant::now()).unwrap();
     let (mut driver, peer, cancel) = harness(&session);
     cancel.request();
-    assert!(matches!(driver.next(&mut session).unwrap(), DriverEvent::CancellationRequired));
+    assert!(matches!(
+        driver.next(&mut session).unwrap(),
+        DriverEvent::CancellationRequired
+    ));
     assert!(peer.output.try_write(b"[]\n").unwrap());
     let error = driver.next(&mut session).unwrap_err();
     assert_eq!(error.primary, SessionError::Cancelled);
@@ -528,15 +642,24 @@ fn endpoint_chunk_limit_and_credit_are_exact_and_errors_are_redacted() {
     let session = ProtocolSession::for_test(Instant::now()).unwrap();
     let (mut driver, peer, _cancel) = harness(&session);
     assert_eq!(peer.output.try_write(&[]), Err(io::IoError::ChunkLimit));
-    assert_eq!(peer.output.try_write(&vec![b'x'; CHUNK_BYTES + 1]), Err(io::IoError::ChunkLimit));
+    assert_eq!(
+        peer.output.try_write(&vec![b'x'; CHUNK_BYTES + 1]),
+        Err(io::IoError::ChunkLimit)
+    );
     for _ in 0..io::QUEUE_CHUNKS {
         assert!(peer.output.try_write(&[b'x'; CHUNK_BYTES]).unwrap());
     }
     assert!(!peer.output.try_write(b"SYNTHETIC_CANARY").unwrap());
-    assert!(matches!(driver.stdout.try_read().unwrap(), ReadStep::Data(_)));
+    assert!(matches!(
+        driver.stdout.try_read().unwrap(),
+        ReadStep::Data(_)
+    ));
     assert!(peer.output.try_write(b"SYNTHETIC_CANARY").unwrap());
     driver.stdout.close();
-    assert_eq!(peer.output.try_write(b"SYNTHETIC_CANARY"), Err(io::IoError::Closed));
+    assert_eq!(
+        peer.output.try_write(b"SYNTHETIC_CANARY"),
+        Err(io::IoError::Closed)
+    );
 }
 
 #[test]
@@ -546,7 +669,10 @@ fn a_closed_driver_cannot_clear_a_later_binding_failure() {
     let (mut driver, mut peer, _cancel) = harness(&session);
     peer.output.close();
     peer.error.close();
-    assert!(matches!(driver.next(&mut session).unwrap(), DriverEvent::Closed));
+    assert!(matches!(
+        driver.next(&mut session).unwrap(),
+        DriverEvent::Closed
+    ));
     let mut foreign = ProtocolSession::for_test(Instant::now()).unwrap();
     let error = driver.next(&mut foreign).unwrap_err();
     assert_eq!(error.fault, DriverFault::Binding);

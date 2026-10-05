@@ -141,11 +141,7 @@ impl Drop for CancelHandle {
 }
 
 #[cfg(test)]
-pub(super) fn pair(
-    owner: &Arc<()>,
-    stream: Stream,
-    wake: &SyncSender<()>,
-) -> (ReadEnd, WriteEnd) {
+pub(super) fn pair(owner: &Arc<()>, stream: Stream, wake: &SyncSender<()>) -> (ReadEnd, WriteEnd) {
     let (sender, receiver) = std::sync::mpsc::sync_channel(QUEUE_CHUNKS);
     (
         ReadEnd {

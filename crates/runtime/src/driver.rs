@@ -4,7 +4,9 @@
 // This entire private boundary has no production constructor until reviewed binding.
 #![cfg_attr(not(test), allow(dead_code))]
 use super::*;
-use crate::{JsonFrameError, JsonObjectDecoder, JsonObjectFrame, MAX_FRAME_BYTES, MAX_PENDING_BYTES};
+use crate::{
+    JsonFrameError, JsonObjectDecoder, JsonObjectFrame, MAX_FRAME_BYTES, MAX_PENDING_BYTES,
+};
 use std::sync::{atomic::Ordering, mpsc::RecvTimeoutError, Weak};
 use zeroize::Zeroize;
 #[path = "driver_io.rs"]
