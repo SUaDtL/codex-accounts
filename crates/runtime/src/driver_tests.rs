@@ -305,19 +305,38 @@ fn released_input_credit_wakes_writer_and_only_full_delivery_marks_sent() {
     let (mut driver, peer, _cancel) = harness(&session);
     let request = session.reserve(Method::Initialize, Instant::now()).unwrap();
     let output = large_object(MAX_FRAME_BYTES);
-    let expected = output.len();
+    let expected = output.clone();
     driver
         .queue_request(&mut session, &request, output)
         .unwrap();
+    // Establish backpressure before any consumer runs or releases credit.
+    for _ in 0..io::QUEUE_CHUNKS {
+        assert_eq!(driver.write_step(&mut session).unwrap(), (true, None));
+        assert!(!session.pending[0].sent);
+    }
+    assert_eq!(driver.write_step(&mut session).unwrap(), (false, None));
+    while driver.wake.try_recv().is_ok() {}
+    let ReadStep::Data(first) = peer.input.try_read().unwrap() else {
+        panic!("expected queued synthetic prefix");
+    };
+    // This direct oracle also fails if a fast consumer hides the pump's wait.
+    assert_eq!(driver.wake.try_recv(), Ok(()), "released slot must wake");
+    assert_eq!(driver.write_step(&mut session).unwrap(), (true, None));
+    assert!(!session.pending[0].sent);
+    assert_eq!(driver.write_step(&mut session).unwrap(), (false, None));
+    let completion_deadline = Instant::now() + Duration::from_secs(5);
+    session.initialize_deadline = completion_deadline;
     thread::scope(|scope| {
         let consumer = scope.spawn(move || {
-            let end = Instant::now() + Duration::from_secs(10);
-            let mut delivered = 0;
+            let mut delivered = first.bytes;
             loop {
-                assert!(Instant::now() < end, "synthetic consumer deadline");
+                assert!(
+                    Instant::now() < completion_deadline,
+                    "synthetic consumer deadline"
+                );
                 match peer.input.try_read().unwrap() {
                     ReadStep::Data(chunk) => {
-                        delivered += chunk.bytes.len();
+                        delivered.extend_from_slice(&chunk.bytes);
                         if chunk.bytes.last() == Some(&b'\n') {
                             return delivered;
                         }
@@ -329,8 +348,128 @@ fn released_input_credit_wakes_writer_and_only_full_delivery_marks_sent() {
         });
         written(&mut driver, &mut session, Method::Initialize);
         assert!(session.pending[0].sent);
-        assert_eq!(consumer.join().unwrap(), expected);
+        assert!(driver.write.is_none());
+        assert!(Instant::now() < completion_deadline);
+        assert!(
+            consumer.join().unwrap().as_slice() == expected.as_slice(),
+            "synthetic output bytes changed"
+        );
     });
+}
+
+fn assert_closed_after_prefix(
+    driver: &mut TransportDriver,
+    session: &mut ProtocolSession,
+    peer: &Peer,
+    prefix: &[u8],
+    error: DriverError,
+) {
+    let mut delivered = Zeroizing::new(Vec::new());
+    for _ in 0..io::QUEUE_CHUNKS {
+        match peer.input.try_read().unwrap() {
+            ReadStep::Data(chunk) => delivered.extend_from_slice(&chunk.bytes),
+            ReadStep::Eof => break,
+            ReadStep::Pending => panic!("failed driver left input open"),
+        }
+    }
+    assert!(delivered.as_slice() == prefix, "partial bytes changed");
+    assert!(!delivered.contains(&b'\n'));
+    assert!(matches!(peer.input.try_read().unwrap(), ReadStep::Eof));
+    assert_eq!(peer.output.try_write(SAMPLE), Err(io::IoError::Closed));
+    assert_eq!(peer.error.try_write(SAMPLE), Err(io::IoError::Closed));
+    assert!(driver.write.is_none());
+    assert_eq!(session.phase(), SessionPhase::Stopped);
+    assert!(session.pending.is_empty());
+    assert_eq!(driver.next(session).unwrap_err(), error);
+}
+
+#[test]
+fn cancellation_after_partial_initialize_or_login_start_never_finishes_the_write() {
+    for method in [Method::Initialize, Method::LoginStart] {
+        let mut session = if method == Method::LoginStart {
+            ProtocolSession::for_login_test(Instant::now()).unwrap()
+        } else {
+            ProtocolSession::for_test(Instant::now()).unwrap()
+        };
+        session.total_deadline = Instant::now() + Duration::from_secs(2);
+        session.initialize_deadline = session.total_deadline;
+        let request = if method == Method::LoginStart {
+            ready(&mut session);
+            session.start_login(Instant::now()).unwrap()
+        } else {
+            session.reserve(method, Instant::now()).unwrap()
+        };
+        let (mut driver, peer, cancel) = harness(&session);
+        let output = large_object(CHUNK_BYTES * 3);
+        let prefix = bytes(&output[..CHUNK_BYTES]);
+        driver
+            .queue_request(&mut session, &request, output)
+            .unwrap();
+        assert_eq!(driver.write_step(&mut session).unwrap(), (true, None));
+        assert!(!session.pending[0].sent);
+        cancel.request();
+        let error = driver.next(&mut session).unwrap_err();
+        assert_eq!(error.fault, DriverFault::Session);
+        assert_eq!(error.primary, SessionError::Cancelled);
+        // A partial login-start has no sent receipt or authoritative login ID.
+        assert_eq!(
+            error.cancellation,
+            if method == Method::LoginStart {
+                CancellationState::Unavailable
+            } else {
+                CancellationState::NotRequested
+            }
+        );
+        assert_eq!(error.cancellation_error, None);
+        assert_eq!(session.login_report(), None);
+        cancel.request();
+        assert_closed_after_prefix(&mut driver, &mut session, &peer, &prefix, error);
+    }
+}
+
+#[test]
+fn blocked_partial_login_cancel_times_out_without_replacing_the_primary_reason() {
+    let mut session = ProtocolSession::for_login_test(Instant::now()).unwrap();
+    ready(&mut session);
+    let start = session.start_login(Instant::now()).unwrap();
+    session.sent(start.id(), Instant::now()).unwrap();
+    let login = session.login_id_for_test(b"SYNTHETIC_LOGIN_ID").unwrap();
+    session
+        .login_start_response(start.id(), &login, Instant::now())
+        .unwrap();
+    let (mut driver, peer, cancel) = harness(&session);
+    cancel.request();
+    assert!(matches!(
+        driver.next(&mut session).unwrap(),
+        DriverEvent::CancellationRequired
+    ));
+    let request = session
+        .reserve_login_cancel(Instant::now())
+        .unwrap()
+        .unwrap();
+    let output = large_object(CHUNK_BYTES * (io::QUEUE_CHUNKS + 1));
+    let prefix = bytes(&output[..CHUNK_BYTES * io::QUEUE_CHUNKS]);
+    driver
+        .queue_request(&mut session, &request, output)
+        .unwrap();
+    for _ in 0..io::QUEUE_CHUNKS {
+        assert_eq!(driver.write_step(&mut session).unwrap(), (true, None));
+        assert!(!session.pending[0].sent);
+    }
+    assert_eq!(driver.write_step(&mut session).unwrap(), (false, None));
+    session.login.as_mut().unwrap().cancel_deadline =
+        Some(Instant::now() + Duration::from_millis(40));
+    cancel.request();
+    let error = driver.next(&mut session).unwrap_err();
+    assert_eq!(error.fault, DriverFault::Session);
+    assert_eq!(error.primary, SessionError::Cancelled);
+    assert_eq!(error.cancellation, CancellationState::TimedOut);
+    assert_eq!(
+        error.cancellation_error,
+        Some(SessionError::CancellationTimeout)
+    );
+    assert_eq!(session.login_report(), None);
+    assert_closed_after_prefix(&mut driver, &mut session, &peer, &prefix, error);
 }
 
 #[test]
