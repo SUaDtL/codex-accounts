@@ -155,7 +155,7 @@ fn login_requires_sealed_lane_complete_handshake_and_no_pending_work() {
         s.start_login(t).unwrap_err(),
         SessionError::MethodUnavailable
     );
-    for step in 0..6 {
+    for step in 0..7 {
         let (mut s, t) = fresh();
         if step > 0 {
             let r = s.reserve(Method::Initialize, t).unwrap();
@@ -164,19 +164,22 @@ fn login_requires_sealed_lane_complete_handshake_and_no_pending_work() {
             }
             if step > 2 {
                 s.response(r.id(), ResponseOutcome::Success, t).unwrap();
+            }
+            if step > 3 {
                 s.initialized_sent(t).unwrap();
             }
-            if step == 3 {
+            if step == 4 {
                 s.reserve(Method::AccountRead, t).unwrap();
             }
-            if step == 4 {
+            if step == 5 {
                 s.account_notification(t).unwrap();
             }
-            if step == 5 {
+            if step == 6 {
                 s.start_login(t).unwrap();
             }
         }
         assert_eq!(s.start_login(t).unwrap_err(), SessionError::Sequence);
+        assert_stopped(&mut s, t, SessionError::Sequence);
     }
 }
 #[test]
