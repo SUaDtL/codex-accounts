@@ -33,8 +33,10 @@ established by the pinned evidence. Do not invent exact versions or native facts
 
 “Run the next PR” means resolve and execute one eligible bounded packet: inspect,
 implement, test, review, publish a normal branch and open/update its PR. At the
-2026-09-25 checkpoint CA-04B is merged through PR #9 and CA-04C is next; live state
-may supersede this. Scoped check repairs are included; unrelated features and
+2026-10-10 checkpoint CA-04A/B/C/D and CA-05A/B are merged through PR #13;
+draft PR #14 contains CA-05C/D and draft PR #15 stacks CA-05E on it. Resume the
+matching review, preserve that dependency and refresh actual refs/checks. Scoped
+check repairs are included; unrelated features and
 automatic phase advancement are not. Stop after returning the actual PR and checks.
 
 A bootstrap/documentation/parallelization request does not start implementation.

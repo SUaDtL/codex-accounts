@@ -1,12 +1,18 @@
 # Security boundary
 
-This bootstrap does not read or store authentication credentials. Its inventory
-utility reads only nominated executable files and a bounded candidate configuration
-file; arbitrary configuration values are never returned. Do not point it at a
-credential file as an executable candidate.
+The discovery utility reads registered-package metadata, nominated executable
+files and a bounded candidate configuration file. It does not open live auth,
+credential stores or history; arbitrary configuration values are never returned.
+Do not point it at a credential file as an executable candidate.
 
-No vault, key-store adapter, login or live switch exists yet. All installations
-are unqualified. Library models and synthetic tests are not native safety proofs.
+Development libraries implement authenticated encrypted vault storage, Windows
+current-user DPAPI, recovery journals and private native lifecycle/resource
+primitives. Their native tests use owned synthetic fixtures. Runtime sequencing
+and transport construction remain private or test-only, and the static UI's
+operational actions are disabled. No production login, live account switch or
+qualified Desktop adapter exists. All installations remain unqualified.
+The catalog is empty and production credential authority is disabled. A model
+result or native fixture does not establish the real Desktop contract.
 The future product's active file-mode credentials will remain plaintext; an
 encrypted inactive vault will not defeat same-user malware or administrators.
 

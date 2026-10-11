@@ -1,5 +1,32 @@
 # Validation and evidence boundary
 
+## CA-05E / PR #15: synthetic driver and test-proof follow-up
+
+Preceding head `caeb46c42efe4ff22926c3d7ac817a580556c59e`, tree
+`a1f4f8c4ed24bcf025144a283a8bdff96e9c56a8`, passed all six jobs in
+[run 37261149762](https://github.com/SUaDtL/codex-accounts/actions/runs/37261149762).
+Its tested merge `d8bfbbb896f8946aa262ae476739628ac3bb10df` has the same tree.
+Inspected logs show 172 Python passes, 242 portable Rust passes per profile,
+280 Windows workspace passes plus 27 separately named native behaviors per profile,
+and eight workspace doctests. Three owner-run two-user helpers remain NOT RUN.
+Those results do not establish execution of the subsequent changed tree.
+
+The authorized follow-up strengthens the full-queue wake/exact-byte oracle and
+adds partial output cancellation and blocked login-cancel timeout tests. Local
+debug/release each pass 118 ordinary runtime cases and five compile-fail doctests;
+the Python suite passes 171 cases with one Windows POSIX-only skip. Formatting,
+workspace/all-target Clippy, dependency/specification/workflow checks pass.
+Five isolated fault fixtures fail for the intended assertions; production runtime,
+native code, pins, workflow and compatibility catalog remain unchanged.
+
+CodeArbiter context is scaffolded but uninitialized, with host support tracked in
+[issue #950](https://github.com/arbiterForge/codeArbiter/issues/950). The owner
+authorized a logged missing-context preflight override scoped to this follow-up;
+numeric maturity/coverage is unassessed. No application qualification, security or
+exact-head hosted CI gate is waived. Final source/tree/run and completed logs must
+be checked on PR #15 after its last publication and base reconciliation.
+See `ca-05e-transport-driver.md` for the transport contract and proof limits.
+
 ## CA-05D: current PR #14 execution boundary
 
 CA-05D continues CA-05C source `db7fcfced20c3fab1f602991fd6e56712ec016b6` on
@@ -277,6 +304,6 @@ do not prove effective official identity, process quiescence or live operation s
 
 ## Next eligible implementation
 
-Finish the combined CA-05C/CA-05D review and inspect its exact-head checks. `next-pr.md` selects the
+Finish the CA-05C/D -> CA-05E review stack and inspect its exact-head checks. `next-pr.md` selects the
 bounded follow-on, not automatic runtime/login/UI integration. The single roadmap,
 root entry point, handoff and open-asks register retain the remaining gates.

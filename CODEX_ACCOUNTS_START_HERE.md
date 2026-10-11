@@ -1,17 +1,20 @@
 # Codex Accounts: start here
 
-Bootstrap revision **2.2.0** · Checkpoint **2026-09-25** · Repository **SUaDtL/codex-accounts**.
+Bootstrap revision **2.3.0** · Checkpoint **2026-10-10** · Repository **SUaDtL/codex-accounts**.
 This is session routing, not an application release or a second roadmap.
 
 ## Resume from live work, not the original bootstrap
 
-Current review: **PR #14**, branch `feat/ca-05c-session-correlation`, contains
-CA-05C and CA-05D. CA-05D adds bounded login-ID correlation, completion reordering
-and cancellation on the existing sealed sequencer. Resume this PR; do not open a
-duplicate. Main remains owner-merged PR #13 at
+Current reviews form a draft stack: **PR #14**, branch
+`feat/ca-05c-session-correlation`, contains CA-05C/D; **PR #15**, branch
+`feat/ca-05e-synthetic-driver`, adds the private synthetic transport pump on PR #14.
+Resume the matching PR; do not open a duplicate. Review order remains #14 then
+#15, with base reconciliation and fresh checks after any prerequisite merge.
+Main remains owner-merged PR #13 at
 `85aff5e32e6619d7250bf7d4dbfcffefbc016043`. Refresh actual refs and checks.
 
 CA-04D, CA-05A/B, CA-06A static views and macOS documentary preparation are retained.
+CA-05E uses owned in-memory endpoints, not native pipes or an official helper.
 Production constructors, official wire schemas, helper/login/credential IO and
 qualification remain unavailable. `docs/next-pr.md` owns the bounded next step;
 old Project snapshots and an earlier head's green result do not override live work.

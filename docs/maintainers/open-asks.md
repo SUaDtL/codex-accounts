@@ -1,6 +1,6 @@
 # Open asks and narrow blockers
 
-Checkpoint: **2026-09-25**, after CA-04B merged. These are missing evidence or owner
+Checkpoint: **2026-10-10**, with draft CA-05C/D/E reviews open. These are missing evidence or owner
 decisions, not claims that the owner promised particular hardware, accounts or
 access. None authorizes collecting secrets or changing an existing configuration.
 [The roadmap](../implementation-plan.html) owns phase gates; this register identifies
