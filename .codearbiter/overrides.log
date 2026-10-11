@@ -1,0 +1,5 @@
+# codeArbiter override log - append-only audit artifact. Never edit or delete prior lines.
+# Format: [ISO-8601] | BY: <name> <<email>> | GATE: <gate bypassed> | REASON: <reason>
+# Written only by /override. The statusline counts non-comment lines after the
+# last-checkpoint marker as "overrides since last checkpoint."
+[2026-10-11T01:55:45Z] | BY: SUaDtL@users.noreply.github.com | GATE: pr15-context-preflight | REASON: User selected a scoped missing-context preflight override for the PR 15 transport test and documentation follow-up, commit and PR update because codeArbiter issue 950 blocks contained brownfield scouts on this host. Context remains uninitialized. Verification uses existing repository AGENTS and pinned CI. Application qualification, security, test, lint, review, CI and merge gates remain intact.
