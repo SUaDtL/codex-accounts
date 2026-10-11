@@ -19,6 +19,11 @@ workspace/all-target Clippy, dependency/specification/workflow checks pass.
 Five isolated fault fixtures fail for the intended assertions; production runtime,
 native code, pins, workflow and compatibility catalog remain unchanged.
 
+An additional prerequisite review gap is closed by extending the login-order test
+at AwaitInitialized. An isolated premature-login fault passes the old assertion
+set and fails the strengthened test; the unchanged implementation passes. Test
+function counts and all production qualification boundaries remain unchanged.
+
 CodeArbiter context is scaffolded but uninitialized, with host support tracked in
 [issue #950](https://github.com/arbiterForge/codeArbiter/issues/950). The owner
 authorized a logged missing-context preflight override scoped to this follow-up;

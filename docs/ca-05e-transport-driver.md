@@ -86,6 +86,14 @@ primary reason, and input left open after failure. An initial corruption fixture
 also changed the newline and was excluded from exact-byte proof before correction.
 The ordinary unmodified fixture passes all 30 driver cases.
 
+The prerequisite review also found a missing login-specific handshake assertion.
+The follow-up extends the existing login-order test to attempt login after the
+initialize response but before the initialized notification is marked sent. It
+asserts refusal, stopped/cleared state and no login report. An isolated fault that
+allows premature login passes the preceding test and fails the strengthened test;
+the unmodified source passes. This adds proof without changing production behavior
+or the count of test functions.
+
 The sanctioned codeArbiter scaffold is present but remains uninitialized.
 [CodeArbiter #950](https://github.com/arbiterForge/codeArbiter/issues/950) records
 missing host-enforced context-scout containment. The owner explicitly selected a
