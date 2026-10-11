@@ -35,6 +35,15 @@ synthetic directories, hidden windows and owned children. These primitives do no
 identify a qualified shared-home writer set, grant consent or connect to live
 credential replacement. See [lifecycle and native checks](docs/ca-04b-lifecycle.md).
 
+CA-04C/D add synthetic target-resource operations and encrypted staging recovery.
+CA-05A/B provide bounded framing and strict JSON object validation. Draft
+[PR #14](https://github.com/SUaDtL/codex-accounts/pull/14) adds session sequencing,
+login-ID correlation and cancellation; stacked draft
+[PR #15](https://github.com/SUaDtL/codex-accounts/pull/15) adds the private synthetic
+transport pump. Its owned in-memory channels exercise real scheduling, backpressure
+and EOF handling. They are not native pipes or an official runtime adapter.
+See [the transport boundary](docs/ca-05e-transport-driver.md).
+
 All full Q0/Q1/Q2 and complete release scenarios remain open. Owner Windows 11,
 ordinary-user isolation, unavailable stores, sync-provider environments, actual
 Desktop contracts and physical-power-loss/directory-metadata qualification remain
@@ -50,8 +59,9 @@ broad history migration belongs in this product.
 New sessions: read [CODEX_ACCOUNTS_START_HERE.md](CODEX_ACCOUNTS_START_HERE.md),
 [the handoff](docs/maintainers/session-handoff.md) and [parallel-work boundaries](docs/maintainers/parallel-work.md).
 The [open-asks register](docs/maintainers/open-asks.md) separates owner evidence from
-safe implementation work. CA-04C is next at the post-CA-04B checkpoint; refresh live
-refs/open PRs before execution. The original CA-02 Project routing is superseded.
+safe implementation work. Resume the CA-05C/D and CA-05E review stack, refreshing
+live refs/open PRs before execution. PR #14 precedes PR #15. The original CA-02
+Project routing is superseded.
 
 The normative [specification](docs/local-codex-switcher-spec.html) owns behavior
 through its canonical `artifact-model`; the visible projection is checked against
@@ -78,16 +88,19 @@ python tools/spec_index.py check
 python tools/ci_contract.py
 python -m unittest discover -s tests/python -v
 cargo fmt --all -- --check
-cargo test --workspace --all-targets --no-fail-fast --locked --offline
+python tools/ci_workspace_tests.py debug
 cargo test --workspace --doc --no-fail-fast --locked --offline
 cargo build --workspace --all-targets --release --locked --offline
-cargo test --workspace --all-targets --release --no-fail-fast --locked --offline
+python tools/ci_workspace_tests.py release
 cargo clippy --workspace --all-targets --locked --offline -- -D warnings
 ```
 
 Standard GitHub-hosted Ubuntu, Windows and macOS jobs retain these blocking checks.
-Windows additionally runs `python tools/run_native_tests.py`, verifying the eleven
-named CA-04B behaviors independently in debug and release; skipped/zero tests fail.
+On Windows, the workspace verifier proves the compiled inventory partition before
+running its complement; `tools/run_native_tests.py` runs all 27 named native
+behaviors independently in debug and release. Together they cover the inventory
+without counting child harnesses as scenarios; skipped/zero native tests fail.
+The native verifier is Windows-only. Other platforms run the portable workspace.
 A separate standard Ubuntu job recompiles and runs debug/release tests, doctests
 and Clippy in a new direct-IP-isolated namespace after reviewed acquisition.
 Cargo `--offline` alone is not OS network isolation. The isolated lane does not
@@ -114,11 +127,11 @@ nominated runtime, reads live auth, writes the nominated home or qualifies a bui
 | `crates/core` | Refusal, compatibility observations and distinct outcomes |
 | `crates/platform` | Platform classification; no credential writer |
 | `crates/discovery` | Read-only inventory with a narrow native boundary |
-| `crates/runtime` | Bounded untrusted framing and method allowlist, not live RPC |
+| `crates/runtime` | Framing, strict JSON, sealed sequencing and private synthetic transport |
 | `crates/vault` | Exact-byte in-memory resource/identity/generation rules |
 | `crates/vault-crypto` | Authenticated envelopes and Windows root protection |
 | `crates/vault-storage` | Protected persistence, journal and private native lifecycle |
-| `app` | Future Tauri shell; no consumer application yet |
+| `app` | Disabled synthetic static previews; integrated Tauri shell remains pending |
 | `compatibility` | Empty catalog; no boolean enables production authority |
 | `docs` / `tools` | Specification, roadmap, scoped reviews and developer checks |
 

@@ -94,8 +94,8 @@ to report a failed observation; do not change security settings to make it pass.
    isolated A->B->A, newest-generation and failure/recovery trials. No trial is
    authorized by this read-only collection procedure.
 
-CA-02's in-place T-07 amendment and source provenance are submitted in PR #3 for
-owner review; see `spec-amendments/ca-02-t07.md`. They are not qualification records.
+CA-02's in-place T-07 amendment and source provenance were adopted through merged
+PR #3; see `spec-amendments/ca-02-t07.md`. They are not qualification records.
 Both source-level mutation gates and the empty catalog remain in force.
 
 ## Verification and rollback

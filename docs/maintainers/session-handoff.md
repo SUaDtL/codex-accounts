@@ -1,12 +1,15 @@
-# Session handoff: CA-05C/CA-05D on PR #14
+# Session handoff: CA-05C/D -> CA-05E review stack
 
 ## Live-state checkpoint
 
 PR #13 is owner-merged as `85aff5e32e6619d7250bf7d4dbfcffefbc016043`.
 Its final source `0ab969c4b05ffc25820f2f6c538ff510bcfa34ae` passed all six jobs in
 run 36186587877, with tree `d58404dfcf67aa3f3c9b59aae36fed708f46c5d6`.
-Those results are historical, not the current slice's proof. Resume branch
-`feat/ca-05c-session-correlation` and its live review, not the merged branch.
+Those results are historical, not the current slice's proof. PR #14's head is
+`e4dbe1242dd0f3238c323570dcf274fbb655c89b`; PR #15's preceding head is
+`caeb46c42efe4ff22926c3d7ac817a580556c59e` on `feat/ca-05e-synthetic-driver`.
+Resume the live stack, with PR #14 preceding PR #15 and fresh base/head checks
+after any prerequisite merge.
 `../next-pr.md` owns packet routing; `../implementation-plan.html` is the only plan.
 
 CA-05C source `db7fcfced20c3fab1f602991fd6e56712ec016b6` passed run 36192783799.
@@ -15,6 +18,13 @@ proof. `session_login.rs` adds bounded login IDs, early completion and a separat
 cancellation lane using the existing request allocator and sent/response checks.
 Thirty new Rust cases and four Python boundary checks join normal CI; old tests
 remain intact. Read `../ca-05d-login-sequencing.md` before extending the driver.
+
+CA-05E adds the private in-memory transport pump, not native pipes or an official
+helper. This follow-up fixes two test-proof gaps: full-queue release/wakeup with
+exact bytes, and cancellation/timeout after partial output. Five isolated fault
+fixtures fail for the intended reasons. Local debug and release each pass 118
+ordinary runtime cases and five compile-fail doctests. See
+`../ca-05e-transport-driver.md` for the preceding exact-head CI and current proof.
 
 ## Existing code and this increment
 
@@ -46,10 +56,18 @@ The current PR owns exact final source/test merge/tree/run and inspected logs;
 No new dependencies, workflow skip, native binding or changed shared-source digest
 is part of CA-05C. The macOS v2 baseline remains unchanged and still source-only.
 
-After review, separately selected CA-05E can implement the private synthetic
-transport-driver boundary and real deadline/IO scheduling, including bounded stderr
-discard and cancellation. Official schema, browser opener, owned-helper stop/reap,
+The codeArbiter scaffold remains uninitialized: contained context-scout support on
+this host is tracked in [codeArbiter #950](https://github.com/arbiterForge/codeArbiter/issues/950).
+The owner authorized a logged missing-context preflight override only for this
+PR's test/documentation follow-up, commit and update. No context sentinel,
+provenance or approval receipt was invented; numeric maturity/coverage is unassessed.
+The override does not waive application qualification, security or CI gates.
+
+Retain the synthetic transport boundary and real deadline/IO scheduling, including
+bounded stderr discard and cancellation. Official schema, browser opener, owned-helper stop/reap,
 newest-generation capture and recovery integration remain separate reviewed work.
 Do not expose test constructors, treat normalized values as proof or change the
 unchanged native inventory. Only publish this review branch non-forced; verify the
-full combined diff and return its actual head/checks. No merge or live account action.
+full combined diff and return its actual head/checks. The owner subsequently
+authorized merge only after completion and green gates. Production qualification
+and live account actions remain separately gated.
