@@ -17,8 +17,9 @@ def check(root: Path = ROOT) -> dict[str, int | str]:
     storage = json.loads((root / 'docs/ca-03c-dependencies.json').read_text(encoding='utf-8'))
     journal = json.loads((root / 'docs/ca-04a-dependencies.json').read_text(encoding='utf-8'))
     lifecycle = json.loads((root / 'docs/ca-04b-dependencies.json').read_text(encoding='utf-8'))
-    review = json.loads((root / 'docs/ca-05b-dependencies.json').read_text(encoding='utf-8'))
-    required = {'docs/ca-02-dependencies.json', 'docs/ca-03b-dependencies.json', 'docs/ca-03c-dependencies.json', 'docs/ca-04a-dependencies.json', 'docs/ca-04b-dependencies.json'}
+    syntax = json.loads((root / 'docs/ca-05b-dependencies.json').read_text(encoding='utf-8'))
+    review = json.loads((root / 'docs/ca-05f-dependencies.json').read_text(encoding='utf-8'))
+    required = {'docs/ca-02-dependencies.json', 'docs/ca-03b-dependencies.json', 'docs/ca-03c-dependencies.json', 'docs/ca-04a-dependencies.json', 'docs/ca-04b-dependencies.json', 'docs/ca-05b-dependencies.json'}
     if set(review['predecessor_sha256']) != required:
         raise ValueError('Prior review set changed')
     for path, expected_hash in review['predecessor_sha256'].items():
@@ -31,6 +32,8 @@ def check(root: Path = ROOT) -> dict[str, int | str]:
             or lifecycle['status'] != 'source_reviewed'
             or review['schema'] != 'codex-accounts/dependency-review/v1'
             or review['status'] != 'source_reviewed'
+            or syntax['schema'] != 'codex-accounts/dependency-review/v1'
+            or syntax['status'] != 'source_reviewed'
             or storage['schema'] != 'codex-accounts/dependency-review/v1'
             or storage['status'] != 'source_reviewed'
             or crypto['schema'] != 'codex-accounts/dependency-review/v1'
@@ -39,7 +42,7 @@ def check(root: Path = ROOT) -> dict[str, int | str]:
     if hashlib.sha256(lock_bytes).hexdigest() != review['lock_sha256']:
         raise ValueError('Reviewed lock bytes changed')
     actual_packages = [p for p in lock['package'] if 'source' in p]
-    expected_packages = inherited['packages'] + crypto['packages'] + storage['packages'] + journal['packages'] + lifecycle['packages'] + review['packages']
+    expected_packages = inherited['packages'] + crypto['packages'] + storage['packages'] + journal['packages'] + lifecycle['packages'] + syntax['packages'] + review['packages']
     keyed = lambda items: {(p['name'], p['version']): (p['source'], p['checksum']) for p in items}
     actual, expected = keyed(actual_packages), keyed(expected_packages)
     if (len(actual) != len(actual_packages) or len(expected) != len(expected_packages)
@@ -60,6 +63,8 @@ def check(root: Path = ROOT) -> dict[str, int | str]:
     if runtime.get('dependencies') != {
         'codex-accounts-vault': {'path': '../vault', 'version': '=0.1.0'},
         'zeroize': {'version': '=1.8.2', 'default-features': False, 'features': ['alloc']},
+        'serde': '=1.0.229',
+        'serde_json': '=1.0.145',
     }:
         raise ValueError('Runtime dependency boundary changed')
     return {'reviewed_packages': len(expected), 'lock_review': 'passed'}

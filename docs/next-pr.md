@@ -1,18 +1,30 @@
-# Current packet: explicit registered image observation
+# Current packet: exact runtime provenance and schema collection
 
-PRs #14, #15 and #16 are merged; current main is
-`9389c33b7bc8d41fee92f14046eebd546c5c86f2`. Continue on
-`codex/runtime-contract-observation`, preserving the existing implementation.
+PRs #14 through #18 are merged; current main is
+`b734f0c0f02010e59c736d1abc758172cd9e171b`. Continue on
+`codex/runtime-publisher-evidence`, preserving the existing implementation.
 The older review-stack instructions below are historical and do not reopen those
 PRs. [Windows storage compatibility](windows-storage-compatibility.md) records the
 current storage behavior, verification limits, owner-authorized engine workflow
-override and implemented registered-metadata boundary. The next Q0 increment adds
-one explicitly nominated package-relative executable image to that read-only
-observation. It must retain root/internal/image handles through registration and
-identity revalidation, keep declared images separate, and preserve unknown
-publisher/runtime/home/backend/policy and ancestry. No candidate execution,
-configuration/auth/history read, qualified binding or credential operation is
-enabled. Keep strict inspection and existing metadata flag refusals intact.
+override and implemented registered-metadata boundary. PR #17 added a separate
+explicitly nominated image observation; PR #18 contains native test families and
+preserves failure diagnostics without changing application behavior or deadlines.
+The current [partial Q0 record](runtime-provenance-observation.md) binds the selected
+package's image bytes to the official download and records one contained original
+`--version` result. It does not close publisher protection, effective home/policy,
+resource/lifecycle or qualification obligations.
+
+That separate collector has now passed review and one original-image invocation:
+317 JSON files / 3,590,402 bytes, exit 0 and cleanup verified. The public manifest
+pins all names/sizes/hashes and fourteen exact generated files; the reader still
+does not execute candidates. CA-05F now implements the private decoder over the
+existing driver for initialize/initialized and account/read with refreshToken:false,
+using actual required/null shapes and original reader/session/request ownership.
+Bounded strict JSON, written receipts and absolute deadlines remain intact. Next:
+managed-login/cancel/notification decoding; rate-limit decoding is a later increment, and
+production construction remains disabled. No server, login, real configuration/auth/history read,
+qualified binding or credential operation is enabled by this packet. Keep the
+shipped discovery reader's no-execution boundary and strict flag refusals intact.
 No application qualification or security gate is waived.
 See [the selected observation contract](registered-image-observation.md) and the
 updated [Q0 collection procedure](q0-qualification.md).

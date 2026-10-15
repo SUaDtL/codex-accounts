@@ -5,6 +5,12 @@ Windows 11 x64 is the proposed first lane. The hosted native test evidence is
 Windows Server 2025 x64 with synthetic resources, not the owner's installation.
 macOS remains a separate qualification lane. Linux/WSL are not product targets.
 
+The owner selected this host's registered Desktop for read-only Q0 work. The
+[2026-10-15 partial runtime record](runtime-provenance-observation.md) now includes
+public-package/image equality and a contained original-image version result.
+Those private experiments do not change this shipped reader's no-execution
+contract, qualify the installation or enable credential operations.
+
 ## Prerequisites
 
 Use an owner-controlled ordinary-user Windows x64 session. Acquire the reviewed

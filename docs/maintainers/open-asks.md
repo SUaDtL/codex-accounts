@@ -1,6 +1,6 @@
 # Open asks and narrow blockers
 
-Checkpoint: **2026-10-15**, after merged PRs #14, #15 and #16. These are missing evidence or owner
+Checkpoint: **2026-10-15**, after merged PRs #14 through #18. These are missing evidence or owner
 decisions, not claims that the owner promised particular hardware, accounts or
 access. None authorizes collecting secrets or changing an existing configuration.
 [The roadmap](../implementation-plan.html) owns phase gates; this register identifies
@@ -8,11 +8,14 @@ what to collect and what remains safe to build without it.
 
 The owner selected this Windows host's registered Desktop as the first Q0 target
 and authorized continued development under a standing engine workflow override.
-Registered metadata inspection now succeeds for package 26.1007.9446.0, with two
-declared images observed separately. It does not yet establish the bundled runtime
-role, official publisher binding, effective home/backend/policy or auth resources.
-The next read-only slice observes one explicitly nominated package image; neither
-that input nor its hash will authorize execution or credential access.
+Registered metadata and explicit nominated-image observation are implemented for
+package 26.1007.9446.0. Separate [partial runtime evidence](../runtime-provenance-observation.md)
+matches image bytes to the official download and records one contained original
+version invocation. This leaves protected ancestry, exclusive runtime selection,
+effective home/backend/policy and auth resources unresolved. A separate reviewed
+collector now pins the exact schema from one contained original invocation; native
+protocol behavior and integration remain unqualified. Neither image equality,
+version nor schema collection enables credential access.
 
 | Ask | Safe next action and expected redacted result | Blocks | Does not block |
 | --- | --- | --- | --- |

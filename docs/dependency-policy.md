@@ -1,7 +1,8 @@
 # Dependency and build boundary
 
-Rust remains pinned to 1.90.0. Core, platform classification and runtime framing
-remain dependency-free and forbid unsafe code. CA-02 adds one discovery-only crate:
+Rust remains pinned to 1.90.0. Core and platform classification remain
+dependency-free. Runtime framing reuses the reviewed vault JSON validator and
+zeroize; runtime code continues to forbid unsafe code. CA-02 adds one discovery-only crate:
 `serde_json = 1.0.145`, `toml = 0.8.23`, `windows = 0.62.2` and
 `windows-sys = 0.61.2`, with exact direct pins and a Cargo-generated lockfile.
 No Tauri/npm dependency or product network client is added.
@@ -80,6 +81,25 @@ limitations. Adjacent storage engine/codec/records/recovery and existing safe co
 restrictions remain intact; there is no blanket safety-lint exception.
 
 No owner project license is selected by recording dependency licenses.
+
+## CA-05F exact JSON dependency reuse
+
+`ca-05f-dependencies.json` adds exact direct runtime edges to serde 1.0.229 and
+serde_json 1.0.145, already transitively enabled through vault with the same
+default/std features. Cargo metadata updated only those two local edge names;
+all 58 external records, versions, checksums and six predecessor review files
+remain unchanged. No acquisition or feature expansion is needed. The checker
+still rejects unreviewed dependencies and feature changes even if a manifest hash
+is rewritten. Core/platform remain dependency-free and runtime forbids unsafe.
+
+Independent scoped review matched both cached archives and all their source
+files, MIT OR Apache-2.0 licenses and the existing build scripts. A current primary
+RustSec tree lookup at `edb58f5974b83eb8302332821cb6d389777aa351` found no package
+advisory entries for serde or serde_json; this is not cargo-audit or a complete
+graph scan. Other packages retain their historical advisory evidence. This reuse
+review does not establish decoder correctness or qualify an installation. Strict
+duplicate-key/depth checking, zeroizing retained sensitive values, fixed errors
+and payload-free Debug remain required; parser scratch is not guaranteed wiped.
 
 CI retains the existing checkout commit pin and read-only repository permissions.
 Hosted runner images and compiler downloads remain external dependencies. A clean

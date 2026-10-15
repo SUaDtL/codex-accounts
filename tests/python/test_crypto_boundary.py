@@ -1,5 +1,6 @@
 """CA-03B source boundaries and fail-closed acquisition regressions, not native proof."""
 import copy
+import hashlib
 import json
 from pathlib import Path
 import shutil
@@ -73,8 +74,8 @@ class DependencyReviewTests(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.root = Path(self.tmp.name)
-        manifest = json.loads((ROOT / 'docs/ca-05b-dependencies.json').read_text())
-        paths = list(manifest['manifest_sha256']) + list(manifest['predecessor_sha256']) + ['Cargo.lock', 'docs/ca-05b-dependencies.json']
+        manifest = json.loads((ROOT / 'docs/ca-05f-dependencies.json').read_text())
+        paths = list(manifest['manifest_sha256']) + list(manifest['predecessor_sha256']) + ['Cargo.lock', 'docs/ca-05f-dependencies.json']
         for relative in paths:
             target = self.root / relative
             target.parent.mkdir(parents=True, exist_ok=True)
@@ -82,7 +83,7 @@ class DependencyReviewTests(unittest.TestCase):
         self.review = manifest
 
     def fail_with(self, review):
-        (self.root / 'docs/ca-05b-dependencies.json').write_text(json.dumps(review))
+        (self.root / 'docs/ca-05f-dependencies.json').write_text(json.dumps(review))
         with self.assertRaises(ValueError):
             check_dependencies.check(self.root)
 
@@ -129,6 +130,27 @@ class DependencyReviewTests(unittest.TestCase):
         review = copy.deepcopy(self.review)
         review['manifest_sha256'].pop('crates/vault-crypto/Cargo.toml')
         self.fail_with(review)
+
+    def test_reused_runtime_json_features_cannot_expand_with_a_rehashed_manifest(self):
+        relative = 'crates/runtime/Cargo.toml'
+        path = self.root / relative
+        original = path.read_text()
+        for package, version, feature in [
+            ('serde', '1.0.229', 'derive'),
+            ('serde_json', '1.0.145', 'arbitrary_precision'),
+            ('serde_json', '1.0.145', 'preserve_order'),
+            ('serde_json', '1.0.145', 'raw_value'),
+            ('serde_json', '1.0.145', 'unbounded_depth'),
+        ]:
+            with self.subTest(package=package, feature=feature):
+                path.write_text(original.replace(
+                    f'{package} = "={version}"',
+                    f'{package} = {{ version = "={version}", features = ["{feature}"] }}'))
+                review = copy.deepcopy(self.review)
+                review['manifest_sha256'][relative] = hashlib.sha256(path.read_bytes()).hexdigest()
+                (self.root / 'docs/ca-05f-dependencies.json').write_text(json.dumps(review))
+                with self.assertRaisesRegex(ValueError, 'Runtime dependency boundary'):
+                    check_dependencies.check(self.root)
 
 
 if __name__ == '__main__':

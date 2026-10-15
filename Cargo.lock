@@ -87,6 +87,8 @@ name = "codex-accounts-runtime"
 version = "0.1.0"
 dependencies = [
  "codex-accounts-vault",
+ "serde",
+ "serde_json",
  "zeroize",
 ]
 

@@ -1,7 +1,10 @@
 #![forbid(unsafe_code)]
-//! Synthetic channel peers, never an official schema, OS pipe or helper process.
+//! Synthetic channel peers; nested codec tests use the pinned captured schema.
+//! No OS pipe or helper process.
 use super::*;
 use std::{sync::mpsc::sync_channel, thread};
+#[path = "codec_tests.rs"]
+mod codec_tests;
 
 const SAMPLE: &[u8] = b"{\"synthetic\":true}\n";
 

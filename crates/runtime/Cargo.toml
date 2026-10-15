@@ -8,6 +8,8 @@ publish.workspace = true
 [dependencies]
 codex-accounts-vault = { path = "../vault", version = "=0.1.0" }
 zeroize = { version = "=1.8.2", default-features = false, features = ["alloc"] }
+serde = "=1.0.229"
+serde_json = "=1.0.145"
 
 [lints]
 workspace = true

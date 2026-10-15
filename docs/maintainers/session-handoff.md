@@ -1,13 +1,24 @@
-# Session handoff: registered runtime candidate observation
+# Session handoff: registered runtime provenance and schema preparation
 
-As of 2026-10-15, PRs #14, #15 and #16 are merged into main
-`9389c33b7bc8d41fee92f14046eebd546c5c86f2`. The active branch is
-`codex/runtime-contract-observation`. Read
+As of 2026-10-15, PRs #14 through #18 are merged into main
+`b734f0c0f02010e59c736d1abc758172cd9e171b`. The active branch is
+`codex/runtime-publisher-evidence`. Read
 [the current packet](../next-pr.md) and
 [Windows storage compatibility](../windows-storage-compatibility.md) first.
 The owner authorized continued direct development outside engine approval bookkeeping;
 the audit log retains that instruction. Preserve pending engine records without
 claiming acceptance. Security, qualification and exact-head CI remain required.
+
+PR #17 preserves the reader's no-execution boundary while adding a retained,
+explicit nominated-image observation. PR #18 supervises native test process
+families and retains bounded failure output; it does not explain away the two
+earlier main restart-test failures. See the validation record for exact CI scope.
+The [local Q0 experiment](../runtime-provenance-observation.md) records public
+package/image equality and one contained original-image version result. The
+separately reviewed schema collector then admitted 317 generated files from one
+contained original invocation with exit and cleanup verified. CA-05F owns private
+handshake/account-read decoding from the pinned schema; full Q0 and production authority
+remain open. Never substitute the private experiment for a shipped adapter.
 
 The following review-stack checkpoint is historical.
 
