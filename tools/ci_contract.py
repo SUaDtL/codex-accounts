@@ -79,10 +79,16 @@ def check_contract(text: str) -> None:
         ("spec", "python3 tools/spec_index.py check"),
         ("dependency_review", "python3 tools/check_dependencies.py"),
         ("workflow_contract", "python3 tools/ci_contract.py"),
-        ("python", "python3 -m unittest discover -s tests/python -v"),
         ("source_evidence", "python3 tools/ci_source.py"),
     ]:
         command(source, identifier, value, SOURCE_IF)
+    command(source, "proof_toolchain", "rustup toolchain install 1.90.0 --profile minimal",
+            SOURCE_IF[:-3] + " && steps.dependency_review.outcome == 'success' }}")
+    command(source, "python", "python3 -m unittest discover -s tests/python -v",
+            SOURCE_IF[:-3] + " && steps.proof_toolchain.outcome == 'success' }}")
+    sequence = steps(source)
+    if not sequence.index(step(source, "dependency_review")) < sequence.index(step(source, "proof_toolchain")) < sequence.index(step(source, "python")):
+        raise ValueError("Execution-proof acquisition must follow dependency review")
     upload = step(source, "source_upload")
     required_upload = f"""uses: actions/upload-artifact@{UPLOAD} # v7.0.1, Node 24; source evidence only
         id: source_upload
@@ -154,7 +160,7 @@ def check_contract(text: str) -> None:
         raise ValueError("Host check must use the selected lane")
 
     expected_ids = {
-        source: {"checkout", "revision", "spec", "dependency_review", "workflow_contract", "python", "source_evidence", "source_upload", "assess"},
+        source: {"checkout", "revision", "spec", "dependency_review", "workflow_contract", "proof_toolchain", "python", "source_evidence", "source_upload", "assess"},
         rust: {"checkout", "revision", "dependency_review", "toolchain", "dependencies", "compiler", "host", "format", "tests", "doctests", "release_build", "release_tests", "native_tests", "clippy", "assess"},
         isolated: {"checkout", "revision", "dependency_review", "toolchain", "dependencies", "isolated", "assess"},
         "ci-gate": {"checkout", "assess"},

@@ -1,4 +1,4 @@
-"""Run and verify the named CA-04B/CA-04C Windows cases; zero filtered tests is not evidence."""
+"""Run reviewed Windows native cases; zero filtered tests is not evidence."""
 from __future__ import annotations
 
 import json
@@ -46,11 +46,33 @@ REPAIR_CASES = (
     'ca04d_staging_archive_failure_preserves_plaintext_and_live_state',
     'ca04d_repair_process_restart_boundaries',
 )
+STORAGE_PREFIX = 'native::tests::'
+STORAGE_CASES = (
+    'native_profile_fixture_parent_is_protected_and_unsafe_parents_refuse',
+    'native_fixture_final_check_refusal_preserves_owned_ancestor',
+    'native_location_mutex_recursive_and_protected_object',
+    'native_location_mutex_process_contention_release_and_abandonment',
+    'native_location_read_only_probe_refuses_denial_and_wrong_type',
+    'native_location_collision_and_replacement_refuse_before_access',
+    'native_location_failure_releases_mutex_and_retains_root_lock',
+    'native_layout_namespace_precedes_known_folder_resolution',
+    'native_layout_valid_staged_initial_anchor_reconciles_without_key_regeneration',
+    'native_layout_descriptor_drift_and_legacy_container_absence_are_lifetime_guards',
+    'native_layout_creation_failures_and_declared_pending_registry_recovery',
+    'native_layout_fresh_nested_round_trip_and_container_precedence',
+    'native_layout_reserved_collision_and_empty_container_beside_legacy_preserve_bytes',
+    'native_layout_existing_lock_is_read_only_and_lock_first',
+    'native_layout_unrecognized_initialization_and_key_matrix_are_preserved',
+    'native_layout_container_inventory_and_lifetime_changes_refuse_before_effects',
+    'native_layout_authenticated_stages_and_torn_recovery_keep_real_methods_reachable',
+    'native_layout_legacy_metadata_unsafe_grants_never_authorize_data_or_denial_fallback',
+)
 WORKERS = 2
 
 def inventory() -> tuple[tuple[str, str], ...]:
     return tuple([(PREFIX, case) for case in CASES]
-                 + [(TARGET_PREFIX, case) for case in TARGET_CASES + REPAIR_CASES])
+                 + [(TARGET_PREFIX, case) for case in TARGET_CASES + REPAIR_CASES]
+                 + [(STORAGE_PREFIX, case) for case in STORAGE_CASES])
 
 MAX_OUTPUT = 1024 * 1024
 FAULTS = {b'AccessDenied', b'Disappeared', b'Incomplete', b'Changed', b'Bound',

@@ -9,7 +9,7 @@ from typing import Any
 
 MAX_INPUT_BYTES = 65536
 REQUIRED = {
-    "source": ("checkout", "revision", "spec", "dependency_review", "workflow_contract", "python",
+    "source": ("checkout", "revision", "spec", "dependency_review", "workflow_contract", "proof_toolchain", "python",
                "source_evidence", "source_upload"),
     "rust": ("checkout", "revision", "dependency_review", "toolchain", "dependencies",
              "compiler", "host", "format", "tests", "doctests", "release_build", "release_tests", "clippy"),

@@ -17,6 +17,14 @@ def results(scope: str) -> dict:
 
 
 class CiGateTests(unittest.TestCase):
+    def test_source_gate_requires_successful_pinned_proof_toolchain(self) -> None:
+        sample = results('source')
+        sample.pop('proof_toolchain', None)
+        self.assertFalse(assess('source', json.dumps(sample)))
+        for outcome in ('failure', 'skipped', 'cancelled'):
+            sample['proof_toolchain'] = {'outcome': outcome}
+            self.assertFalse(assess('source', json.dumps(sample)))
+
     def test_exact_success_of_every_required_check_passes(self) -> None:
         for scope in REQUIRED:
             with self.subTest(scope=scope):

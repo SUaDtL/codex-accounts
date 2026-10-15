@@ -16,10 +16,10 @@ class PartitionTests(unittest.TestCase):
         return collections.Counter({('tests::ordinary','test'):2,('tests::bench','benchmark'):1})
     def test_compiled_partition_is_complete_disjoint_and_counts_duplicate_cross_crate_names(self):
         self.assertEqual(workspace.verify_partition(self.full(),self.rest()),len(native.inventory()))
-        self.assertEqual(len(native.inventory()),27)
+        self.assertEqual(len(native.inventory()),45)
         args=workspace.selectors()
         self.assertEqual(args[0],'--exact')
-        self.assertEqual(args[1::2],['--skip']*27)
+        self.assertEqual(args[1::2],['--skip']*45)
         self.assertEqual(args[2::2],[p+c for p,c in native.inventory()])
     def test_missing_duplicated_extra_or_unassigned_skips_cannot_pass(self):
         first=next(iter(self.full()))
@@ -81,6 +81,34 @@ class PartitionTests(unittest.TestCase):
             with self.assertRaises(ValueError):workspace.selectors()
 
 class IndependentNativeTests(unittest.TestCase):
+    def test_storage_inventory_preserves_legacy_cases_and_runs_each_new_case(self):
+        from tools import windows_test_proof as proof
+        inherited = ([(native.PREFIX, name) for name in native.CASES]
+                     + [(native.TARGET_PREFIX, name)
+                        for name in native.TARGET_CASES + native.REPAIR_CASES])
+        self.assertEqual(len(inherited), 27)
+        added = [('native::tests::', name.removeprefix('native::tests::'))
+                 for name in ((proof.FIXTURE_CASE, proof.FIXTURE_REFUSAL_CASE)
+                              + proof.LOCATION_CASES + proof.PROFILE_LEGACY_CASES)]
+        self.assertEqual(len(added), 18)
+        self.assertEqual(native.inventory(), tuple(inherited + added))
+        self.assertEqual(len(set(native.inventory())), 45)
+        for prefix, name in added:
+            for profile in ('debug', 'release'):
+                command = native.case_command(profile, prefix, name)
+                self.assertIn(prefix + name, command)
+                self.assertIn('--exact', command)
+                self.assertIn('--test-threads=1', command)
+                output = (f'test {prefix}{name} ... ok\n'
+                          'test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; '
+                          '0 filtered out; finished in 0.00s\n').encode()
+                native.verify(output, 0, (name,), prefix=prefix)
+                for wrong in (b'', output + output,
+                              output.replace(b' ... ok', b' ... ignored'),
+                              output.replace(b' ... ok', b' ... FAILED')):
+                    with self.assertRaises(ValueError):
+                        native.verify(wrong, 0, (name,), prefix=prefix)
+
     def test_failed_case_is_not_retried_and_other_cases_still_execute(self):
         seen=[]
         def case(profile,prefix,name):
