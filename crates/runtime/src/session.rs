@@ -370,7 +370,11 @@ impl ProtocolSession {
     /// payload/identity data. Early signals after initialize is sent are bounded and
     /// may be drained without completing a request or extending any deadline.
     pub fn account_notification(&mut self, now: Instant) -> Result<(), SessionError> {
-        self.check(now)?;
+        if self.phase == SessionPhase::LoginCancelling {
+            self.check_cancellation(now)?;
+        } else {
+            self.check(now)?;
+        }
         let initializing = self.phase == SessionPhase::AwaitInitializeResponse
             && self
                 .pending
@@ -384,6 +388,7 @@ impl ProtocolSession {
                     | SessionPhase::AwaitLoginStart
                     | SessionPhase::AwaitLoginCompletion
                     | SessionPhase::LoginReported
+                    | SessionPhase::LoginCancelling
             )
         {
             return self.stop(SessionError::Sequence);

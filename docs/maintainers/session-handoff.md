@@ -1,8 +1,8 @@
-# Session handoff: registered runtime provenance and schema preparation
+# Session handoff: CA-05G managed-login codec
 
-As of 2026-10-15, PRs #14 through #18 are merged into main
-`b734f0c0f02010e59c736d1abc758172cd9e171b`. The active branch is
-`codex/runtime-publisher-evidence`. Read
+As of 2026-10-15, PRs #14 through #19 are merged into main
+`e75ef1618984f1eac79cb7d28d0ae6410353a26c`. The active branch is
+`codex/managed-login-codec`. Read
 [the current packet](../next-pr.md) and
 [Windows storage compatibility](../windows-storage-compatibility.md) first.
 The owner authorized continued direct development outside engine approval bookkeeping;
@@ -19,6 +19,12 @@ separately reviewed schema collector then admitted 317 generated files from one
 contained original invocation with exit and cleanup verified. CA-05F owns private
 handshake/account-read decoding from the pinned schema; full Q0 and production authority
 remain open. Never substitute the private experiment for a shipped adapter.
+
+PR #19 and its post-merge CI are green on the same tested tree. CA-05G now extends
+only the private wire codec and a bounded cancellation-notification transition;
+the native helper, credential integration and production constructors remain
+unavailable. Preserve the existing driver/session rather than adding another
+sequencer. Final evidence belongs to CA-05G's own head and completed checks.
 
 The following review-stack checkpoint is historical.
 

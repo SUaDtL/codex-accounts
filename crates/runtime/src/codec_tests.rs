@@ -3,6 +3,8 @@
 use super::super::codec::{AccountPresence, Codec, CodecEvent};
 use super::super::codec::{RUNTIME_IMAGE_SHA256, RUNTIME_VERSION, SCHEMA_MANIFEST_SHA256};
 use super::*;
+#[path = "codec_login_tests.rs"]
+mod managed;
 
 const INIT: &str = r#"{"codexHome":"C:\\SYNTHETIC_HOME","platformFamily":"windows","platformOs":"windows","userAgent":"SYNTHETIC_AGENT"}"#;
 fn bind() -> (
@@ -180,7 +182,7 @@ fn codec_envelopes_reject_unknown_ids_methods_requests_and_remote_errors() {
         r#"{"id":1.0,"result":{}}"#,
         r#"{"id":true,"result":{}}"#,
         r#"{"id":1,"method":"command/exec","params":{"SYNTHETIC":"SECRET"}}"#,
-        r#"{"method":"account/updated","params":{}}"#,
+        r#"{"method":"future/notification","params":{}}"#,
         r#"{"id":1,"result":{},"error":{"code":1,"message":"SYNTHETIC"}}"#,
         r#"{"id":1,"error":{"code":1,"message":"SYNTHETIC"}}"#,
         r#"{"id":1,"error":"SYNTHETIC"}"#,
@@ -204,7 +206,7 @@ fn codec_envelopes_reject_unknown_ids_methods_requests_and_remote_errors() {
 fn codec_notifications_and_server_requests_have_distinct_fixed_refusals() {
     for (raw, expected) in [
         (
-            r#"{"method":"account/updated","params":{}}"#,
+            r#"{"method":"future/notification","params":{}}"#,
             SessionError::MethodUnavailable,
         ),
         (
@@ -367,7 +369,7 @@ fn codec_binding_constants_pin_the_actual_collected_runtime_and_manifest() {
     );
     assert_eq!(
         SCHEMA_MANIFEST_SHA256,
-        "d4aa245f05067c9db7cb0917b7584d10f91a5429a03dd0953d5eaa15faa7bda4"
+        "8a371a4eef9b1f58797e0704e798fe8c9899c35d4264285f4554d18b4540f7b2"
     );
 }
 

@@ -1,8 +1,8 @@
-# Current packet: exact runtime provenance and schema collection
+# Current packet: CA-05G managed-login/cancellation wire codec
 
-PRs #14 through #18 are merged; current main is
-`b734f0c0f02010e59c736d1abc758172cd9e171b`. Continue on
-`codex/runtime-publisher-evidence`, preserving the existing implementation.
+PRs #14 through #19 are merged; current main is
+`e75ef1618984f1eac79cb7d28d0ae6410353a26c`. Continue on
+`codex/managed-login-codec`, preserving the existing implementation.
 The older review-stack instructions below are historical and do not reopen those
 PRs. [Windows storage compatibility](windows-storage-compatibility.md) records the
 current storage behavior, verification limits, owner-authorized engine workflow
@@ -16,16 +16,29 @@ resource/lifecycle or qualification obligations.
 
 That separate collector has now passed review and one original-image invocation:
 317 JSON files / 3,590,402 bytes, exit 0 and cleanup verified. The public manifest
-pins all names/sizes/hashes and fourteen exact generated files; the reader still
+pins all names/sizes/hashes. CA-05F published fourteen exact generated files; CA-05G
+adds five files from that same admitted collection, with a new selection pin and
+the unchanged complete inventory. The reader still
 does not execute candidates. CA-05F now implements the private decoder over the
 existing driver for initialize/initialized and account/read with refreshToken:false,
 using actual required/null shapes and original reader/session/request ownership.
-Bounded strict JSON, written receipts and absolute deadlines remain intact. Next:
-managed-login/cancel/notification decoding; rate-limit decoding is a later increment, and
-production construction remains disabled. No server, login, real configuration/auth/history read,
+Bounded strict JSON, written receipts and absolute deadlines remain intact.
+
+CA-05G extends that private codec for fixed managed ChatGPT start/cancel requests
+and matching login-completed/account-updated notifications. Use the existing
+specialized login sequencer, exact decoded IDs and bounded early-completion queue.
+Cancellation acknowledgements retain their exact status and original failure;
+they never prove helper exit. During cancellation, a schema-valid account-change
+signal may consume existing shared notification credit without changing phase,
+primary error or the fixed deadline. Expiry/quota and late-event tests are required.
+Late start replies during cancellation must discard the URL. Notification
+emittedAtMs is informational, never clock authority. Rate-limit decoding remains
+a later increment and production construction stays disabled. No actual server,
+login, real configuration/auth/history read,
 qualified binding or credential operation is enabled by this packet. Keep the
 shipped discovery reader's no-execution boundary and strict flag refusals intact.
 No application qualification or security gate is waived.
+See the [implemented CA-05G boundary and verification](ca-05g-managed-login-codec.md).
 See [the selected observation contract](registered-image-observation.md) and the
 updated [Q0 collection procedure](q0-qualification.md).
 

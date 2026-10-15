@@ -1,6 +1,38 @@
 # Validation and evidence boundary
 
-## CA-05F: pinned schema and private codec candidate
+## CA-05G: managed-login wire codec candidate
+
+The [private managed-login codec](ca-05g-managed-login-codec.md) adds sixteen
+actual-driver test groups and one session cancellation-notification regression.
+Fresh local runtime debug/release each pass 152 ordinary tests and five
+compile-fail doctests. The full Python suite runs 232 tests with one existing
+POSIX-only skip on Windows. Formatting, strict workspace/all-target Clippy and
+schema/spec/dependency/workflow checks pass. Independent security and
+coverage/schema reviews found no actionable issue; all nineteen schema exports
+were independently compared against the original admitted collection.
+
+Two isolated safeguard-removal controls fail their intended assertions, then
+are restored. Cancellation without intent has a failing-before/passing-after
+category regression. Final combined-head hosted CI remains required. No local
+result establishes application qualification or transfers to a later source.
+The inherited native cases, process-supervision proof, deadlines, no-retry rule,
+dependency graph and empty compatibility catalog are unchanged.
+Both local Windows workspace profiles pass their complete/disjoint 328-case
+complement of the 382 compiled cases; all 54 isolated native cases still require
+hosted execution in each profile. Workspace doctests and the optimized all-target
+build also pass. The staged-file secret scan reports zero findings.
+
+## Merged CA-05F / PR #19: pinned schema and private codec
+
+PR #19 merged as `e75ef1618984f1eac79cb7d28d0ae6410353a26c`. Reviewed source
+`7803f2789332427013658cf960f8478bcaff5659`, tested merge
+`d6b11f463dce901018272a8518f52cbef4bb5acf` and actual merge share tree
+`586d7c94ed89eec312a543849056aa6e7289e5a8`. All six jobs passed in
+[PR run 38790391915](https://github.com/SUaDtL/codex-accounts/actions/runs/38790391915)
+and [post-merge main run 38792671825](https://github.com/SUaDtL/codex-accounts/actions/runs/38792671825).
+Both inspected Windows logs prove all 108 native executions, all 17 new codec
+cases per profile, 365=311+54 complete/disjoint compiled partitions per profile
+and twelve supervisor tests including four actual Windows fixture methods.
 
 The reviewed original-image collector admitted 317 JSON files / 3,590,402 bytes
 with exit 0, signaled parent, empty job, completed drains and successful profile
@@ -25,7 +57,7 @@ without weakening either guard; the full suite then passed. The two earlier
 schema-checker findings, Python 3.11 junction fallback and CLI traceback exposure,
 have reviewed fixes and passing owned-junction/fixed-output regressions.
 
-Final exact-head hosted checks remain required. The 54 native case identities per
+These exact-head results belong to PR #19; CA-05G must obtain fresh checks. The 54 native case identities per
 profile, supervisor proof, deadlines and no-retry behavior are unchanged. No
 catalog entry, production constructor, native helper, login, credential IO or
 completed Q0-Q5 acceptance follows from this candidate.

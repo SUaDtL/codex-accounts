@@ -1,6 +1,34 @@
 //! Deterministic synthetic normalized events. No runtime, filesystem or credentials.
 #![forbid(unsafe_code)]
 use super::*;
+#[test]
+fn cancellation_account_signal_keeps_primary_phase_deadline_and_shared_quota() {
+    let (mut s, t, _) = waiting();
+    s.cancel(t).unwrap_err();
+    let deadline = s.poll_cancellation(t).unwrap();
+    for _ in 0..MAX_NOTIFICATIONS {
+        s.account_notification(t).unwrap();
+        assert_eq!(s.phase(), SessionPhase::LoginCancelling);
+        assert_eq!(s.failure(), Some(SessionError::Cancelled));
+        assert_eq!(s.poll_cancellation(t).unwrap(), deadline);
+    }
+    assert_eq!(s.account_notification(t), Err(SessionError::Cancelled));
+    assert_eq!(
+        s.cancellation_error(),
+        Some(SessionError::NotificationLimit)
+    );
+    let (mut s, t, _) = waiting();
+    s.cancel(t).unwrap_err();
+    assert_eq!(
+        s.account_notification(t + ProtocolSession::CANCELLATION_BUDGET),
+        Err(SessionError::Cancelled)
+    );
+    assert_eq!(
+        s.cancellation_error(),
+        Some(SessionError::CancellationTimeout)
+    );
+    assert_eq!(s.pending_notifications(), 0);
+}
 fn fresh() -> (ProtocolSession, Instant) {
     let now = Instant::now();
     (ProtocolSession::for_login_test(now).unwrap(), now)

@@ -1,5 +1,8 @@
 # CA-05F: exact-schema handshake and account-read codec
 
+Merged in [PR #19](https://github.com/SUaDtL/codex-accounts/pull/19); its exact
+source/tree and passing PR/post-merge CI are in [validation](validation.md).
+
 The [partial Q0 observation](runtime-provenance-observation.md) collected the
 schema from the original registered runtime, `codex-cli 0.162.0-alpha.17.2`.
 The public subset keeps fourteen generated files byte-for-byte and pins all
@@ -60,7 +63,8 @@ combined suite retained explicit unsafe prohibitions and exact dependency maps.
 The additive [dependency review](ca-05f-dependencies.json) preserves all 58 external
 packages, features and six predecessor review files.
 
-Final combined-head hosted checks must pass before merge. No actual server/RPC,
+PR #19 passed final combined-head hosted checks before merge. A later increment
+must obtain its own checks. No actual server/RPC,
 helper, native pipe, login, credentials, browser action, compatibility record or
 production constructor is introduced. Next: extend the same codec for the actual
 managed-login/cancel/notification schemas, then separately reviewed native helper
