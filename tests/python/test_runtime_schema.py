@@ -27,7 +27,7 @@ class RuntimeSchemaTests(unittest.TestCase):
 
     def test_collected_subset_and_codec_bind_to_the_exact_original_image(self):
         result = schema.check(self.root)
-        self.assertEqual(result['included_schema_files'], 14)
+        self.assertEqual(result['included_schema_files'], 19)
         self.assertEqual(result['generated_schema_files'], 317)
         self.assertIs(result['qualified'], False)
 

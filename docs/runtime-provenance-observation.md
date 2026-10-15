@@ -90,11 +90,17 @@ remained in force. An independent review found a directory alternate-stream gap;
 owned regressions reproduced it and the fix passed review before this invocation.
 
 The [public manifest](../crates/runtime/schema/codex-0.162.0-alpha.17.2/manifest.json)
-retains all generated names/sizes/hashes and collection-source hashes. Fourteen
-unmodified generated files, 435,254 bytes, are included for envelope, handshake
-and account-read decoding. Other generated files remain private and are represented
-by metadata only. Manifest SHA-256 is
+retains all generated names/sizes/hashes and collection-source hashes. CA-05F
+included fourteen unmodified generated files, 435,254 bytes, for envelope,
+handshake and account-read decoding. Its selection manifest SHA-256 was
 `d4aa245f05067c9db7cb0917b7584d10f91a5429a03dd0953d5eaa15faa7bda4`.
+CA-05G adds five exact managed-login/cancellation schema files from the same
+captured output: nineteen selected files / 443,473 bytes. Its manifest records the
+prior selection hash and has SHA-256
+`8a371a4eef9b1f58797e0704e798fe8c9899c35d4264285f4554d18b4540f7b2`.
+The original collection, executable binding and every generated-file hash remain
+unchanged; no new runtime invocation occurred. Omitted files remain private and
+are represented by metadata only.
 The full sorted inventory digest is
 `c3e7117ed29452428cc712b4fcea4ac9d1f3a4e65ae50ce27448665fed3db937`.
 The original collector entrypoint source SHA-256 was

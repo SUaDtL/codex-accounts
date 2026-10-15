@@ -3,12 +3,15 @@
 #![forbid(unsafe_code)]
 use super::*;
 use serde::de::{self, Deserialize, DeserializeSeed, IgnoredAny, MapAccess, Visitor};
+#[path = "codec_login.rs"]
+mod managed;
+pub(super) use managed::{CancelStatus, Presence};
 
 pub(super) const RUNTIME_VERSION: &str = "0.162.0-alpha.17.2";
 pub(super) const RUNTIME_IMAGE_SHA256: &str =
     "e98c516f1c8935789aabe9122ee7e05ec4c3efd1ba6acf179242e031c495b99e";
 pub(super) const SCHEMA_MANIFEST_SHA256: &str =
-    "d4aa245f05067c9db7cb0917b7584d10f91a5429a03dd0953d5eaa15faa7bda4";
+    "8a371a4eef9b1f58797e0704e798fe8c9899c35d4264285f4554d18b4540f7b2";
 const TEXT_LIMIT: usize = 4096;
 
 /// Retained untrusted text has a zeroizing owner and no payload diagnostics.
@@ -266,7 +269,7 @@ impl<'de> Deserialize<'de> for RemoteError {
 }
 struct Envelope {
     id: Option<u64>,
-    method: bool,
+    method: Option<Secret>,
     result: bool,
     error: bool,
 }
@@ -279,8 +282,8 @@ impl<'de> Deserialize<'de> for Envelope {
                 f.write_str("response envelope")
             }
             fn visit_map<A: MapAccess<'de>>(self, mut map: A) -> Result<Self::Value, A::Error> {
-                let (mut id, mut result, mut error, mut method, mut params) =
-                    (None, None, None, None, None);
+                let (mut id, mut result, mut error, mut method, mut params, mut emitted) =
+                    (None, None, None, None, None, None);
                 while let Some(key) = map.next_key::<Secret>()? {
                     match key.as_str() {
                         "id" => unique(&mut id, map.next_value::<u64>()?)?,
@@ -288,6 +291,7 @@ impl<'de> Deserialize<'de> for Envelope {
                         "error" => unique(&mut error, map.next_value::<RemoteError>()?)?,
                         "method" => unique(&mut method, map.next_value::<Secret>()?)?,
                         "params" => unique(&mut params, map.next_value::<IgnoredAny>()?)?,
+                        "emittedAtMs" => unique(&mut emitted, map.next_value::<i64>()?)?,
                         _ => return Err(invalid()),
                     }
                 }
@@ -297,9 +301,20 @@ impl<'de> Deserialize<'de> for Envelope {
                 if params.is_some() && method.is_none() {
                     return Err(invalid());
                 }
+                if emitted.is_some()
+                    && (method.is_none() || id.is_some() || result.is_some() || error.is_some())
+                {
+                    return Err(invalid());
+                }
+                if method.is_some()
+                    && id.is_none()
+                    && (params.is_none() || result.is_some() || error.is_some())
+                {
+                    return Err(invalid());
+                }
                 Ok(Envelope {
                     id,
-                    method: method.is_some(),
+                    method,
                     result: result.is_some(),
                     error: error.is_some(),
                 })
@@ -311,6 +326,22 @@ impl<'de> Deserialize<'de> for Envelope {
 pub(super) enum CodecEvent {
     Initialized(InitializeObservation),
     Account(AccountObservation),
+    LoginStarted {
+        auth_url: Secret,
+    },
+    CancellationReady,
+    CancellationProgress,
+    LoginCompletionBuffered,
+    LoginCompletion {
+        outcome: LoginCompletion,
+        error: Presence<Secret>,
+        onboarding: Presence<&'static str>,
+    },
+    AccountUpdated(managed::AccountUpdate),
+    CancellationAcknowledged {
+        status: CancelStatus,
+        primary: SessionError,
+    },
 }
 impl fmt::Debug for CodecEvent {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -444,13 +475,11 @@ impl Codec {
             .map_err(|_| driver.fail(session, DriverFault::Binding))?;
         let envelope: Envelope = serde_json::from_slice(bytes)
             .map_err(|_| self.fail(session, driver, SessionError::InvalidMessage))?;
-        if envelope.method {
-            let reason = if envelope.id.is_some() {
-                SessionError::UnexpectedServerRequest
-            } else {
-                SessionError::MethodUnavailable
-            };
-            return Err(self.fail(session, driver, reason));
+        if let Some(method) = &envelope.method {
+            if envelope.id.is_some() {
+                return Err(self.fail(session, driver, SessionError::UnexpectedServerRequest));
+            }
+            return self.notification(session, driver, bytes, method.as_str());
         }
         if envelope.result == envelope.error {
             return Err(self.fail(session, driver, SessionError::InvalidMessage));
@@ -470,11 +499,25 @@ impl Codec {
         if !pending.sent {
             return Err(self.fail(session, driver, SessionError::UnsentResponse));
         }
-        if !matches!(method, Method::Initialize | Method::AccountRead) {
+        if !matches!(
+            method,
+            Method::Initialize | Method::AccountRead | Method::LoginStart | Method::LoginCancel
+        ) {
             return Err(self.fail(session, driver, SessionError::MethodUnavailable));
         }
         if envelope.error {
+            if method == Method::LoginStart {
+                let _ = session.login_start_error(&id, Instant::now());
+                return Err(driver.fail(session, DriverFault::Session));
+            }
+            if method == Method::LoginCancel {
+                let _ = session.login_cancel_response(&id, ResponseOutcome::Error, Instant::now());
+                return Err(driver.fail(session, DriverFault::Session));
+            }
             return Err(self.fail(session, driver, SessionError::RemoteError));
+        }
+        if matches!(method, Method::LoginStart | Method::LoginCancel) {
+            return self.login_response(session, driver, bytes, &id, method);
         }
         let mut decoder = serde_json::Deserializer::from_slice(bytes);
         let event = ResponseSeed(method)

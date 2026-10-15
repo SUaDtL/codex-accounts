@@ -1,14 +1,15 @@
 # Codex Accounts: start here
 
-Bootstrap revision **2.4.0** · Checkpoint **2026-10-15** · Repository **SUaDtL/codex-accounts**.
+Bootstrap revision **2.5.0** · Checkpoint **2026-10-15** · Repository **SUaDtL/codex-accounts**.
 This is session routing, not an application release or a second roadmap.
 
 ## Resume from live work, not the original bootstrap
 
-PRs **#14** through **#18** are merged. Main is
-`b734f0c0f02010e59c736d1abc758172cd9e171b`, including the private synthetic
+PRs **#14** through **#19** are merged. Main is
+`e75ef1618984f1eac79cb7d28d0ae6410353a26c`, including the private synthetic
 transport driver, guarded Windows storage, explicit registered-image observation
-and native-test process supervision. Continue on `codex/runtime-publisher-evidence`;
+native-test process supervision and the pinned CA-05F handshake/account-read
+codec. Continue CA-05G on `codex/managed-login-codec`;
 do not reopen the historical review stack. Refresh actual refs and checks.
 The owner authorized the same standing engine workflow override for this next
 increment; application security, qualification and CI remain required.
@@ -18,7 +19,8 @@ CA-05E uses owned in-memory endpoints, not native pipes or an official helper.
 Production constructors, native helper/login/credential IO and qualification
 remain unavailable. Contained original-image version and schema experiments now
 pin `codex-cli 0.162.0-alpha.17.2`; the private CA-05F decoder uses its actual
-handshake/account-read shapes. This [partial evidence](docs/runtime-provenance-observation.md)
+handshake/account-read shapes. The next private codec increment adds managed
+login/cancel/notification decoding with the existing sequencer. This [partial evidence](docs/runtime-provenance-observation.md)
 does not qualify an adapter. `docs/next-pr.md` owns the bounded next step;
 old Project snapshots and an earlier head's green result do not override live work.
 
