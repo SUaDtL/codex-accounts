@@ -61,6 +61,27 @@ history, launch candidates, request login, stop processes or change configuratio
 The older Python inventory is a legacy synthetic developer aid, not an alternate
 native discovery or authorization path. Use this native entry point for Q0.
 
+## Explicit registered metadata observations
+
+The Windows compatibility reader adds a separate partial observation mode:
+
+```powershell
+.\target\debug\codex-accounts-discovery.exe --candidate $id --registered-metadata
+```
+
+Use the explicit opaque ID from the sanitized inventory. This mode rejects
+`--candidate-home` and `--runtime-relative`. It reads only the selected registered
+root's bounded manifest and declared executable images, retaining handles and
+checking registration and identities again. It never reads configuration,
+credentials or history, and never executes an image. Default strict inspection
+keeps its existing ancestor checks and typed refusals.
+
+The partial report explicitly leaves outer ancestry, modification protection,
+publisher binding, runtime role and effective home/backend/policy unestablished.
+Each declared image remains a separate unqualified observation. A successful
+metadata read is useful Q0 input, not completed Q0 or authority to run an image,
+read credentials or add a compatibility record.
+
 ## Expected redacted result
 
 A completed report always has `qualified: false` and

@@ -1,4 +1,4 @@
-"""Run and verify the named CA-04B/CA-04C Windows cases; zero filtered tests is not evidence."""
+"""Run reviewed Windows native cases; zero filtered tests is not evidence."""
 from __future__ import annotations
 
 import json
@@ -46,11 +46,41 @@ REPAIR_CASES = (
     'ca04d_staging_archive_failure_preserves_plaintext_and_live_state',
     'ca04d_repair_process_restart_boundaries',
 )
+STORAGE_PREFIX = 'native::tests::'
+STORAGE_CASES = (
+    'native_profile_fixture_parent_is_protected_and_unsafe_parents_refuse',
+    'native_fixture_final_check_refusal_preserves_owned_ancestor',
+    'native_location_mutex_recursive_and_protected_object',
+    'native_location_mutex_process_contention_release_and_abandonment',
+    'native_location_read_only_probe_refuses_denial_and_wrong_type',
+    'native_location_collision_and_replacement_refuse_before_access',
+    'native_location_failure_releases_mutex_and_retains_root_lock',
+    'native_layout_namespace_precedes_known_folder_resolution',
+    'native_layout_valid_staged_initial_anchor_reconciles_without_key_regeneration',
+    'native_layout_descriptor_drift_and_legacy_container_absence_are_lifetime_guards',
+    'native_layout_creation_failures_and_declared_pending_registry_recovery',
+    'native_layout_fresh_nested_round_trip_and_container_precedence',
+    'native_layout_reserved_collision_and_empty_container_beside_legacy_preserve_bytes',
+    'native_layout_existing_lock_is_read_only_and_lock_first',
+    'native_layout_unrecognized_initialization_and_key_matrix_are_preserved',
+    'native_layout_container_inventory_and_lifetime_changes_refuse_before_effects',
+    'native_layout_authenticated_stages_and_torn_recovery_keep_real_methods_reachable',
+    'native_layout_legacy_metadata_unsafe_grants_never_authorize_data_or_denial_fallback',
+)
+DISCOVERY_CASES = (
+    ('native::tests::', 'native_registered_root_retains_internal_handles_without_outer_observation'),
+    ('windows_reader::tests::', 'native_registered_metadata_observes_each_declared_image_without_sensitive_reads'),
+    ('windows_reader::tests::', 'native_registered_metadata_refuses_manifest_mismatch_limits_and_external_paths'),
+    ('windows_reader::tests::', 'native_registered_metadata_refuses_sharing_hardlinks_and_registration_drift'),
+    ('windows_reader::tests::', 'native_registered_metadata_retains_manifest_root_and_images_through_reobservation'),
+    ('windows_reader::tests::', 'native_registered_metadata_accepts_one_utf8_bom_and_refuses_invalid_prefixes'),
+)
 WORKERS = 2
 
 def inventory() -> tuple[tuple[str, str], ...]:
     return tuple([(PREFIX, case) for case in CASES]
-                 + [(TARGET_PREFIX, case) for case in TARGET_CASES + REPAIR_CASES])
+                 + [(TARGET_PREFIX, case) for case in TARGET_CASES + REPAIR_CASES]
+                 + [(STORAGE_PREFIX, case) for case in STORAGE_CASES]) + DISCOVERY_CASES
 
 MAX_OUTPUT = 1024 * 1024
 FAULTS = {b'AccessDenied', b'Disappeared', b'Incomplete', b'Changed', b'Bound',
@@ -84,7 +114,9 @@ def verify(output: bytes, returncode: int, cases: tuple[str, ...] = CASES, *, pr
 def case_command(profile: str, prefix: str, case: str) -> list[str]:
     if profile not in {'debug', 'release'} or (prefix, case) not in inventory():
         raise ValueError('Unreviewed native invocation')
-    command = ['cargo', 'test', '-p', 'codex-accounts-vault-storage', '--lib']
+    package = ('codex-accounts-discovery' if (prefix, case) in DISCOVERY_CASES
+               else 'codex-accounts-vault-storage')
+    command = ['cargo', 'test', '-p', package, '--lib']
     if profile == 'release':
         command += ['--release']
     return command + ['--locked', '--offline', prefix + case, '--', '--exact',
@@ -117,7 +149,8 @@ def run_case(profile: str, prefix: str, case: str) -> dict:
 
 def run_profile(profile: str) -> bool:
     # Build once before parallel Cargo invocations to avoid concurrent cold builds.
-    command = ['cargo', 'test', '-p', 'codex-accounts-vault-storage', '--lib',
+    command = ['cargo', 'test', '-p', 'codex-accounts-vault-storage',
+               '-p', 'codex-accounts-discovery', '--lib',
                '--no-run', '--locked', '--offline']
     if profile == 'release':
         command += ['--release']
@@ -130,11 +163,13 @@ def run_profile(profile: str) -> bool:
     except (OSError, subprocess.SubprocessError):
         return False
     failed = False
-    # Start costly restarts first. Two cases maximum; never share mutable fixtures.
+    # Restart suites already fan out to four owned fixture workers internally.
+    # Run them alone under the SAME per-case deadline, then use two workers for
+    # ordinary cases. Avoid multiplying disk-heavy restart fanout across suites.
     cases = sorted(inventory(), key=lambda item: ('restart' not in item[1], item[1]))
     with ThreadPoolExecutor(max_workers=WORKERS) as executor:
-        futures = [executor.submit(run_case, profile, prefix, case) for prefix, case in cases]
-        for future in as_completed(futures):
+        def collect(future):
+            nonlocal failed
             try:
                 record = future.result()
                 print(json.dumps(record), flush=True)
@@ -143,6 +178,13 @@ def run_profile(profile: str) -> bool:
                 # Infrastructure exceptions remain failure; finish collecting
                 # independent cases without exporting arbitrary exception text.
                 failed = True
+        for prefix, case in cases:
+            if 'process_restart' in case:
+                collect(executor.submit(run_case, profile, prefix, case))
+        futures = [executor.submit(run_case, profile, prefix, case)
+                   for prefix, case in cases if 'process_restart' not in case]
+        for future in as_completed(futures):
+            collect(future)
     return not failed
 
 

@@ -4,6 +4,8 @@ from contextlib import redirect_stdout
 import io
 import json
 import subprocess
+import threading
+import time
 import unittest
 from unittest.mock import patch
 from tools import ci_workspace_tests as workspace, run_native_tests as native
@@ -16,10 +18,10 @@ class PartitionTests(unittest.TestCase):
         return collections.Counter({('tests::ordinary','test'):2,('tests::bench','benchmark'):1})
     def test_compiled_partition_is_complete_disjoint_and_counts_duplicate_cross_crate_names(self):
         self.assertEqual(workspace.verify_partition(self.full(),self.rest()),len(native.inventory()))
-        self.assertEqual(len(native.inventory()),27)
+        self.assertEqual(len(native.inventory()),51)
         args=workspace.selectors()
         self.assertEqual(args[0],'--exact')
-        self.assertEqual(args[1::2],['--skip']*27)
+        self.assertEqual(args[1::2],['--skip']*51)
         self.assertEqual(args[2::2],[p+c for p,c in native.inventory()])
     def test_missing_duplicated_extra_or_unassigned_skips_cannot_pass(self):
         first=next(iter(self.full()))
@@ -81,6 +83,79 @@ class PartitionTests(unittest.TestCase):
             with self.assertRaises(ValueError):workspace.selectors()
 
 class IndependentNativeTests(unittest.TestCase):
+    def test_internally_parallel_restart_cases_do_not_overlap_other_cases(self):
+        lock = threading.Lock()
+        active = []
+        overlaps = []
+        seen = []
+        def case(profile, prefix, name):
+            with lock:
+                if active and ('process_restart' in name
+                               or any('process_restart' in other for other in active)):
+                    overlaps.append(name)
+                active.append(name)
+                seen.append((prefix, name))
+            time.sleep(0.01)
+            with lock:
+                active.remove(name)
+            return {'native_case': name, 'result': 'passed'}
+        with patch.object(native.subprocess, 'run', return_value=subprocess.CompletedProcess([], 0)), \
+             patch.object(native, 'run_case', side_effect=case), redirect_stdout(io.StringIO()):
+            self.assertTrue(native.run_profile('debug'))
+        self.assertEqual(overlaps, [])
+        self.assertCountEqual(seen, native.inventory())
+        self.assertEqual(len(seen), len(set(seen)))
+        self.assertEqual(native.WORKERS, 2)
+
+    def test_storage_inventory_preserves_legacy_cases_and_runs_each_new_case(self):
+        from tools import windows_test_proof as proof
+        inherited = ([(native.PREFIX, name) for name in native.CASES]
+                     + [(native.TARGET_PREFIX, name)
+                        for name in native.TARGET_CASES + native.REPAIR_CASES])
+        self.assertEqual(len(inherited), 27)
+        added = [('native::tests::', name.removeprefix('native::tests::'))
+                 for name in ((proof.FIXTURE_CASE, proof.FIXTURE_REFUSAL_CASE)
+                              + proof.LOCATION_CASES + proof.PROFILE_LEGACY_CASES)]
+        self.assertEqual(len(added), 18)
+        self.assertEqual(native.inventory()[:45], tuple(inherited + added))
+        self.assertEqual(len(set(native.inventory())), 51)
+        for prefix, name in added:
+            for profile in ('debug', 'release'):
+                command = native.case_command(profile, prefix, name)
+                self.assertIn(prefix + name, command)
+                self.assertIn('--exact', command)
+                self.assertIn('--test-threads=1', command)
+                output = (f'test {prefix}{name} ... ok\n'
+                          'test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; '
+                          '0 filtered out; finished in 0.00s\n').encode()
+                native.verify(output, 0, (name,), prefix=prefix)
+                for wrong in (b'', output + output,
+                              output.replace(b' ... ok', b' ... ignored'),
+                              output.replace(b' ... ok', b' ... FAILED')):
+                    with self.assertRaises(ValueError):
+                        native.verify(wrong, 0, (name,), prefix=prefix)
+
+    def test_registered_metadata_inventory_uses_the_discovery_crate(self):
+        expected = (
+            ('native::tests::', 'native_registered_root_retains_internal_handles_without_outer_observation'),
+            ('windows_reader::tests::', 'native_registered_metadata_observes_each_declared_image_without_sensitive_reads'),
+            ('windows_reader::tests::', 'native_registered_metadata_refuses_manifest_mismatch_limits_and_external_paths'),
+            ('windows_reader::tests::', 'native_registered_metadata_refuses_sharing_hardlinks_and_registration_drift'),
+            ('windows_reader::tests::', 'native_registered_metadata_retains_manifest_root_and_images_through_reobservation'),
+            ('windows_reader::tests::', 'native_registered_metadata_accepts_one_utf8_bom_and_refuses_invalid_prefixes'),
+        )
+        self.assertEqual(native.inventory()[45:], expected)
+        for prefix, name in expected:
+            for profile in ('debug', 'release'):
+                command = native.case_command(profile, prefix, name)
+                self.assertEqual(command[command.index('-p') + 1], 'codex-accounts-discovery')
+                self.assertIn(prefix + name, command)
+                self.assertIn('--exact', command)
+                self.assertIn('--test-threads=1', command)
+        prefix, name = native.inventory()[0]
+        self.assertEqual(native.case_command('debug', prefix, name)[3],
+                         'codex-accounts-vault-storage')
+
     def test_failed_case_is_not_retried_and_other_cases_still_execute(self):
         seen=[]
         def case(profile,prefix,name):

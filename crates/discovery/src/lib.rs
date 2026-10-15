@@ -81,6 +81,7 @@ pub struct Options {
     pub(crate) runtime_relative: Option<String>,
     pub(crate) home: Option<PathBuf>,
     pub(crate) local: bool,
+    pub(crate) registered_metadata: bool,
 }
 impl fmt::Debug for Options {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -121,10 +122,18 @@ pub fn options(args: impl IntoIterator<Item = String>) -> Result<Options, ReadEr
                 result.home = Some(value.into());
             }
             "--show-local-paths" => result.local = true,
+            "--registered-metadata" => result.registered_metadata = true,
             _ => return Err(ReadError::Usage),
         }
     }
     if result.candidate.is_none() && (result.runtime_relative.is_some() || result.home.is_some()) {
+        return Err(ReadError::Usage);
+    }
+    if result.registered_metadata
+        && (result.candidate.is_none()
+            || result.runtime_relative.is_some()
+            || result.home.is_some())
+    {
         return Err(ReadError::Usage);
     }
     Ok(result)
@@ -408,6 +417,31 @@ mod tests {
             "a".repeat(64)
         ])
         .is_err());
+    }
+
+    #[test]
+    fn registered_metadata_requires_explicit_candidate_and_no_home_or_runtime() {
+        let id = "a".repeat(64);
+        assert!(options(vec![
+            "--candidate".into(),
+            id.clone(),
+            "--registered-metadata".into()
+        ])
+        .is_ok());
+        assert!(options(vec!["--registered-metadata".into()]).is_err());
+        for (flag, value) in [
+            ("--candidate-home", "SYNTHETIC_CANARY"),
+            ("--runtime-relative", "synthetic.exe"),
+        ] {
+            assert!(options(vec![
+                "--candidate".into(),
+                id.clone(),
+                "--registered-metadata".into(),
+                flag.into(),
+                value.into()
+            ])
+            .is_err());
+        }
     }
 
     #[test]

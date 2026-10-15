@@ -64,11 +64,15 @@ class JsonRuntimeBoundaryTests(unittest.TestCase):
             paths = [*macos_preparation.SOURCES, macos_preparation.PACKET,
                      'docs/macos/interface-baseline-ca04c.json',
                      'docs/macos/ca-04d-interface-review.md']
+            for path in ('docs/macos/interface-baseline.json',
+                         'docs/macos/windows-storage-interface-review.json'):
+                if (ROOT / path).is_file() and path not in paths:
+                    paths.append(path)
             for path in paths:
                 (root / path).parent.mkdir(parents=True, exist_ok=True)
                 shutil.copyfile(ROOT / path, root / path)
             macos_preparation.check(root)
-            for path in paths[-2:]:
+            for path in paths[len(macos_preparation.SOURCES) + 1:]:
                 original = (root / path).read_bytes()
                 (root / path).write_bytes(original + b'changed')
                 with self.assertRaisesRegex(macos_preparation.PacketError, 'provenance changed'):

@@ -40,9 +40,14 @@ jobs:
         id: workflow_contract
         if: ${{ !cancelled() && steps.checkout.outcome == 'success' }}
         run: python3 tools/ci_contract.py
+      # The frozen-home adversary compiles and executes an actual offline Rust fixture.
+      - name: Acquire pinned toolchain for execution-proof tests
+        id: proof_toolchain
+        if: ${{ !cancelled() && steps.checkout.outcome == 'success' && steps.dependency_review.outcome == 'success' }}
+        run: rustup toolchain install 1.90.0 --profile minimal
       - name: Run developer-tool tests
         id: python
-        if: ${{ !cancelled() && steps.checkout.outcome == 'success' }}
+        if: ${{ !cancelled() && steps.checkout.outcome == 'success' && steps.proof_toolchain.outcome == 'success' }}
         run: python3 -m unittest discover -s tests/python -v
       - name: Retain exact committed source evidence
         id: source_evidence

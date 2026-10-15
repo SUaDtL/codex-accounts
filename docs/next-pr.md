@@ -1,4 +1,15 @@
-# Current packet: CA-05E review follow-up on PR #15
+# Current packet: Windows storage and registered metadata
+
+PRs #14 and #15 are merged; current main is
+`727eb6154db1d7c4ac5db10a7868b6271cd55293`. Continue on
+`codex/windows-compatibility-plan`, preserving the existing implementation.
+The older review-stack instructions below are historical and do not reopen those
+PRs. [Windows storage compatibility](windows-storage-compatibility.md) records the
+current storage behavior, verification limits, owner-authorized engine workflow
+override and next registered-metadata boundary. No application qualification or
+security gate is waived.
+
+## Historical CA-05E review packet
 
 Resume PR #15, `feat/ca-05e-synthetic-driver`, stacked on PR #14,
 `feat/ca-05c-session-correlation`. The prerequisite head is

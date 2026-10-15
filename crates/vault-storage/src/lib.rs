@@ -46,6 +46,9 @@ pub use journal::{OperationStatus, SwitchPhase};
 // Observation logic is not a qualified installation or a public effect executor.
 #[allow(dead_code)]
 mod lifecycle_model;
+// Pure placement policy only; native probing and guarded access are separate.
+#[allow(dead_code)]
+mod storage_location;
 
 use codex_accounts_vault::{CredentialSet, Identity, Resource, ResourceId, ResourceShape};
 pub use codex_accounts_vault::{GenerationId, ProfileId};

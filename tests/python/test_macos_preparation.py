@@ -1,7 +1,11 @@
 """Preparation records cannot launder Windows results into macOS evidence."""
 from copy import deepcopy
+from contextlib import contextmanager
 import hashlib
 import json
+from pathlib import Path
+import shutil
+import tempfile
 import unittest
 from tools import macos_preparation as m
 
@@ -10,6 +14,128 @@ class MacosPreparationTests(unittest.TestCase):
     def setUp(self):
         self.record = m.decode((m.ROOT / m.PACKET).read_bytes())
         self.sources = {name: (m.ROOT / name).read_bytes() for name in m.SOURCES}
+        for name in ('docs/macos/interface-baseline.json',
+                     'docs/macos/interface-baseline-ca04c.json',
+                     'docs/macos/ca-04d-interface-review.md',
+                     'docs/macos/windows-storage-interface-review.json'):
+            if (m.ROOT / name).is_file():
+                self.sources[name] = (m.ROOT / name).read_bytes()
+
+    @contextmanager
+    def join_fixture(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for path in {*self.sources, m.PACKET}:
+                (root / path).parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(m.ROOT / path, root / path)
+            record = deepcopy(self.record)
+            record['interfaces'] = {
+                name: hashlib.sha256(self.sources[name].replace(b'\r\n', b'\n')).hexdigest()
+                for name in m.SOURCES}
+            (root / m.PACKET).write_text(json.dumps(record), encoding='utf-8')
+            yield root, record
+
+    def rehash_review(self, root, record, raw):
+        path = ('docs/macos/windows-storage-interface-review.json'
+                if record['packet_format'].endswith('/v3')
+                else 'docs/macos/ca-04d-interface-review.md')
+        (root / path).write_bytes(raw)
+        record['review_sha256'] = hashlib.sha256(raw.replace(b'\r\n', b'\n')).hexdigest()
+        (root / m.PACKET).write_text(json.dumps(record), encoding='utf-8')
+
+    def test_current_join_retains_exact_historical_chain(self):
+        historical = ['docs/macos/interface-baseline-ca04c.json',
+                      'docs/macos/ca-04d-interface-review.md']
+        if self.record['packet_format'].endswith('/v3'):
+            historical.append('docs/macos/interface-baseline.json')
+        for path in historical:
+            with self.subTest(path=path), self.join_fixture() as (root, record):
+                m.check(root)
+                raw = (root / path).read_bytes() + b'\n '
+                (root / path).write_bytes(raw)
+                if record['packet_format'].endswith('/v2'):
+                    field = ('predecessor_sha256' if path.endswith('ca04c.json')
+                             else 'review_sha256')
+                    record[field] = hashlib.sha256(raw.replace(b'\r\n', b'\n')).hexdigest()
+                else:
+                    previous_path = 'docs/macos/interface-baseline.json'
+                    previous = m.decode((root / previous_path).read_bytes())
+                    if path != previous_path:
+                        field = ('predecessor_sha256' if path.endswith('ca04c.json')
+                                 else 'review_sha256')
+                        previous[field] = hashlib.sha256(raw.replace(b'\r\n', b'\n')).hexdigest()
+                        (root / previous_path).write_text(json.dumps(previous), encoding='utf-8')
+                    digest = hashlib.sha256((root / previous_path).read_bytes().replace(b'\r\n', b'\n')).hexdigest()
+                    record['predecessor_sha256'] = digest
+                    review = m.decode((root / 'docs/macos/windows-storage-interface-review.json').read_bytes())
+                    review['predecessor_sha256'] = digest
+                    self.rehash_review(root, record, json.dumps(review).encode())
+                (root / m.PACKET).write_text(json.dumps(record), encoding='utf-8')
+                with self.assertRaises(m.PacketError, msg='rehashing cannot rewrite fixed historical assessments'):
+                    m.check(root)
+            with self.subTest(missing=path), self.join_fixture() as (root, _):
+                (root / path).unlink()
+                with self.assertRaises((m.PacketError, OSError)):
+                    m.check(root)
+        self.assertEqual(self.record['packet_format'], 'codex-accounts/macos-preparation/v3')
+        self.assertEqual(self.record['source_state'], 'reviewed-working-tree')
+
+    def test_rehashed_review_cannot_change_source_join_or_grant_native_authority(self):
+        with self.join_fixture() as (root, record):
+            m.check(root)
+            if record['packet_format'].endswith('/v2'):
+                raw = (root / 'docs/macos/ca-04d-interface-review.md').read_bytes() + b'\nnative_status=passed\n'
+            else:
+                review = m.decode((root / 'docs/macos/windows-storage-interface-review.json').read_bytes())
+                review['native_status'] = 'passed'
+                raw = json.dumps(review).encode()
+            self.rehash_review(root, record, raw)
+            with self.assertRaises(m.PacketError, msg='a rehashed review cannot grant native authority'):
+                m.check(root)
+        with self.join_fixture() as (root, record):
+            original = m.decode((root / 'docs/macos/windows-storage-interface-review.json').read_bytes())
+            changes = []
+            for key, value in [('base_commit', '0' * 40), ('source_state', 'committed'),
+                               ('platform', 'windows-x86_64'), ('native_status', True),
+                               ('evidence', 'windows-native-pass'), ('qualified', True)]:
+                changes.append(dict(original, **{key: value}))
+            for field in ('before_sha256', 'after_sha256', 'path'):
+                review = deepcopy(original)
+                review['changed_source'][field] = '../outside' if field == 'path' else '0' * 64
+                changes.append(review)
+            for field in ('changed_source', 'assessment', 'unchanged_interfaces'):
+                review = deepcopy(original)
+                del review[field]
+                changes.append(review)
+                changes.append(dict(original, **{field: False}))
+            review = deepcopy(original)
+            review['unchanged_interfaces'][m.SOURCES[0]] = '0' * 64
+            changes.append(review)
+            review = deepcopy(original)
+            review['unchanged_interfaces']['../outside'] = '0' * 64
+            changes.append(review)
+            for value in ('', 'x' * 2049, False):
+                review = deepcopy(original)
+                review['assessment']['recognition'] = value
+                changes.append(review)
+            for review in changes:
+                with self.subTest(review=changes.index(review)):
+                    self.rehash_review(root, record, json.dumps(review).encode())
+                    with self.assertRaises(m.PacketError):
+                        m.check(root)
+            for raw in (b'{"native_status":"not-run","native_status":"passed"}',
+                        b'\xff', b'{broken}', b'x' * (16 * 1024 + 1)):
+                self.rehash_review(root, record, raw)
+                with self.assertRaises(m.PacketError):
+                    m.check(root)
+            self.rehash_review(root, record, json.dumps(original).encode())
+            path = m.SOURCES[3]
+            changed = self.sources[path] + b'\n// synthetic source drift\n'
+            (root / path).write_bytes(changed)
+            record['interfaces'][path] = hashlib.sha256(changed.replace(b'\r\n', b'\n')).hexdigest()
+            (root / m.PACKET).write_text(json.dumps(record), encoding='utf-8')
+            with self.assertRaises(m.PacketError, msg='a new source hash cannot replace semantic review'):
+                m.check(root)
 
     def test_current_shared_interface_snapshot_matches(self):
         m.check()

@@ -1,5 +1,5 @@
 //! Current-user registered-package reader. Name hints find candidates, not trust.
-use crate::native::{Apartment, ReadHandle};
+use crate::native::{Apartment, ReadHandle, RegisteredRoot};
 use crate::*;
 use codex_accounts_core::compatibility::select;
 use std::io::{Read, Seek, SeekFrom};
@@ -31,6 +31,7 @@ fn hash_bytes(bytes: &[u8]) -> Result<String, ReadError> {
     bounded(CryptographicBuffer::EncodeToHexString(&hash).map_err(winerr)?)
 }
 
+#[derive(Clone, PartialEq, Eq)]
 struct Candidate {
     id: String,
     full_name: String,
@@ -132,7 +133,16 @@ fn candidates() -> Result<Vec<Candidate>, ReadError> {
 fn manifest_executables(root: &Path) -> Result<Vec<String>, ReadError> {
     let mut handle = ReadHandle::open(&root.join("AppxManifest.xml"), false)?;
     let bytes = handle.bytes(MAX_CONFIG_BYTES)?;
-    let text = std::str::from_utf8(&bytes).map_err(|_| ReadError::InvalidMetadata)?;
+    let paths = parse_manifest(&bytes, None)?;
+    handle.revalidate()?;
+    Ok(paths)
+}
+
+fn parse_manifest(bytes: &[u8], registered: Option<&Candidate>) -> Result<Vec<String>, ReadError> {
+    let text = std::str::from_utf8(bytes).map_err(|_| ReadError::InvalidMetadata)?;
+    // WinRT takes decoded XML text, so remove only the optional encoding marker.
+    // Validate UTF-8 first; another marker or malformed prefix remains invalid XML.
+    let text = text.strip_prefix('\u{feff}').unwrap_or(text);
     let doc = XmlDocument::new().map_err(winerr)?;
     let settings = XmlLoadSettings::new().map_err(winerr)?;
     settings.SetProhibitDtd(true).map_err(winerr)?;
@@ -140,6 +150,40 @@ fn manifest_executables(root: &Path) -> Result<Vec<String>, ReadError> {
     settings.SetMaxElementDepth(64).map_err(winerr)?;
     doc.LoadXmlWithSettings(&HSTRING::from(text), &settings)
         .map_err(|_| ReadError::InvalidMetadata)?;
+    if let Some(candidate) = registered {
+        let identities = doc
+            .SelectNodes(&HSTRING::from(
+                "/*[local-name()='Package']/*[local-name()='Identity']",
+            ))
+            .map_err(winerr)?;
+        if identities.Length().map_err(winerr)? != 1 {
+            return Err(ReadError::InvalidMetadata);
+        }
+        let identity: XmlElement = identities.Item(0).map_err(winerr)?.cast().map_err(winerr)?;
+        let attr = |name| {
+            bounded(
+                identity
+                    .GetAttribute(&HSTRING::from(name))
+                    .map_err(winerr)?,
+            )
+        };
+        let architecture = match candidate.architecture {
+            0 => "x86",
+            5 => "arm",
+            9 => "x64",
+            11 => "neutral",
+            12 => "arm64",
+            _ => return Err(ReadError::InvalidMetadata),
+        };
+        let version = candidate.version.map(|n| n.to_string()).join(".");
+        if attr("Name")? != candidate.name
+            || attr("Publisher")? != candidate.publisher
+            || attr("Version")? != version
+            || attr("ProcessorArchitecture")? != architecture
+        {
+            return Err(ReadError::InvalidMetadata);
+        }
+    }
     let nodes = doc.SelectNodes(&HSTRING::from("/*[local-name()='Package']/*[local-name()='Applications']/*[local-name()='Application']")).map_err(winerr)?;
     let count = nodes.Length().map_err(winerr)?;
     if count as usize > MAX_APPLICATIONS {
@@ -161,7 +205,6 @@ fn manifest_executables(root: &Path) -> Result<Vec<String>, ReadError> {
             paths.push(executable);
         }
     }
-    handle.revalidate()?;
     Ok(paths)
 }
 
@@ -173,6 +216,15 @@ fn binary_observation(
     validate_relative_executable(relative)?;
     let path = root.join(relative);
     let mut handle = ReadHandle::open(&path, false)?;
+    binary_from_handle(&mut handle, &path, local, false).map(|observation| (observation, handle))
+}
+
+fn binary_from_handle(
+    handle: &mut ReadHandle,
+    path: &Path,
+    local: bool,
+    partial: bool,
+) -> Result<Value, ReadError> {
     let before = handle.identity();
     // Inspect only an on-disk PE image, never load it as a library or process.
     let mut dos = [0u8; 64];
@@ -237,7 +289,11 @@ fn binary_observation(
     } else {
         "not_established_offline"
     };
-    let writable = handle.current_user_can_replace_or_modify()?;
+    let writable = if partial {
+        Value::String("unknown".into())
+    } else {
+        json!(handle.current_user_can_replace_or_modify()?)
+    };
     handle.revalidate()?;
     let mut result = json!({"state": "observed", "sha256": hash, "size_bytes": total,
         "pe_machine": machine, "x64_image": machine == 0x8664,
@@ -248,9 +304,58 @@ fn binary_observation(
         "file_identity": {"volume_serial": before.volume, "file_id": format!("{:016x}", before.file_id)},
         "qualified": false, "credential_mutation_enabled": false});
     if local {
-        result["local_display_only_do_not_share"] = json!({"path": path_text(&path)});
+        result["local_display_only_do_not_share"] = json!({"path": path_text(path)});
     }
-    Ok((result, handle))
+    if partial {
+        result["path_protection"] = json!("partial_registered_root_and_descendants_only");
+        result["outer_ancestry_validation"] = json!("not_established");
+        result["executable_role"] = json!("unqualified_manifest_candidate");
+    }
+    Ok(result)
+}
+
+fn collect_registered(
+    selected: &Candidate,
+    local: bool,
+    reobserve: impl FnOnce() -> Result<Vec<Candidate>, ReadError>,
+) -> Result<Value, ReadError> {
+    let root = RegisteredRoot::open(&selected.root)?;
+    let mut manifest = root.open_relative("AppxManifest.xml")?;
+    let bytes = manifest.bytes(MAX_CONFIG_BYTES)?;
+    let executables = parse_manifest(&bytes, Some(selected))?;
+    let mut handles = Vec::new();
+    let mut images = Vec::new();
+    for relative in &executables {
+        let mut image = root.open_relative(relative)?;
+        images.push(binary_from_handle(
+            &mut image,
+            &selected.root.join(relative),
+            local,
+            true,
+        )?);
+        handles.push(image);
+    }
+    if reobserve()?
+        .iter()
+        .filter(|c| c.id == selected.id)
+        .collect::<Vec<_>>()
+        != vec![selected]
+    {
+        return Err(ReadError::Changed);
+    }
+    root.revalidate()?;
+    manifest.revalidate()?;
+    for image in &handles {
+        image.revalidate()?;
+    }
+    Ok(
+        json!({"observation_scope": "partial_registered_root_and_declared_images",
+        "outer_ancestry_validation": "not_established", "registration_stable_during_inspection": true,
+        "manifest_identity_matches_registration": true, "manifest_application_count": executables.len(),
+        "images": images, "publisher_binding": "unknown", "runtime_role": "unknown",
+        "effective_home": "unknown", "effective_backend": "unknown", "effective_policy": "unknown",
+        "qualified": false, "credential_mutation_enabled": false}),
+    )
 }
 
 fn config_observation(home: Option<&Path>) -> DeclaredConfig {
@@ -308,6 +413,10 @@ pub fn inspect(opts: &Options) -> Result<Value, ReadError> {
         }
     };
     let selected = &candidates[index];
+    if opts.registered_metadata {
+        report["registered_metadata"] = collect_registered(selected, opts.local, self::candidates)?;
+        return Ok(report);
+    }
     // Hold the registered package root throughout inspection. No nominated
     // standalone executable can substitute for an installed application.
     let root = ReadHandle::open(&selected.root, true)?;
@@ -374,6 +483,243 @@ pub fn inspect(opts: &Options) -> Result<Value, ReadError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    static NEXT_METADATA: AtomicUsize = AtomicUsize::new(0);
+    struct MetadataFixture(Candidate);
+    impl MetadataFixture {
+        fn new() -> Self {
+            let root = std::env::temp_dir().join(format!(
+                "ca-metadata-SYNTHETIC_CANARY-{}-{}",
+                std::process::id(),
+                NEXT_METADATA.fetch_add(1, Ordering::Relaxed)
+            ));
+            std::fs::create_dir(&root).unwrap();
+            let candidate = Candidate {
+                id: "a".repeat(64),
+                full_name: "Synthetic.Codex_1.2.3.4_x64_fixture".into(),
+                name: "Synthetic.Codex".into(),
+                publisher: "CN=Synthetic".into(),
+                root,
+                version: [1, 2, 3, 4],
+                architecture: 9,
+                origin: "registration_signature_kind_unknown",
+            };
+            let fixture = Self(candidate);
+            fixture.manifest(
+                "<Application Executable='first.exe'/><Application Executable='second.exe'/>",
+            );
+            let mut pe = vec![0u8; 512];
+            pe[..2].copy_from_slice(b"MZ");
+            pe[60..64].copy_from_slice(&128u32.to_le_bytes());
+            pe[128..132].copy_from_slice(b"PE\0\0");
+            pe[132..134].copy_from_slice(&0x8664u16.to_le_bytes());
+            for file in ["first.exe", "second.exe"] {
+                std::fs::write(fixture.0.root.join(file), &pe).unwrap();
+            }
+            fixture
+        }
+        fn manifest(&self, apps: &str) {
+            std::fs::write(self.0.root.join("AppxManifest.xml"), format!("<Package><Identity Name='Synthetic.Codex' Publisher='CN=Synthetic' Version='1.2.3.4' ProcessorArchitecture='x64'/><Applications>{apps}</Applications></Package>")).unwrap();
+        }
+        fn collect(&self) -> Result<Value, ReadError> {
+            collect_registered(&self.0, false, || Ok(vec![self.0.clone()]))
+        }
+    }
+    impl Drop for MetadataFixture {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0.root);
+        }
+    }
+
+    #[test]
+    fn native_registered_metadata_observes_each_declared_image_without_sensitive_reads() {
+        use std::os::windows::fs::OpenOptionsExt;
+        let _apartment = Apartment::enter().unwrap();
+        let fixture = MetadataFixture::new();
+        let mut guards = Vec::new();
+        for file in ["auth.json", "config.toml", "history.jsonl"] {
+            std::fs::write(fixture.0.root.join(file), b"SYNTHETIC_NEVER_READ").unwrap();
+            guards.push(
+                std::fs::OpenOptions::new()
+                    .read(true)
+                    .share_mode(0)
+                    .open(fixture.0.root.join(file))
+                    .unwrap(),
+            );
+        }
+        crate::native::take_opened_paths();
+        let report = fixture.collect().unwrap();
+        assert_eq!(report["images"].as_array().unwrap().len(), 2);
+        assert_eq!(report["outer_ancestry_validation"], "not_established");
+        assert_eq!(
+            report["observation_scope"],
+            "partial_registered_root_and_declared_images"
+        );
+        assert_eq!(report["qualified"], false);
+        assert_eq!(report["credential_mutation_enabled"], false);
+        assert!(report.get("desktop").is_none());
+        assert!(report.get("runtime").is_none());
+        for image in report["images"].as_array().unwrap() {
+            assert_eq!(image["current_user_can_replace_or_modify"], "unknown");
+            assert_eq!(image["executable_role"], "unqualified_manifest_candidate");
+            assert_eq!(image["qualified"], false);
+        }
+        for field in [
+            "publisher_binding",
+            "effective_home",
+            "effective_backend",
+            "effective_policy",
+            "runtime_role",
+        ] {
+            assert_eq!(report[field], "unknown");
+        }
+        assert!(!encode(&report).unwrap().contains("SYNTHETIC"));
+        let opened = crate::native::take_opened_paths();
+        assert!(opened.iter().all(|p| p == &fixture.0.root
+            || ["AppxManifest.xml", "first.exe", "second.exe"]
+                .iter()
+                .any(|n| p.file_name().is_some_and(|f| f == *n))));
+        drop(guards);
+        for file in ["auth.json", "config.toml", "history.jsonl"] {
+            assert_eq!(
+                std::fs::read(fixture.0.root.join(file)).unwrap(),
+                b"SYNTHETIC_NEVER_READ"
+            );
+        }
+    }
+
+    #[test]
+    fn native_registered_metadata_accepts_one_utf8_bom_and_refuses_invalid_prefixes() {
+        let _apartment = Apartment::enter().unwrap();
+        let fixture = MetadataFixture::new();
+        let path = fixture.0.root.join("AppxManifest.xml");
+        let manifest = std::fs::read(&path).unwrap();
+        let mut prefixed = b"\xef\xbb\xbf".to_vec();
+        prefixed.extend_from_slice(&manifest);
+        std::fs::write(&path, &prefixed).unwrap();
+        let report = fixture.collect().unwrap();
+        assert_eq!(report["manifest_identity_matches_registration"], true);
+        assert_eq!(report["images"].as_array().unwrap().len(), 2);
+        assert_eq!(report["qualified"], false);
+        assert_eq!(manifest_executables(&fixture.0.root).unwrap().len(), 2);
+        for prefix in [
+            b"\xef\xbb\xbf\xef\xbb\xbf".as_slice(),
+            b"x\xef\xbb\xbf",
+            b"\xef\xbb",
+            b"\xff",
+        ] {
+            let mut invalid = prefix.to_vec();
+            invalid.extend_from_slice(&manifest);
+            std::fs::write(&path, invalid).unwrap();
+            assert!(matches!(fixture.collect(), Err(ReadError::InvalidMetadata)));
+        }
+    }
+
+    #[test]
+    fn native_registered_metadata_refuses_manifest_mismatch_limits_and_external_paths() {
+        let _apartment = Apartment::enter().unwrap();
+        let fixture = MetadataFixture::new();
+        for bytes in [
+            b"\xff".to_vec(),
+            b"<broken".to_vec(),
+            b"<!DOCTYPE Package [<!ENTITY x SYSTEM 'file:///SYNTHETIC'>]><Package>&x;</Package>"
+                .to_vec(),
+            vec![b' '; MAX_CONFIG_BYTES + 1],
+        ] {
+            std::fs::write(fixture.0.root.join("AppxManifest.xml"), bytes).unwrap();
+            assert!(matches!(
+                fixture.collect(),
+                Err(ReadError::InvalidMetadata | ReadError::InputLimit)
+            ));
+        }
+        fixture.manifest("<Application Executable='../external.exe'/>");
+        assert!(matches!(fixture.collect(), Err(ReadError::UnsafePath)));
+        fixture.manifest("<Application Executable='first.exe'/>");
+        let mut mismatched = fixture.0.clone();
+        mismatched.version[3] = 5;
+        assert!(matches!(
+            collect_registered(&mismatched, false, || Ok(vec![mismatched.clone()])),
+            Err(ReadError::InvalidMetadata)
+        ));
+        fixture.manifest(&"<Application Executable='first.exe'/>".repeat(MAX_APPLICATIONS + 1));
+        assert!(matches!(fixture.collect(), Err(ReadError::InputLimit)));
+        fixture.manifest("<Application Executable='first.exe'/>");
+        std::fs::write(fixture.0.root.join("first.exe"), b"not a PE").unwrap();
+        assert!(matches!(fixture.collect(), Err(ReadError::InvalidMetadata)));
+    }
+
+    #[test]
+    fn native_registered_metadata_refuses_sharing_hardlinks_and_registration_drift() {
+        let _apartment = Apartment::enter().unwrap();
+        let fixture = MetadataFixture::new();
+        let writer = std::fs::OpenOptions::new()
+            .write(true)
+            .open(fixture.0.root.join("first.exe"))
+            .unwrap();
+        assert!(matches!(
+            fixture.collect(),
+            Err(ReadError::SharingViolation)
+        ));
+        drop(writer);
+        std::fs::hard_link(
+            fixture.0.root.join("first.exe"),
+            fixture.0.root.join("alias.exe"),
+        )
+        .unwrap();
+        assert!(matches!(fixture.collect(), Err(ReadError::UnsafePath)));
+        std::fs::remove_file(fixture.0.root.join("alias.exe")).unwrap();
+        for field in 0..5 {
+            let mut changed = fixture.0.clone();
+            match field {
+                0 => changed.publisher.push('x'),
+                1 => changed.root.push("other"),
+                2 => changed.version[0] += 1,
+                3 => changed.origin = "other",
+                _ => changed.full_name.push('x'),
+            }
+            assert!(matches!(
+                collect_registered(&fixture.0, false, || Ok(vec![changed])),
+                Err(ReadError::Changed)
+            ));
+        }
+        assert!(matches!(
+            collect_registered(&fixture.0, false, || Ok(vec![])),
+            Err(ReadError::Changed)
+        ));
+        std::fs::remove_file(fixture.0.root.join("second.exe")).unwrap();
+        assert!(matches!(fixture.collect(), Err(ReadError::Missing)));
+    }
+
+    #[test]
+    fn native_registered_metadata_retains_manifest_root_and_images_through_reobservation() {
+        let _apartment = Apartment::enter().unwrap();
+        let fixture = MetadataFixture::new();
+        let result = collect_registered(&fixture.0, false, || {
+            for file in ["AppxManifest.xml", "first.exe", "second.exe"] {
+                assert!(std::fs::OpenOptions::new()
+                    .write(true)
+                    .open(fixture.0.root.join(file))
+                    .is_err());
+                assert!(std::fs::rename(
+                    fixture.0.root.join(file),
+                    fixture.0.root.join("substitution.exe")
+                )
+                .is_err());
+            }
+            assert!(std::fs::rename(
+                &fixture.0.root,
+                fixture.0.root.with_extension("substitution")
+            )
+            .is_err());
+            Ok(vec![fixture.0.clone()])
+        });
+        assert!(result.is_ok());
+        let changed = collect_registered(&fixture.0, false, || {
+            std::fs::write(fixture.0.root.join("new-synthetic-entry"), b"SYNTHETIC").unwrap();
+            Ok(vec![fixture.0.clone()])
+        });
+        assert!(matches!(changed, Err(ReadError::Changed)));
+    }
     #[test]
     fn native_current_user_inventory_is_bounded_and_not_qualification() {
         let result = inspect(&Options::default());

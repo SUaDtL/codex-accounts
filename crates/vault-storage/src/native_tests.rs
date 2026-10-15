@@ -3,20 +3,32 @@ use crate::{Capture, ProfileText};
 use codex_accounts_vault::{Identity, Resource, ResourceId, ResourceShape};
 use std::process::{Command, Stdio};
 
-// The hosted runner's LocalAppData may be administrator-owned. Create only a
-// fresh protected test parent; never change that existing directory's owner/ACL.
+// Resolve Profile read-only and create only a fresh protected synthetic parent.
+// Existing Profile/ancestor permissions and both application vault slots stay intact.
 pub(super) struct Sandbox(pub(super) PathBuf, PathBuf);
 impl Sandbox {
     pub(super) fn new() -> Self {
-        let base = local_root().expect("known folder");
-        let suffix: String = random_id()
-            .unwrap()
-            .iter()
-            .map(|b| format!("{b:02x}"))
-            .collect();
-        let parent = base.parent().unwrap().join(format!("ca03c-test-{suffix}"));
-        validate_path(&parent).expect("synthetic parent path");
-        let security = Security::new().expect("synthetic parent security");
+        Self::try_new().expect("safe synthetic fixture parent")
+    }
+    fn try_new() -> Result<Self, StorageError> {
+        Self::try_under(&known_folder(
+            &windows_sys::Win32::UI::Shell::FOLDERID_Profile,
+        )?)
+    }
+    fn try_under(base: &Path) -> Result<Self, StorageError> {
+        let suffix: String = random_id()?.iter().map(|b| format!("{b:02x}")).collect();
+        let parent = base.join(format!("ca03c-test-{suffix}"));
+        Self::create_parent(&parent)
+    }
+    fn create_parent(parent: &Path) -> Result<Self, StorageError> {
+        Self::create_parent_with_final_check(parent, cloud_check)
+    }
+    fn create_parent_with_final_check(
+        parent: &Path,
+        final_check: impl FnOnce(&File, &[File]) -> Result<(), StorageError>,
+    ) -> Result<Self, StorageError> {
+        validate_path(parent)?;
+        let security = Security::new()?;
         let mut ancestors: Vec<_> = parent.ancestors().skip(1).collect();
         ancestors.reverse();
         let mut held = Vec::new();
@@ -27,33 +39,327 @@ impl Sandbox {
                 FILE_SHARE_READ,
                 OPEN_EXISTING,
                 None,
-            )
-            .expect("synthetic parent ancestor handle");
-            check_object(&f, true).expect("synthetic parent ancestor shape");
-            security
-                .check(&f, false)
-                .expect("synthetic parent ancestor security");
+            )?;
+            check_object(&f, true)?;
+            security.check(&f, false)?;
             held.push(f);
         }
-        cloud_check(held.last().unwrap(), &held).expect("synthetic parent location");
-        assert_ne!(
-            unsafe { CreateDirectoryW(wide(&parent).unwrap().as_ptr(), &security.attrs()) },
-            0,
-            "create only a new protected synthetic parent"
-        );
+        check_volume_and_sync(held.last().ok_or(StorageError::UnsafePath)?, &held)?;
+        if unsafe { CreateDirectoryW(wide(parent)?.as_ptr(), &security.attrs()) } == 0 {
+            return Err(last());
+        }
+        let created = Self(parent.join("ca03c-test-vault"), parent.to_owned());
         let f = open_file(
-            &parent,
+            parent,
             FILE_READ_ATTRIBUTES | READ_CONTROL,
             FILE_SHARE_READ,
             OPEN_EXISTING,
             None,
-        )
-        .expect("synthetic parent handle");
-        security
-            .check(&f, true)
-            .expect("synthetic parent must be current-user owned and protected");
-        Self(parent.join("ca03c-test-vault"), parent)
+        )?;
+        check_object(&f, true)?;
+        security.check(&f, true)?;
+        held.push(f);
+        // The test-only seam is exactly the final check, after the real fresh
+        // parent handle has joined held. Normal fixtures always use cloud_check.
+        final_check(held.last().ok_or(StorageError::UnsafePath)?, &held)?;
+        Ok(created)
     }
+}
+
+#[test]
+fn native_fixture_final_check_refusal_preserves_owned_ancestor() {
+    // A regression/removal failure must still clean this exact exclusively
+    // created synthetic root. This backstop never searches Profile by prefix.
+    struct OwnedBackstop {
+        fixture: Option<Sandbox>,
+        root: PathBuf,
+    }
+    impl Drop for OwnedBackstop {
+        fn drop(&mut self) {
+            drop(self.fixture.take());
+            if self.root.exists() {
+                std::fs::remove_dir_all(&self.root).expect("remove exact owned regression root");
+            }
+        }
+    }
+    let owned = Sandbox::new();
+    let backstop = OwnedBackstop {
+        root: owned.1.clone(),
+        fixture: Some(owned),
+    };
+    let fixture = backstop.fixture.as_ref().unwrap();
+    let ancestor = open_file(
+        &fixture.1,
+        FILE_READ_ATTRIBUTES | READ_CONTROL,
+        FILE_SHARE_READ,
+        OPEN_EXISTING,
+        None,
+    )
+    .unwrap();
+    Security::new().unwrap().check(&ancestor, true).unwrap();
+    let ancestor_security = security_bytes(&ancestor);
+    let canary = fixture.1.join("synthetic-unrelated-canary");
+    std::fs::write(&canary, b"SYNTHETIC_UNRELATED_ANCESTOR_UNCHANGED").unwrap();
+    let parent = fixture.1.join("synthetic-final-check-refusal");
+    assert!(!parent.exists(), "refusal parent starts absent");
+    let mut callbacks = 0;
+    let mut strict_fresh_parent_observed = false;
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        Sandbox::create_parent_with_final_check(&parent, |file, held| {
+            callbacks += 1;
+            assert!(
+                held.last().unwrap().as_raw_handle() == file.as_raw_handle(),
+                "the fresh parent handle is still the final held handle"
+            );
+            Security::new().unwrap().check(file, true).unwrap();
+            let actual = check_object(file, true).unwrap();
+            let expected = open_file(
+                &parent,
+                FILE_READ_ATTRIBUTES | READ_CONTROL,
+                FILE_SHARE_READ,
+                OPEN_EXISTING,
+                None,
+            )
+            .unwrap();
+            let expected = check_object(&expected, true).unwrap();
+            assert!(
+                (actual.volume, actual.id) == (expected.volume, expected.id),
+                "callback receives this exact newly-created protected parent"
+            );
+            cloud_check(file, held).unwrap();
+            strict_fresh_parent_observed = true;
+            // Refuse only after actual native creation, metadata protection and
+            // the real final sync query. This is a test-only injected error,
+            // never an assumed inventory, bypass or qualification outcome.
+            Err(StorageError::UnsafePath)
+        })
+    }));
+    assert_eq!(
+        callbacks, 1,
+        "the final post-push callback must actually execute once"
+    );
+    assert!(
+        strict_fresh_parent_observed,
+        "strict live parent checks precede injected refusal"
+    );
+    assert!(
+        result.is_ok(),
+        "final-check refusal must return without cleanup panic"
+    );
+    assert!(
+        matches!(result.unwrap(), Err(StorageError::UnsafePath)),
+        "the original typed final-check refusal must be preserved"
+    );
+    assert!(
+        !parent.exists(),
+        "final-check refusal removes only its exclusively-created parent"
+    );
+    assert!(
+        fixture.1.is_dir(),
+        "the existing owned ancestor remains present"
+    );
+    assert!(
+        std::fs::read(&canary).unwrap() == b"SYNTHETIC_UNRELATED_ANCESTOR_UNCHANGED",
+        "final-check refusal preserves unrelated ancestor canary bytes"
+    );
+    assert!(
+        security_bytes(&ancestor) == ancestor_security,
+        "final-check refusal preserves existing ancestor protection"
+    );
+    drop(ancestor);
+}
+
+// Independent read-only oracle: no create/redirect flags, no environment path.
+fn observed_profile_folder() -> PathBuf {
+    let mut p = null_mut();
+    let status = unsafe {
+        SHGetKnownFolderPath(
+            &windows_sys::Win32::UI::Shell::FOLDERID_Profile,
+            0,
+            null_mut(),
+            &mut p,
+        )
+    };
+    let p = TaskString(p);
+    assert!(
+        status >= 0 && !p.0.is_null(),
+        "read-only Profile known-folder query"
+    );
+    let mut len = 0;
+    while len < 240 && unsafe { *p.0.add(len) } != 0 {
+        len += 1;
+    }
+    assert!(len > 0 && len < 240, "bounded Profile known-folder result");
+    PathBuf::from(OsString::from_wide(unsafe {
+        std::slice::from_raw_parts(p.0, len)
+    }))
+}
+
+fn security_bytes(file: &File) -> Vec<u8> {
+    let mut descriptor = null_mut();
+    assert_eq!(
+        unsafe {
+            GetSecurityInfo(
+                file.as_raw_handle(),
+                SE_FILE_OBJECT,
+                OWNER_SECURITY_INFORMATION | DACL_SECURITY_INFORMATION,
+                null_mut(),
+                null_mut(),
+                null_mut(),
+                null_mut(),
+                &mut descriptor,
+            )
+        },
+        0,
+        "read-only synthetic descriptor snapshot"
+    );
+    let descriptor = Allocation(descriptor);
+    let len = unsafe { GetSecurityDescriptorLength(descriptor.0) } as usize;
+    assert!((1..=65536).contains(&len), "bounded descriptor snapshot");
+    unsafe { std::slice::from_raw_parts(descriptor.0.cast::<u8>(), len) }.to_vec()
+}
+
+#[test]
+fn native_profile_fixture_parent_is_protected_and_unsafe_parents_refuse() {
+    let profile = observed_profile_folder();
+    let profile_handle = open_file(
+        &profile,
+        FILE_READ_ATTRIBUTES | READ_CONTROL,
+        FILE_SHARE_READ | FILE_SHARE_WRITE,
+        OPEN_EXISTING,
+        None,
+    )
+    .unwrap();
+    let original_profile_security = security_bytes(&profile_handle);
+    let created = Sandbox::try_new();
+    assert!(
+        created.is_ok(),
+        "Profile fixture must create safely without AppData ancestry"
+    );
+    let fixture = created.unwrap();
+    assert!(
+        fixture.1.parent() == Some(profile.as_path()),
+        "fixture must be directly under Profile"
+    );
+    let name = fixture.1.file_name().unwrap().to_str().unwrap();
+    assert!(
+        name.starts_with("ca03c-test-") && name.len() == 43,
+        "unique synthetic fixture name, never an application vault slot"
+    );
+    let second = Sandbox::try_new().unwrap();
+    assert!(
+        second.1 != fixture.1,
+        "separate fixtures have distinct parents"
+    );
+    let security = Security::new().unwrap();
+    let parent_handle = open_file(
+        &fixture.1,
+        FILE_READ_ATTRIBUTES | READ_CONTROL,
+        FILE_SHARE_READ,
+        OPEN_EXISTING,
+        None,
+    )
+    .unwrap();
+    check_object(&parent_handle, true).unwrap();
+    security.check(&parent_handle, true).unwrap();
+    let before = security_bytes(&parent_handle);
+    assert!(
+        matches!(
+            Sandbox::create_parent(&fixture.1),
+            Err(StorageError::AlreadyExists)
+        ),
+        "an existing synthetic parent is never adopted or overwritten"
+    );
+    assert!(
+        security_bytes(&parent_handle) == before,
+        "collision leaves the protected descriptor unchanged"
+    );
+    drop(parent_handle);
+    // Native storage creation/reopen exercises the unchanged owner, NTFS,
+    // ancestry, sync, protected root/leaf and exclusive kernel-lock checks.
+    drop(Disk::at(&fixture.0, true).unwrap());
+    drop(Disk::at(&fixture.0, false).unwrap());
+    let file = fixture.1.join("synthetic-file-parent");
+    std::fs::write(&file, b"SYNTHETIC_PARENT_CANARY").unwrap();
+    assert!(
+        matches!(Sandbox::try_under(&file), Err(StorageError::UnsafePath)),
+        "a file cannot be a fixture ancestor"
+    );
+    assert!(
+        std::fs::read(&file).unwrap() == b"SYNTHETIC_PARENT_CANARY",
+        "refusal preserves synthetic file bytes"
+    );
+    for base in [
+        fixture.1.join("OneDrive"),
+        fixture.1.join(".."),
+        fixture.1.join("CON"),
+    ] {
+        assert!(
+            matches!(Sandbox::try_under(&base), Err(StorageError::UnsafePath)),
+            "unsafe sync, traversal and device parents remain refused"
+        );
+    }
+    let bad = fixture.1.join("synthetic-broad-parent");
+    let sddl: Vec<u16> = "D:P(A;;FA;;;WD)\0".encode_utf16().collect();
+    let mut descriptor = null_mut();
+    assert_ne!(
+        unsafe {
+            ConvertStringSecurityDescriptorToSecurityDescriptorW(
+                sddl.as_ptr(),
+                SDDL_REVISION_1,
+                &mut descriptor,
+                null_mut(),
+            )
+        },
+        0
+    );
+    let descriptor = Allocation(descriptor);
+    let attrs = SECURITY_ATTRIBUTES {
+        nLength: std::mem::size_of::<SECURITY_ATTRIBUTES>() as u32,
+        lpSecurityDescriptor: descriptor.0,
+        bInheritHandle: 0,
+    };
+    // This deliberately unsafe descriptor belongs only to this newly-created
+    // synthetic directory. No existing ancestor's permissions are changed.
+    assert_ne!(
+        unsafe { CreateDirectoryW(wide(&bad).unwrap().as_ptr(), &attrs) },
+        0
+    );
+    let bad_handle = open_file(
+        &bad,
+        FILE_READ_ATTRIBUTES | READ_CONTROL,
+        FILE_SHARE_READ,
+        OPEN_EXISTING,
+        None,
+    )
+    .unwrap();
+    let bad_before = security_bytes(&bad_handle);
+    assert!(
+        matches!(Sandbox::try_under(&bad), Err(StorageError::UnsafePath)),
+        "broad writable synthetic ancestors refuse without a fallback"
+    );
+    assert!(
+        security_bytes(&bad_handle) == bad_before,
+        "unsafe parent descriptor is never repaired"
+    );
+    assert_eq!(
+        std::fs::read_dir(&bad).unwrap().count(),
+        0,
+        "refusal creates no fixture below an unsafe parent"
+    );
+    drop(bad_handle);
+    assert!(
+        security_bytes(&profile_handle) == original_profile_security,
+        "existing Profile permissions remain unchanged"
+    );
+    drop(profile_handle);
+    drop(second);
+    let owned = fixture.1.clone();
+    drop(fixture);
+    assert!(
+        !owned.exists(),
+        "cleanup removes only the owned synthetic tree"
+    );
 }
 impl Drop for Sandbox {
     fn drop(&mut self) {
@@ -83,6 +389,1892 @@ fn cap() -> Capture {
 }
 fn text() -> ProfileText {
     ProfileText::new("SYNTHETIC_LABEL".into()).unwrap()
+}
+
+// TASK-05 exercises the same private constructor used by the public fixed-folder
+// entry. Every path belongs to this exclusively created synthetic fixture.
+fn layout_paths(fixture: &Sandbox) -> [PathBuf; 2] {
+    [
+        fixture.1.join("CodexAccounts-Vault-v1"),
+        fixture
+            .1
+            .join("synthetic-profile")
+            .join("CodexAccounts-Storage")
+            .join("CodexAccounts-Vault-v1"),
+    ]
+}
+fn layout_fixture() -> (Sandbox, [PathBuf; 2]) {
+    let fixture = location_fixture();
+    let paths = layout_paths(&fixture);
+    protected_directory(paths[1].parent().unwrap().parent().unwrap());
+    (fixture, paths)
+}
+fn protected_directory(path: &Path) {
+    let security = Security::new().unwrap();
+    assert_ne!(
+        unsafe { CreateDirectoryW(wide(path).unwrap().as_ptr(), &security.attrs()) },
+        0
+    );
+}
+fn layout_seed(
+    paths: &[PathBuf; 2],
+    index: usize,
+) -> (RootKey, crate::ProfileId, crate::GenerationId) {
+    if index == 1 {
+        protected_directory(paths[1].parent().unwrap());
+    }
+    let mut disk = Disk::at(&paths[index], true).unwrap();
+    let root = bootstrap(&mut disk, true).unwrap();
+    let mut store = Storage::create(disk, &root).unwrap();
+    let (profile, generation) = store.add(&root, text(), text(), cap()).unwrap();
+    drop(store);
+    (root, profile, generation)
+}
+fn layout_open(paths: &[PathBuf; 2], create: bool) -> Result<Vault, StorageError> {
+    open_vault_dispatch(create, &known_location_namespace(paths), || {
+        Ok(paths.clone())
+    })
+}
+
+#[test]
+fn native_layout_namespace_precedes_known_folder_resolution() {
+    use windows_sys::Win32::System::Threading::{CreateMutexExW, OpenMutexW};
+    let fixture = Sandbox::new();
+    let namespace = location_namespace(&fixture);
+    let security = Security::new().unwrap();
+    let calls = std::cell::Cell::new(0);
+    let denied_resolution = || {
+        calls.set(calls.get() + 1);
+        Err(StorageError::AccessDenied)
+    };
+    let guard = LocationLock::acquire(&security, &namespace).unwrap();
+    assert!(
+        matches!(
+            open_vault_dispatch(false, &namespace, denied_resolution),
+            Err(StorageError::Busy)
+        ),
+        "constructor namespace Busy precedes even failed known-folder resolution"
+    );
+    assert_eq!(
+        calls.get(),
+        0,
+        "Busy never invokes the actual resolver dispatch"
+    );
+    drop(guard);
+    for expected in 1..=2 {
+        assert!(matches!(
+            open_vault_dispatch(false, &namespace, denied_resolution),
+            Err(StorageError::AccessDenied)
+        ));
+        assert_eq!(
+            calls.get(),
+            expected,
+            "resolution failure releases actual namespace ownership"
+        );
+    }
+
+    let mut child = LocationChild::start(&fixture, "abandon");
+    child.ready(&fixture);
+    let observer = Token(unsafe {
+        OpenMutexW(
+            LOCATION_RIGHTS,
+            0,
+            location_mutex_name(&security, &namespace).as_ptr(),
+        )
+    });
+    assert!(!observer.0.is_null());
+    child.finish(&fixture, 73);
+    assert!(
+        matches!(
+            open_vault_dispatch(false, &namespace, denied_resolution),
+            Err(StorageError::RecoveryRequired)
+        ),
+        "constructor abandonment precedes failed known-folder resolution"
+    );
+    assert_eq!(
+        calls.get(),
+        2,
+        "abandoned ownership never invokes resolution"
+    );
+    assert!(matches!(
+        open_vault_dispatch(false, &namespace, denied_resolution),
+        Err(StorageError::AccessDenied)
+    ));
+    assert_eq!(
+        calls.get(),
+        3,
+        "abandoned refusal releases ownership before retry"
+    );
+    drop(observer);
+
+    let broad_namespace = [namespace.as_slice(), b"-broad-dispatch"].concat();
+    let sddl: Vec<u16> = "D:P(A;;GA;;;WD)\0".encode_utf16().collect();
+    let mut descriptor = null_mut();
+    assert_ne!(
+        unsafe {
+            ConvertStringSecurityDescriptorToSecurityDescriptorW(
+                sddl.as_ptr(),
+                SDDL_REVISION_1,
+                &mut descriptor,
+                null_mut(),
+            )
+        },
+        0
+    );
+    let descriptor = Allocation(descriptor);
+    let attrs = SECURITY_ATTRIBUTES {
+        nLength: std::mem::size_of::<SECURITY_ATTRIBUTES>() as u32,
+        lpSecurityDescriptor: descriptor.0,
+        bInheritHandle: 0,
+    };
+    let broad = Token(unsafe {
+        CreateMutexExW(
+            &attrs,
+            location_mutex_name(&security, &broad_namespace).as_ptr(),
+            0,
+            LOCATION_RIGHTS,
+        )
+    });
+    assert!(!broad.0.is_null());
+    assert!(
+        matches!(
+            open_vault_dispatch(false, &broad_namespace, denied_resolution),
+            Err(StorageError::UnsafePath)
+        ),
+        "constructor namespace protection refusal precedes failed known-folder resolution"
+    );
+    assert_eq!(
+        calls.get(),
+        3,
+        "namespace refusal never invokes resolution or repairs protection"
+    );
+}
+fn layout_snapshot(root: &Path) -> std::collections::BTreeMap<String, Vec<u8>> {
+    std::fs::read_dir(root)
+        .unwrap()
+        .map(|entry| {
+            let entry = entry.unwrap();
+            {
+                let name = entry.file_name().into_string().unwrap();
+                let bytes = if name == "lock" {
+                    assert_eq!(entry.metadata().unwrap().len(), 0);
+                    Vec::new()
+                } else {
+                    std::fs::read(entry.path()).unwrap()
+                };
+                (name, bytes)
+            }
+        })
+        .collect()
+}
+fn synthetic_descriptor(extra: &str) -> Allocation {
+    let security = Security::new().unwrap();
+    let mut text = null_mut();
+    assert_ne!(
+        unsafe { ConvertSidToStringSidW(security.user.as_ptr().cast_mut().cast(), &mut text) },
+        0
+    );
+    let text = Allocation(text.cast());
+    let mut len = 0;
+    while len < 256 && unsafe { *text.0.cast::<u16>().add(len) } != 0 {
+        len += 1;
+    }
+    assert!(len < 256);
+    let sid = String::from_utf16(unsafe { std::slice::from_raw_parts(text.0.cast::<u16>(), len) })
+        .unwrap();
+    let sddl: Vec<u16> = format!("O:{sid}D:P{extra}(A;;FA;;;{sid})(A;;FA;;;SY)\0")
+        .encode_utf16()
+        .collect();
+    let mut sd = null_mut();
+    assert_ne!(
+        unsafe {
+            ConvertStringSecurityDescriptorToSecurityDescriptorW(
+                sddl.as_ptr(),
+                SDDL_REVISION_1,
+                &mut sd,
+                null_mut(),
+            )
+        },
+        0
+    );
+    Allocation(sd)
+}
+fn synthetic_dacl(path: &Path, extra: &str) {
+    let sd = synthetic_descriptor(extra);
+    let (mut present, mut acl, mut defaulted) = (0, null_mut(), 0);
+    assert_ne!(
+        unsafe { GetSecurityDescriptorDacl(sd.0, &mut present, &mut acl, &mut defaulted) },
+        0
+    );
+    assert_eq!(
+        unsafe {
+            SetNamedSecurityInfoW(
+                wide(path).unwrap().as_ptr(),
+                SE_FILE_OBJECT,
+                DACL_SECURITY_INFORMATION | PROTECTED_DACL_SECURITY_INFORMATION,
+                null_mut(),
+                null_mut(),
+                acl,
+                null_mut(),
+            )
+        },
+        0
+    );
+}
+
+#[test]
+fn native_layout_legacy_metadata_unsafe_grants_never_authorize_data_or_denial_fallback() {
+    let (fixture, mut paths) = layout_fixture();
+    let legacy_parent = fixture.1.join("synthetic-legacy-ancestor");
+    protected_directory(&legacy_parent);
+    paths[0] = legacy_parent.join("CodexAccounts-Vault-v1");
+    synthetic_dacl(&legacy_parent, "(A;;0x00000002;;;WD)");
+    let parent = open_file(
+        &legacy_parent,
+        FILE_READ_ATTRIBUTES | READ_CONTROL,
+        FILE_SHARE_READ,
+        OPEN_EXISTING,
+        None,
+    )
+    .unwrap();
+    let original_descriptor = security_bytes(&parent);
+    assert!(
+        matches!(
+            Security::new().unwrap().check(&parent, false),
+            Err(StorageError::UnsafePath)
+        ),
+        "strict data checks still refuse the positively supported dangerous grant"
+    );
+    drop(parent);
+    let vault = layout_open(&paths, true).expect("checked metadata absence beneath parsed unsafe legacy grant permits only new protected Profile creation");
+    drop(vault);
+    let parent = open_file(
+        &legacy_parent,
+        FILE_READ_ATTRIBUTES | READ_CONTROL,
+        FILE_SHARE_READ,
+        OPEN_EXISTING,
+        None,
+    )
+    .unwrap();
+    assert_eq!(
+        security_bytes(&parent),
+        original_descriptor,
+        "legacy ancestor permissions are never repaired"
+    );
+    drop(parent);
+    std::fs::remove_dir_all(&paths[1]).unwrap();
+    std::fs::remove_dir(paths[1].parent().unwrap()).unwrap();
+    protected_directory(&paths[0]);
+    assert!(
+        matches!(layout_open(&paths, true), Err(StorageError::AlreadyExists)),
+        "occupied unsafe legacy slot is observed before any data access"
+    );
+    assert!(
+        matches!(layout_open(&paths, false), Err(StorageError::UnsafePath)),
+        "selected legacy data access refuses with no Profile fallback"
+    );
+    assert!(!paths[0].join("lock").exists());
+    std::fs::remove_dir(&paths[0]).unwrap();
+    synthetic_dacl(
+        &legacy_parent,
+        "(OA;;FA;00000000-0000-0000-0000-000000000001;;WD)",
+    );
+    assert!(
+        matches!(layout_open(&paths, true), Err(StorageError::UnsafePath)),
+        "unsupported ACE is not a metadata unsafe-grant tag"
+    );
+    synthetic_dacl(&legacy_parent, "(D;;RC;;;OW)");
+    assert!(
+        matches!(layout_open(&paths, true), Err(StorageError::AccessDenied)),
+        "denied observation never becomes Missing"
+    );
+    assert!(
+        !paths[1].parent().unwrap().exists(),
+        "all metadata refusals leave container absent"
+    );
+}
+
+#[test]
+fn native_layout_fresh_nested_round_trip_and_container_precedence() {
+    let (_fixture, paths) = layout_fixture();
+    assert!(
+        matches!(
+            Disk::at_known_location(&paths, false),
+            Err(StorageError::Missing)
+        ),
+        "genuinely absent container means Missing, never unknown intermediate ancestry"
+    );
+    let mut vault = layout_open(&paths, true).expect("fresh protected container and root");
+    assert!(
+        vault.storage.disk.root == paths[1],
+        "fresh constructor selects only nested Profile root"
+    );
+    let (p, g) = vault
+        .storage
+        .add(&vault.root, text(), text(), cap())
+        .unwrap();
+    let original = layout_snapshot(&paths[1]);
+    drop(vault);
+    let vault = layout_open(&paths, false).unwrap();
+    assert_eq!(vault.storage.latest(p).unwrap(), g);
+    assert_eq!(
+        layout_snapshot(&paths[1]),
+        original,
+        "clean reopen preserves key, control and registry bytes"
+    );
+    drop(vault);
+    assert!(matches!(
+        layout_open(&paths, true),
+        Err(StorageError::AlreadyExists)
+    ));
+    std::fs::remove_dir_all(&paths[1]).unwrap();
+    assert!(
+        matches!(
+            layout_open(&paths, true),
+            Err(StorageError::RecoveryRequired)
+        ),
+        "empty existing container is never adopted"
+    );
+    assert!(matches!(
+        layout_open(&paths, false),
+        Err(StorageError::RecoveryRequired)
+    ));
+}
+
+#[test]
+fn native_layout_reserved_collision_and_empty_container_beside_legacy_preserve_bytes() {
+    let (_fixture, paths) = layout_fixture();
+    let (_, p, g) = layout_seed(&paths, 0);
+    let original = layout_snapshot(&paths[0]);
+    protected_directory(paths[1].parent().unwrap());
+    assert!(
+        matches!(
+            layout_open(&paths, false),
+            Err(StorageError::RecoveryRequired)
+        ),
+        "empty container blocks sole legacy selection"
+    );
+    assert!(matches!(
+        layout_open(&paths, true),
+        Err(StorageError::AlreadyExists)
+    ));
+    assert_eq!(layout_snapshot(&paths[0]), original);
+    std::fs::remove_dir(paths[1].parent().unwrap()).unwrap();
+    let vault = layout_open(&paths, false).unwrap();
+    assert_eq!(vault.storage.latest(p).unwrap(), g);
+    drop(vault);
+    let reserved = paths[1]
+        .parent()
+        .unwrap()
+        .parent()
+        .unwrap()
+        .join("CodexAccounts-Vault-v1");
+    protected_directory(&reserved);
+    assert!(
+        matches!(
+            layout_open(&paths, false),
+            Err(StorageError::ActiveStateUnknown)
+        ),
+        "reserved slot is collision-only"
+    );
+    assert!(matches!(
+        layout_open(&paths, true),
+        Err(StorageError::AlreadyExists)
+    ));
+    assert_eq!(layout_snapshot(&paths[0]), original);
+    std::fs::remove_dir(&reserved).unwrap();
+    layout_seed(&paths, 1);
+    assert!(
+        matches!(
+            layout_open(&paths, false),
+            Err(StorageError::ActiveStateUnknown)
+        ),
+        "two active roots refuse before data reads"
+    );
+    assert_eq!(layout_snapshot(&paths[0]), original);
+
+    // COV-05-02 reserved-only constructor oracle: this is deliberately a
+    // separate fresh fixture, so the preceding reserved-plus-legacy evidence
+    // remains intact and cannot mask a conditional reserved-slot regression.
+    {
+        let (_fixture, paths) = layout_fixture();
+        let profile = paths[1].parent().unwrap().parent().unwrap();
+        let reserved = profile.join("CodexAccounts-Vault-v1");
+        protected_directory(&reserved);
+        let canary = reserved.join("synthetic-reserved-only-canary");
+        std::fs::write(&canary, b"SYNTHETIC_RESERVED_ONLY_CANARY").unwrap();
+        let reserved_before = layout_snapshot(&reserved);
+        let profile_before = std::fs::read_dir(profile)
+            .unwrap()
+            .map(|entry| entry.unwrap().file_name().into_string().unwrap())
+            .collect::<std::collections::BTreeSet<_>>();
+        assert_eq!(
+            profile_before,
+            ["CodexAccounts-Vault-v1".to_owned()].into_iter().collect(),
+            "the fresh reserved-only fixture has no active root or nested container"
+        );
+        assert!(
+            !paths[0].exists() && !paths[1].exists() && !paths[1].parent().unwrap().exists(),
+            "both active roots and the fixed nested container start absent"
+        );
+        if test_gaps_adverse() == Some(TestGapsAdverse::ReservedAbsent) {
+            std::fs::remove_file(&canary).unwrap();
+            std::fs::remove_dir(&reserved).unwrap();
+            assert!(
+                !reserved.exists(),
+                "reserved-absent adverse control removed only the owned reserved fixture"
+            );
+        }
+        assert!(
+            matches!(
+                layout_open(&paths, false),
+                Err(StorageError::ActiveStateUnknown)
+            ),
+            "reserved-only occupancy refuses open before either active slot is created"
+        );
+        assert!(
+            matches!(layout_open(&paths, true), Err(StorageError::AlreadyExists)),
+            "reserved-only occupancy refuses create before key or control access"
+        );
+        assert_eq!(
+            layout_snapshot(&reserved),
+            reserved_before,
+            "both reserved-only refusals preserve exact owned canary inventory"
+        );
+        let profile_after = std::fs::read_dir(profile)
+            .unwrap()
+            .map(|entry| entry.unwrap().file_name().into_string().unwrap())
+            .collect::<std::collections::BTreeSet<_>>();
+        assert_eq!(
+            profile_after, profile_before,
+            "both reserved-only refusals preserve the exact Profile child inventory"
+        );
+        assert!(
+            !paths[0].exists() && !paths[1].exists() && !paths[1].parent().unwrap().exists(),
+            "reserved-only refusal never creates either active root or nested container"
+        );
+        for root in [&paths[0], &paths[1], &reserved] {
+            for name in ["key.cakp", "state.bin", "lock"] {
+                assert!(
+                    !root.join(name).exists(),
+                    "reserved-only refusal never creates protected storage files"
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn native_layout_existing_lock_is_read_only_and_lock_first() {
+    let (_fixture, paths) = layout_fixture();
+    let _ = layout_seed(&paths, 1);
+    std::fs::remove_file(paths[1].join("lock")).unwrap();
+    std::fs::rename(paths[1].join("key.cakp"), paths[1].join("key.cakp.stage")).unwrap();
+    let before = layout_snapshot(&paths[1]);
+    assert!(
+        matches!(
+            layout_open(&paths, false),
+            Err(StorageError::RecoveryRequired)
+        ),
+        "missing existing lock wins over staged-key plus payload refusal"
+    );
+    assert_eq!(
+        layout_snapshot(&paths[1]),
+        before,
+        "recognition never recreates lock or adopts key"
+    );
+    let lock = open_file(
+        &paths[1].join("lock"),
+        GENERIC_READ | GENERIC_WRITE | READ_CONTROL,
+        0,
+        CREATE_NEW,
+        Some(&Security::new().unwrap()),
+    )
+    .unwrap();
+    drop(lock);
+    assert!(matches!(
+        layout_open(&paths, false),
+        Err(StorageError::KeyUnavailable)
+    ));
+    assert_eq!(
+        layout_snapshot(&paths[1]).get("key.cakp.stage"),
+        before.get("key.cakp.stage")
+    );
+    std::fs::write(paths[1].join("lock"), b"SYNTHETIC_INVALID_LOCK").unwrap();
+    assert!(
+        matches!(layout_open(&paths, false), Err(StorageError::Corrupt)),
+        "invalid lock also wins over key classification"
+    );
+}
+
+#[test]
+fn native_layout_unrecognized_initialization_and_key_matrix_are_preserved() {
+    let (_fixture, paths) = layout_fixture();
+    protected_directory(paths[1].parent().unwrap());
+    let mut disk = Disk::at(&paths[1], true).unwrap();
+    let root = bootstrap(&mut disk, true).unwrap();
+    drop(disk);
+    let before = layout_snapshot(&paths[1]);
+    assert!(
+        matches!(
+            layout_open(&paths, false),
+            Err(StorageError::RecoveryRequired)
+        ),
+        "committed key alone is not an authenticated store"
+    );
+    assert_eq!(layout_snapshot(&paths[1]), before);
+    std::fs::rename(paths[1].join("key.cakp"), paths[1].join("key.cakp.stage")).unwrap();
+    let before = layout_snapshot(&paths[1]);
+    assert!(
+        matches!(
+            layout_open(&paths, false),
+            Err(StorageError::RecoveryRequired)
+        ),
+        "staged-only bootstrap is never adopted"
+    );
+    assert_eq!(layout_snapshot(&paths[1]), before);
+    std::fs::write(paths[1].join("payload.bin"), b"SYNTHETIC_PAYLOAD").unwrap();
+    assert!(matches!(
+        layout_open(&paths, false),
+        Err(StorageError::KeyUnavailable)
+    ));
+    std::fs::remove_file(paths[1].join("payload.bin")).unwrap();
+    let mut committed = open_file(
+        &paths[1].join("key.cakp"),
+        GENERIC_READ | GENERIC_WRITE | READ_CONTROL,
+        0,
+        CREATE_NEW,
+        Some(&Security::new().unwrap()),
+    )
+    .unwrap();
+    committed
+        .write_all(root.protect().unwrap().as_bytes())
+        .unwrap();
+    committed.sync_all().unwrap();
+    drop(committed);
+    assert!(
+        matches!(
+            layout_open(&paths, false),
+            Err(StorageError::ExternalChange)
+        ),
+        "committed plus staged key never selects either"
+    );
+    std::fs::remove_file(paths[1].join("key.cakp.stage")).unwrap();
+    std::fs::write(paths[1].join("key.cakp"), b"SYNTHETIC_MALFORMED_KEY").unwrap();
+    assert!(matches!(
+        layout_open(&paths, false),
+        Err(StorageError::KeyUnavailable)
+    ));
+}
+
+#[test]
+fn native_layout_container_inventory_and_lifetime_changes_refuse_before_effects() {
+    let (_fixture, paths) = layout_fixture();
+    let (_, p, _) = layout_seed(&paths, 1);
+    let canary = paths[1].parent().unwrap().join("synthetic-extra-child");
+    std::fs::write(&canary, b"SYNTHETIC_CONTAINER_CANARY").unwrap();
+    let before = layout_snapshot(&paths[1]);
+    assert!(
+        matches!(layout_open(&paths, false), Err(StorageError::UnsafePath)),
+        "initial container inventory is exactly one fixed directory child"
+    );
+    assert_eq!(layout_snapshot(&paths[1]), before);
+    std::fs::remove_file(&canary).unwrap();
+    let mut vault = layout_open(&paths, false).unwrap();
+    std::fs::write(&canary, b"SYNTHETIC_LATE_CHILD").unwrap();
+    assert!(matches!(
+        vault.storage.read_latest(&vault.root, p),
+        Err(StorageError::ExternalChange)
+    ));
+    assert!(matches!(
+        vault.storage.add(&vault.root, text(), text(), cap()),
+        Err(StorageError::ExternalChange)
+    ));
+    assert_eq!(
+        layout_snapshot(&paths[1]),
+        before,
+        "late ambiguity precedes every protected effect"
+    );
+    drop(vault);
+    std::fs::remove_file(&canary).unwrap();
+    let vault = layout_open(&paths, false).unwrap();
+    protected_directory(&paths[0]);
+    assert!(matches!(
+        vault.storage.read_latest(&vault.root, p),
+        Err(StorageError::ExternalChange)
+    ));
+    assert_eq!(layout_snapshot(&paths[1]), before);
+}
+
+#[test]
+fn native_layout_authenticated_stages_and_torn_recovery_keep_real_methods_reachable() {
+    let (_fixture, paths) = layout_fixture();
+    protected_directory(paths[1].parent().unwrap());
+    let mut disk = Disk::at(&paths[1], true).unwrap();
+    let _root = bootstrap(&mut disk, true).unwrap();
+    disk.stage("state.bin", b"SYNTHETIC_TORN_WITHOUT_ANCHOR")
+        .unwrap();
+    drop(disk);
+    let before = layout_snapshot(&paths[1]);
+    assert!(
+        matches!(
+            layout_open(&paths, false),
+            Err(StorageError::RecoveryRequired)
+        ),
+        "torn stage without current authenticated anchor is incomplete initialization"
+    );
+    assert_eq!(layout_snapshot(&paths[1]), before);
+    std::fs::remove_dir_all(&paths[1]).unwrap();
+    std::fs::remove_dir(paths[1].parent().unwrap()).unwrap();
+    let (root, p, g) = layout_seed(&paths, 1);
+    let mut disk = Disk::at(&paths[1], false).unwrap();
+    disk.stage("state.bin", b"SYNTHETIC_TORN_WITH_VALID_ANCHOR")
+        .unwrap();
+    drop(disk);
+    let before = layout_snapshot(&paths[1]);
+    let mut vault = layout_open(&paths, false).unwrap();
+    assert_eq!(vault.recovery(), Recovery::ControlRepairRequired);
+    assert!(matches!(
+        vault.storage.read_latest(&vault.root, p),
+        Err(StorageError::RecoveryRequired)
+    ));
+    assert_eq!(
+        layout_snapshot(&paths[1]),
+        before,
+        "recognition and torn opening are nonmutating"
+    );
+    vault.recover_control().unwrap();
+    assert_eq!(vault.recovery(), Recovery::Clean);
+    assert_eq!(vault.storage.latest(p).unwrap(), g);
+    drop(vault);
+    let mut disk = Disk::at(&paths[1], false).unwrap();
+    let current = disk.read("state.bin").unwrap().unwrap();
+    let context = codex_accounts_vault_crypto::EnvelopeContext::new(
+        codex_accounts_vault_crypto::Purpose::Journal,
+        1,
+        root.identifier(),
+        root.identifier(),
+        0,
+    )
+    .unwrap();
+    let plaintext = root
+        .open(
+            &context,
+            &codex_accounts_vault_crypto::Envelope::from_bytes(&current).unwrap(),
+        )
+        .unwrap();
+    let mut next = crate::codec::read_state(plaintext.expose()).unwrap();
+    next.sequence += 1;
+    next.parent = Some(digest(&current));
+    let sealed = root
+        .seal(&context, &crate::codec::state(&next).unwrap())
+        .unwrap();
+    disk.stage("state.bin", sealed.as_bytes()).unwrap();
+    drop(disk);
+    let disk = Disk::at_known_location(&paths, false).unwrap();
+    assert_eq!(
+        std::fs::read(paths[1].join("state.bin")).unwrap(),
+        current,
+        "private recognition never publishes an authenticated stage"
+    );
+    assert!(paths[1].join("state.bin.stage").exists());
+    drop(disk);
+    let vault = layout_open(&paths, false).unwrap();
+    assert_eq!(vault.recovery(), Recovery::Clean);
+    assert_eq!(
+        std::fs::read(paths[1].join("state.bin")).unwrap(),
+        sealed.as_bytes(),
+        "only admitted existing Storage::open publishes the valid stage"
+    );
+}
+
+thread_local! { static CREATION_FAULT: std::cell::Cell<Option<u8>> = const { std::cell::Cell::new(None) }; }
+pub(super) fn creation_checkpoint(point: u8) -> Result<(), StorageError> {
+    CREATION_FAULT.with(|fault| {
+        if fault.get() == Some(point) {
+            fault.set(None);
+            Err(StorageError::Io)
+        } else {
+            Ok(())
+        }
+    })
+}
+struct CreationFault;
+impl CreationFault {
+    fn arm(point: u8) -> Self {
+        CREATION_FAULT.with(|f| f.set(Some(point)));
+        Self
+    }
+}
+impl Drop for CreationFault {
+    fn drop(&mut self) {
+        CREATION_FAULT.with(|f| f.set(None));
+    }
+}
+
+struct FailSecondControlStage {
+    disk: Disk,
+    controls: usize,
+}
+impl Files for FailSecondControlStage {
+    fn read(&self, name: &str) -> Result<Option<Vec<u8>>, StorageError> {
+        self.disk.read(name)
+    }
+    fn list(&self) -> Result<Vec<String>, StorageError> {
+        self.disk.list()
+    }
+    fn stage(&mut self, name: &str, bytes: &[u8]) -> Result<(), StorageError> {
+        self.disk.stage(name, bytes)?;
+        if name == "state.bin" {
+            self.controls += 1;
+            if self.controls == 2 {
+                return Err(StorageError::Io);
+            }
+        }
+        Ok(())
+    }
+    fn publish(
+        &mut self,
+        name: &str,
+        old: Option<&[u8]>,
+        bytes: &[u8],
+    ) -> Result<(), StorageError> {
+        self.disk.publish(name, old, bytes)
+    }
+    fn erase(&mut self, name: &str, bytes: &[u8]) -> Result<(), StorageError> {
+        self.disk.erase(name, bytes)
+    }
+}
+
+#[cfg(test)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum TestGapsAdverse {
+    ReservedAbsent,
+    CleanupPrecompleted,
+    CleanupSkipped,
+    RestorePrecompleted,
+    RestoreSkipped,
+}
+
+#[cfg(test)]
+fn test_gaps_adverse() -> Option<TestGapsAdverse> {
+    let Ok(value) = std::env::var("CA05_TEST_GAPS_ADVERSE") else {
+        return None;
+    };
+    Some(match value.as_str() {
+        "reserved-absent" => TestGapsAdverse::ReservedAbsent,
+        "cleanup-precompleted" => TestGapsAdverse::CleanupPrecompleted,
+        "cleanup-skipped" => TestGapsAdverse::CleanupSkipped,
+        "restore-precompleted" => TestGapsAdverse::RestorePrecompleted,
+        "restore-skipped" => TestGapsAdverse::RestoreSkipped,
+        _ => panic!("unknown CA05_TEST_GAPS_ADVERSE selector"),
+    })
+}
+
+#[cfg(test)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum PendingEffect {
+    CommitIntentPublish,
+    GarbageErase,
+}
+
+// Delegates every real Disk operation. The selected operation has already
+// completed on the test-owned synthetic fixture when it reports Io, modelling
+// uncertain durable outcome without altering production behavior or Disk.
+#[cfg(test)]
+struct FailPendingEffect {
+    disk: Disk,
+    effect: PendingEffect,
+    injected: bool,
+}
+
+#[cfg(test)]
+impl Files for FailPendingEffect {
+    fn read(&self, name: &str) -> Result<Option<Vec<u8>>, StorageError> {
+        self.disk.read(name)
+    }
+    fn list(&self) -> Result<Vec<String>, StorageError> {
+        self.disk.list()
+    }
+    fn stage(&mut self, name: &str, bytes: &[u8]) -> Result<(), StorageError> {
+        self.disk.stage(name, bytes)
+    }
+    fn publish(
+        &mut self,
+        name: &str,
+        old: Option<&[u8]>,
+        bytes: &[u8],
+    ) -> Result<(), StorageError> {
+        self.disk.publish(name, old, bytes)?;
+        if self.effect == PendingEffect::CommitIntentPublish
+            && !self.injected
+            && name == "state.bin"
+        {
+            self.injected = true;
+            return Err(StorageError::Io);
+        }
+        Ok(())
+    }
+    fn erase(&mut self, name: &str, bytes: &[u8]) -> Result<(), StorageError> {
+        self.disk.erase(name, bytes)?;
+        if self.effect == PendingEffect::GarbageErase && !self.injected {
+            self.injected = true;
+            return Err(StorageError::Io);
+        }
+        Ok(())
+    }
+}
+
+#[test]
+fn native_layout_creation_failures_and_declared_pending_registry_recovery() {
+    for point in 1..=5 {
+        let (_fixture, paths) = layout_fixture();
+        let fault = CreationFault::arm(point);
+        assert!(
+            matches!(creation_checkpoint(99), Ok(())),
+            "unselected probe cannot inject a failure"
+        );
+        let result = layout_open(&paths, true);
+        drop(fault);
+        assert!(matches!(result,Err(StorageError::Io)),"the exact actual post-creation/key/control effect must reach the injected typed failure");
+        drop(
+            LocationLock::acquire(&Security::new().unwrap(), &known_location_namespace(&paths))
+                .unwrap(),
+        );
+        assert!(
+            paths[1].parent().unwrap().is_dir(),
+            "uncertain created container is preserved"
+        );
+        let before = if paths[1].exists() {
+            layout_snapshot(&paths[1])
+        } else {
+            std::collections::BTreeMap::new()
+        };
+        let retry = layout_open(&paths, true);
+        assert!(
+            matches!(
+                retry,
+                Err(StorageError::AlreadyExists | StorageError::RecoveryRequired)
+            ),
+            "create never completes preserved partial initialization"
+        );
+        if point < 5 {
+            assert!(matches!(
+                layout_open(&paths, false),
+                Err(StorageError::RecoveryRequired)
+            ));
+        } else {
+            let mut vault = layout_open(&paths, false).unwrap();
+            assert_eq!(vault.recovery(),Recovery::CommitPending,"authenticated published first intent is recognized and returns an actual guarded recovery object");
+            assert!(matches!(
+                vault.storage.add(&vault.root, text(), text(), cap()),
+                Err(StorageError::RecoveryRequired)
+            ));
+            assert_eq!(
+                layout_snapshot(&paths[1]),
+                before,
+                "recognized opening does not complete pending initialization"
+            );
+            let key = before.get("key.cakp").unwrap().clone();
+            vault.reconcile().unwrap();
+            assert_eq!(vault.recovery(), Recovery::Clean);
+            assert_eq!(std::fs::read(paths[1].join("key.cakp")).unwrap(), key);
+            continue;
+        }
+        if paths[1].exists() {
+            assert_eq!(
+                layout_snapshot(&paths[1]),
+                before,
+                "both retries preserve every resulting synthetic byte"
+            );
+        }
+    }
+    let (_fixture, paths) = layout_fixture();
+    let (root, p, g) = layout_seed(&paths, 1);
+    let disk = Disk::at_known_location(&paths, false).unwrap();
+    let mut store = Storage::open(FailSecondControlStage { disk, controls: 0 }, &root).unwrap();
+    assert!(matches!(
+        store.append(&root, p, g, cap()),
+        Err(StorageError::Io)
+    ));
+    assert_eq!(
+        store.disk.controls, 2,
+        "fault follows the real pending intent and all new registry/object publications"
+    );
+    drop(store);
+    let before = layout_snapshot(&paths[1]);
+    let disk = Disk::at_known_location(&paths, false).unwrap();
+    assert_eq!(
+        layout_snapshot(&paths[1]),
+        before,
+        "private recognition admits declared new registry but never publishes its control"
+    );
+    let mut store = Storage::open(disk, &root).unwrap();
+    assert_eq!(store.recovery(), Recovery::Clean);
+    assert_ne!(
+        store.latest(p).unwrap(),
+        g,
+        "existing opening publishes the genuine new-registry control after recognition"
+    );
+    let (id, mut effects) =
+        crate::engine::coordinator::tests::native_prepare_interrupted(&mut store, &root);
+    drop(store);
+    let mut vault = layout_open(&paths, false).unwrap();
+    assert_eq!(vault.recovery(), Recovery::SwitchPending);
+    assert!(matches!(
+        vault.storage.add(&vault.root, text(), text(), cap()),
+        Err(StorageError::SwitchPending)
+    ));
+    crate::engine::coordinator::tests::native_finish_interrupted(
+        &mut vault.storage,
+        &vault.root,
+        id,
+        &mut effects,
+    );
+
+    // COV-05-01 CleanupPending: append first so prune has an actual obsolete
+    // generation and authenticated garbage. A later Storage::open establishes
+    // the required later-startup condition before the real garbage erase fault.
+    {
+        let (_fixture, paths) = layout_fixture();
+        let (root, profile, first) = layout_seed(&paths, 1);
+        let key_before = std::fs::read(paths[1].join("key.cakp")).unwrap();
+        let disk = Disk::at_known_location(&paths, false).unwrap();
+        let mut store = Storage::open(disk, &root).unwrap();
+        let current = store.append(&root, profile, first, cap()).unwrap();
+        assert_eq!(store.latest(profile).unwrap(), current);
+        drop(store);
+        let disk = Disk::at_known_location(&paths, false).unwrap();
+        let mut store = Storage::open(
+            FailPendingEffect {
+                disk,
+                effect: PendingEffect::GarbageErase,
+                injected: false,
+            },
+            &root,
+        )
+        .unwrap();
+        assert!(
+            matches!(store.prune(&root), Err(StorageError::Io)),
+            "actual authenticated garbage erasure reports the injected I/O outcome"
+        );
+        assert!(
+            store.disk.injected,
+            "the cleanup fixture reached a real Disk garbage-erase effect"
+        );
+        drop(store);
+        let cleanup_pending = layout_snapshot(&paths[1]);
+        let disk = Disk::at_known_location(&paths, false).unwrap();
+        crate::engine::recognize_existing(&disk, &root).unwrap();
+        assert_eq!(
+            layout_snapshot(&paths[1]),
+            cleanup_pending,
+            "authenticated read-only recognition leaves CleanupPending bytes intact"
+        );
+        drop(disk);
+        if test_gaps_adverse() == Some(TestGapsAdverse::CleanupPrecompleted) {
+            let mut completed = layout_open(&paths, false).unwrap();
+            completed.reconcile().unwrap();
+            assert_eq!(
+                completed.recovery(),
+                Recovery::Clean,
+                "cleanup-precompleted adverse control completed the owned pending fixture"
+            );
+            drop(completed);
+        }
+        let mut vault = layout_open(&paths, false).unwrap();
+        assert_eq!(
+            vault.recovery(),
+            Recovery::CleanupPending,
+            "layout_open returns the actual guarded CleanupPending Vault"
+        );
+        assert_eq!(
+            layout_snapshot(&paths[1]),
+            cleanup_pending,
+            "constructor admission does not mutate the authenticated cleanup inventory"
+        );
+        assert!(
+            matches!(
+                vault.add(text(), text(), cap()),
+                Err(StorageError::RecoveryRequired)
+            ),
+            "ordinary mutation remains refused while cleanup is pending"
+        );
+        assert!(matches!(
+            vault.latest(profile),
+            Err(StorageError::RecoveryRequired)
+        ));
+        assert!(matches!(
+            vault.read_latest(profile),
+            Err(StorageError::RecoveryRequired)
+        ));
+        assert!(matches!(
+            vault.append(profile, current, cap()),
+            Err(StorageError::RecoveryRequired)
+        ));
+        assert!(matches!(vault.prune(), Err(StorageError::RecoveryRequired)));
+        assert!(matches!(
+            vault.remove_inactive(profile),
+            Err(StorageError::RecoveryRequired)
+        ));
+        assert_eq!(
+            layout_snapshot(&paths[1]),
+            cleanup_pending,
+            "all ordinary-operation refusals preserve the authenticated pending inventory"
+        );
+        if test_gaps_adverse() == Some(TestGapsAdverse::CleanupSkipped) {
+            assert_eq!(
+                vault.recovery(),
+                Recovery::CleanupPending,
+                "cleanup-skipped adverse control left the owned pending fixture unresolved"
+            );
+        } else {
+            vault.reconcile().unwrap();
+        }
+        assert_eq!(
+            vault.recovery(),
+            Recovery::Clean,
+            "explicit reconciliation is required to reach clean state"
+        );
+        assert_eq!(vault.latest(profile).unwrap(), current);
+        assert_eq!(
+            std::fs::read(paths[1].join("key.cakp")).unwrap(),
+            key_before,
+            "reconciliation preserves exact wrapped-key bytes"
+        );
+        let cleaned = layout_snapshot(&paths[1]);
+        assert!(
+            cleaned.len() < cleanup_pending.len()
+                && cleaned.iter().all(|(name, bytes)| {
+                    name == "state.bin" || cleanup_pending.get(name) == Some(bytes)
+                }),
+            "reconciliation preserves authenticated retained inventory and erases only pending garbage"
+        );
+    }
+
+    // COV-05-01 CommitPending: the real control intent publishes first, then
+    // reports Io. The old authenticated registry remains current and the
+    // constructor must return a guarded Vault with restore_previous reachable.
+    {
+        let (_fixture, paths) = layout_fixture();
+        let (root, profile, old) = layout_seed(&paths, 1);
+        let old_inventory = layout_snapshot(&paths[1]);
+        let key_before = std::fs::read(paths[1].join("key.cakp")).unwrap();
+        let disk = Disk::at_known_location(&paths, false).unwrap();
+        let mut store = Storage::open(
+            FailPendingEffect {
+                disk,
+                effect: PendingEffect::CommitIntentPublish,
+                injected: false,
+            },
+            &root,
+        )
+        .unwrap();
+        assert!(
+            matches!(
+                store.append(&root, profile, old, cap()),
+                Err(StorageError::Io)
+            ),
+            "the actual pending control intent reports the injected I/O outcome"
+        );
+        assert!(
+            store.disk.injected,
+            "the commit fixture reached a real Disk control-intent publication"
+        );
+        drop(store);
+        let commit_pending = layout_snapshot(&paths[1]);
+        let disk = Disk::at_known_location(&paths, false).unwrap();
+        crate::engine::recognize_existing(&disk, &root).unwrap();
+        assert_eq!(
+            layout_snapshot(&paths[1]),
+            commit_pending,
+            "authenticated read-only recognition leaves CommitPending bytes intact"
+        );
+        drop(disk);
+        if test_gaps_adverse() == Some(TestGapsAdverse::RestorePrecompleted) {
+            let mut completed = layout_open(&paths, false).unwrap();
+            completed.restore_previous().unwrap();
+            assert_eq!(
+                completed.recovery(),
+                Recovery::Clean,
+                "restore-precompleted adverse control completed the owned pending fixture"
+            );
+            drop(completed);
+        }
+        let mut vault = layout_open(&paths, false).unwrap();
+        assert_eq!(
+            vault.recovery(),
+            Recovery::CommitPending,
+            "layout_open returns the actual guarded CommitPending Vault"
+        );
+        assert_eq!(
+            layout_snapshot(&paths[1]),
+            commit_pending,
+            "constructor admission does not publish or rewrite the pending control"
+        );
+        assert!(
+            matches!(
+                vault.add(text(), text(), cap()),
+                Err(StorageError::RecoveryRequired)
+            ),
+            "ordinary mutation remains refused while commit restoration is pending"
+        );
+        assert!(matches!(
+            vault.latest(profile),
+            Err(StorageError::RecoveryRequired)
+        ));
+        assert!(matches!(
+            vault.read_latest(profile),
+            Err(StorageError::RecoveryRequired)
+        ));
+        assert!(matches!(
+            vault.append(profile, old, cap()),
+            Err(StorageError::RecoveryRequired)
+        ));
+        assert!(matches!(vault.prune(), Err(StorageError::RecoveryRequired)));
+        assert!(matches!(
+            vault.remove_inactive(profile),
+            Err(StorageError::RecoveryRequired)
+        ));
+        assert_eq!(
+            layout_snapshot(&paths[1]),
+            commit_pending,
+            "all ordinary-operation refusals preserve the authenticated pending inventory"
+        );
+        if test_gaps_adverse() == Some(TestGapsAdverse::RestoreSkipped) {
+            assert_eq!(
+                vault.recovery(),
+                Recovery::CommitPending,
+                "restore-skipped adverse control left the owned pending fixture unresolved"
+            );
+        } else {
+            vault.restore_previous().unwrap();
+        }
+        assert_eq!(
+            vault.recovery(),
+            Recovery::Clean,
+            "explicit restore_previous is required to reach clean state"
+        );
+        assert_eq!(vault.latest(profile).unwrap(), old);
+        assert_eq!(
+            std::fs::read(paths[1].join("key.cakp")).unwrap(),
+            key_before,
+            "restore_previous preserves exact wrapped-key bytes"
+        );
+        let restored = layout_snapshot(&paths[1]);
+        for (name, bytes) in &old_inventory {
+            if name != "state.bin" {
+                assert_eq!(
+                    restored.get(name),
+                    Some(bytes),
+                    "restore_previous preserves the old authenticated inventory"
+                );
+            }
+        }
+        assert!(
+            restored
+                .keys()
+                .all(|name| name == "state.bin" || old_inventory.contains_key(name)),
+            "restore_previous leaves no pending object outside the old inventory"
+        );
+    }
+}
+
+#[test]
+fn native_layout_descriptor_drift_and_legacy_container_absence_are_lifetime_guards() {
+    let (fixture, mut paths) = layout_fixture();
+    let legacy_parent = fixture.1.join("synthetic-observed-legacy-parent");
+    protected_directory(&legacy_parent);
+    paths[0] = legacy_parent.join(VAULT_CHILD);
+    synthetic_dacl(&legacy_parent, "(A;;0x00000002;;;WD)");
+    let mut vault = layout_open(&paths, true).unwrap();
+    assert!(
+        matches!(layout_open(&paths, false), Err(StorageError::Busy)),
+        "actual constructor acquires namespace before metadata/selection"
+    );
+    assert!(
+        matches!(Disk::at(&paths[1], false), Err(StorageError::Busy)),
+        "actual recognized namespace retains independent per-root ownership"
+    );
+    let before = layout_snapshot(&paths[1]);
+    // Both descriptors have the same supported unsafe-grant classification.
+    // Only the observed byte comparison detects this test-owned DACL change.
+    synthetic_dacl(&legacy_parent, "(A;;0x00000006;;;WD)");
+    assert!(
+        matches!(
+            vault.storage.disk.read("key.cakp"),
+            Err(StorageError::ExternalChange)
+        ),
+        "same-tag descriptor drift refuses protected read"
+    );
+    assert!(
+        matches!(
+            vault.storage.add(&vault.root, text(), text(), cap()),
+            Err(StorageError::ExternalChange)
+        ),
+        "same-tag descriptor drift refuses before a protected effect"
+    );
+    assert_eq!(layout_snapshot(&paths[1]), before);
+    drop(vault);
+    let (_fixture, paths) = layout_fixture();
+    let (root, p, _) = layout_seed(&paths, 0);
+    let vault = layout_open(&paths, false).unwrap();
+    let before = layout_snapshot(&paths[0]);
+    protected_directory(paths[1].parent().unwrap());
+    assert!(
+        matches!(
+            vault.storage.read_latest(&vault.root, p),
+            Err(StorageError::ExternalChange)
+        ),
+        "sole legacy lifetime retains actual checked container absence"
+    );
+    assert_eq!(layout_snapshot(&paths[0]), before);
+    drop(vault);
+    std::fs::remove_dir(paths[1].parent().unwrap()).unwrap();
+    let mut disk = Disk::at(&paths[0], false).unwrap();
+    disk.stage("state.bin", b"SYNTHETIC_RECOGNITION_TORN_STAGE")
+        .unwrap();
+    let before = layout_snapshot(&paths[0]);
+    crate::engine::recognize_existing(&disk, &root).unwrap();
+    assert_eq!(
+        layout_snapshot(&paths[0]),
+        before,
+        "direct private engine recognition performs no creation/publication/erase"
+    );
+    drop(disk);
+}
+
+struct StopFirstControlStage(Disk);
+impl Files for StopFirstControlStage {
+    fn read(&self, name: &str) -> Result<Option<Vec<u8>>, StorageError> {
+        self.0.read(name)
+    }
+    fn list(&self) -> Result<Vec<String>, StorageError> {
+        self.0.list()
+    }
+    fn stage(&mut self, name: &str, bytes: &[u8]) -> Result<(), StorageError> {
+        self.0.stage(name, bytes)?;
+        if name == "state.bin" {
+            Err(StorageError::Io)
+        } else {
+            Ok(())
+        }
+    }
+    fn publish(
+        &mut self,
+        name: &str,
+        old: Option<&[u8]>,
+        bytes: &[u8],
+    ) -> Result<(), StorageError> {
+        self.0.publish(name, old, bytes)
+    }
+    fn erase(&mut self, name: &str, bytes: &[u8]) -> Result<(), StorageError> {
+        self.0.erase(name, bytes)
+    }
+}
+#[test]
+fn native_layout_valid_staged_initial_anchor_reconciles_without_key_regeneration() {
+    let (_fixture, paths) = layout_fixture();
+    protected_directory(paths[1].parent().unwrap());
+    let mut disk = Disk::at(&paths[1], true).unwrap();
+    let root = bootstrap(&mut disk, true).unwrap();
+    assert!(
+        matches!(
+            Storage::create(StopFirstControlStage(disk), &root),
+            Err(StorageError::Io)
+        ),
+        "stop only after real authenticated first control staging"
+    );
+    let before = layout_snapshot(&paths[1]);
+    assert!(!before.contains_key("state.bin"));
+    assert!(before.contains_key("state.bin.stage"));
+    let disk = Disk::at_known_location(&paths, false)
+        .expect("valid staged initial authenticated anchor must recognize read-only");
+    crate::engine::recognize_existing(&disk, &root).unwrap();
+    assert_eq!(
+        layout_snapshot(&paths[1]),
+        before,
+        "stage-only recognition never publishes control or key"
+    );
+    let mut vault = finish_vault(disk, false).unwrap();
+    assert_eq!(vault.recovery(), Recovery::CommitPending);
+    assert!(matches!(
+        vault.storage.add(&vault.root, text(), text(), cap()),
+        Err(StorageError::RecoveryRequired)
+    ));
+    vault.reconcile().unwrap();
+    assert_eq!(vault.recovery(), Recovery::Clean);
+    assert_eq!(
+        std::fs::read(paths[1].join("key.cakp")).unwrap(),
+        *before.get("key.cakp").unwrap(),
+        "explicit recognized-store recovery keeps the exact committed wrapped key"
+    );
+}
+
+// TASK-04 uses separate names and only the exact newly-owned fixture. The name
+// includes current-user identity internally, but neither names nor SIDs are logged.
+fn location_fixture() -> Sandbox {
+    let fixture = Sandbox::new();
+    if let Some(journal) = std::env::var_os("CA04_LOCATION_SYNTHETIC_JOURNAL") {
+        // Optional private author capture, never a behavior/authority bypass.
+        // Retain each exact exclusively-owned root before any adverse operation.
+        let encoded: String = fixture
+            .1
+            .as_os_str()
+            .encode_wide()
+            .flat_map(u16::to_le_bytes)
+            .map(|b| format!("{b:02x}"))
+            .collect();
+        let mut file = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(journal)
+            .unwrap();
+        writeln!(
+            file,
+            "{{\"root_utf16_hex\":\"{encoded}\",\"pid\":{}}}",
+            std::process::id()
+        )
+        .unwrap();
+        file.sync_all().unwrap();
+    }
+    fixture
+}
+fn location_namespace(fixture: &Sandbox) -> Vec<u8> {
+    fixture
+        .1
+        .as_os_str()
+        .encode_wide()
+        .flat_map(u16::to_le_bytes)
+        .collect()
+}
+fn location_slots(fixture: &Sandbox) -> [PathBuf; 2] {
+    [
+        fixture.1.join("synthetic-legacy-slot"),
+        fixture.1.join("synthetic-profile-slot"),
+    ]
+}
+fn location_mutex_name(security: &Security, namespace: &[u8]) -> Vec<u16> {
+    use sha2::{Digest, Sha256};
+    let mut hash = Sha256::new();
+    hash.update(b"CodexAccounts/VaultLocation/v1\0");
+    hash.update((security.user.len() as u32).to_le_bytes());
+    hash.update(&security.user);
+    hash.update(namespace);
+    let hex: String = hash.finalize().iter().map(|b| format!("{b:02x}")).collect();
+    format!("Global\\CodexAccounts.VaultLocation.v1.{hex}\0")
+        .encode_utf16()
+        .collect()
+}
+fn protected_location_mutex(handle: HANDLE, security: &Security) -> bool {
+    let (mut owner, mut dacl, mut sd) = (null_mut(), null_mut(), null_mut());
+    let status = unsafe {
+        GetSecurityInfo(
+            handle,
+            SE_KERNEL_OBJECT,
+            OWNER_SECURITY_INFORMATION | DACL_SECURITY_INFORMATION,
+            &mut owner,
+            null_mut(),
+            &mut dacl,
+            null_mut(),
+            &mut sd,
+        )
+    };
+    let sd = Allocation(sd);
+    if status != 0 || sid_copy(owner).ok().as_ref() != Some(&security.user) || dacl.is_null() {
+        return false;
+    }
+    let (mut control, mut revision) = (0, 0);
+    if unsafe { GetSecurityDescriptorControl(sd.0, &mut control, &mut revision) } == 0
+        || control & SE_DACL_PROTECTED == 0
+        || unsafe { IsValidAcl(dacl) } == 0
+        || unsafe { (*dacl).AceCount } != 2
+    {
+        return false;
+    }
+    let mut found = [false; 2];
+    for index in 0..2 {
+        let mut ace = null_mut();
+        if unsafe { GetAce(dacl, index, &mut ace) } == 0 || ace.is_null() {
+            return false;
+        }
+        let header = unsafe { &*ace.cast::<ACE_HEADER>() };
+        if u32::from(header.AceType) != ACCESS_ALLOWED_ACE_TYPE
+            || header.AceFlags != 0
+            || usize::from(header.AceSize) < std::mem::size_of::<ACCESS_ALLOWED_ACE>()
+        {
+            return false;
+        }
+        let allowed = unsafe { &*ace.cast::<ACCESS_ALLOWED_ACE>() };
+        let sid = (&allowed.SidStart as *const u32).cast::<u8>();
+        let size = 8 + 4 * usize::from(unsafe { *sid.add(1) });
+        if size > 68
+            || std::mem::offset_of!(ACCESS_ALLOWED_ACE, SidStart) + size
+                > usize::from(header.AceSize)
+            || allowed.Mask != READ_CONTROL | SYNCHRONIZE | 1
+        {
+            return false;
+        }
+        let Ok(sid) = sid_copy(sid.cast_mut().cast()) else {
+            return false;
+        };
+        if sid == security.user && !found[0] {
+            found[0] = true;
+        } else if sid == security.system && !found[1] {
+            found[1] = true;
+        } else {
+            return false;
+        }
+    }
+    found == [true, true]
+}
+
+#[test]
+fn native_location_mutex_recursive_and_protected_object() {
+    use windows_sys::Win32::System::Threading::CreateMutexExW;
+    let fixture = Sandbox::new();
+    let namespace = location_namespace(&fixture);
+    let security = Security::new().unwrap();
+    let guard = LocationLock::acquire(&security, &namespace).unwrap();
+    assert!(
+        matches!(
+            LocationLock::acquire(&security, &namespace),
+            Err(StorageError::Busy)
+        ),
+        "recursive location acquisition must refuse rather than increment kernel ownership"
+    );
+    assert!(
+        protected_location_mutex(guard.0 .0, &security),
+        "location object is strictly current-user/SYSTEM protected"
+    );
+    drop(guard);
+    let second = LocationLock::acquire(&security, &namespace).unwrap();
+    drop(second);
+    // Deliberately broad protection at creation of a fresh test-only kernel object.
+    let broad_name = location_mutex_name(&security, &[namespace.as_slice(), b"-broad"].concat());
+    let broad_sddl: Vec<u16> = "D:P(A;;GA;;;WD)\0".encode_utf16().collect();
+    let mut broad_sd = null_mut();
+    assert_ne!(
+        unsafe {
+            ConvertStringSecurityDescriptorToSecurityDescriptorW(
+                broad_sddl.as_ptr(),
+                SDDL_REVISION_1,
+                &mut broad_sd,
+                null_mut(),
+            )
+        },
+        0
+    );
+    let broad_sd = Allocation(broad_sd);
+    let attrs = SECURITY_ATTRIBUTES {
+        nLength: std::mem::size_of::<SECURITY_ATTRIBUTES>() as u32,
+        lpSecurityDescriptor: broad_sd.0,
+        bInheritHandle: 0,
+    };
+    let broad = Token(unsafe {
+        CreateMutexExW(
+            &attrs,
+            broad_name.as_ptr(),
+            0,
+            READ_CONTROL | SYNCHRONIZE | 1,
+        )
+    });
+    assert!(!broad.0.is_null(), "fresh broad synthetic mutex exists");
+    assert!(
+        matches!(
+            LocationLock::acquire(&security, &[namespace.as_slice(), b"-broad"].concat()),
+            Err(StorageError::UnsafePath)
+        ),
+        "existing broad kernel protection must refuse without repair"
+    );
+}
+
+struct LocationChild(std::process::Child);
+impl LocationChild {
+    fn start(fixture: &Sandbox, mode: &str) -> Self {
+        std::fs::write(
+            fixture.1.join("location-marker"),
+            b"SYNTHETIC_LOCATION_ONLY",
+        )
+        .unwrap();
+        Self(
+            Command::new(std::env::current_exe().unwrap())
+                .args(["--exact", "native::tests::native_location_child"])
+                .env("CA04_LOCATION_SYNTHETIC_ROOT", &fixture.1)
+                .env("CA04_LOCATION_SYNTHETIC_MODE", mode)
+                .stdin(Stdio::null())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .spawn()
+                .unwrap(),
+        )
+    }
+    fn ready(&mut self, fixture: &Sandbox) {
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        while !fixture.1.join("location-ready").exists() {
+            assert!(
+                self.0.try_wait().unwrap().is_none(),
+                "owned location child remains live until readiness"
+            );
+            assert!(
+                std::time::Instant::now() < deadline,
+                "owned location child readiness bound"
+            );
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+    }
+    fn finish(&mut self, fixture: &Sandbox, expected: i32) {
+        std::fs::write(fixture.1.join("location-finish"), b"SYNTHETIC_FINISH").unwrap();
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        let status = loop {
+            if let Some(status) = self.0.try_wait().unwrap() {
+                break status;
+            }
+            assert!(
+                std::time::Instant::now() < deadline,
+                "owned location child exit bound"
+            );
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        };
+        assert_eq!(status.code(), Some(expected));
+    }
+}
+impl Drop for LocationChild {
+    fn drop(&mut self) {
+        if self.0.try_wait().unwrap().is_none() {
+            self.0.kill().unwrap();
+        }
+        self.0.wait().unwrap();
+    }
+}
+#[test]
+fn native_location_child() {
+    let Some(path) = std::env::var_os("CA04_LOCATION_SYNTHETIC_ROOT") else {
+        return;
+    };
+    let root = PathBuf::from(path);
+    validate_path(&root).unwrap();
+    assert!(root
+        .file_name()
+        .unwrap()
+        .to_string_lossy()
+        .starts_with("ca03c-test-"));
+    assert_eq!(
+        std::fs::read(root.join("location-marker")).unwrap(),
+        b"SYNTHETIC_LOCATION_ONLY"
+    );
+    let namespace: Vec<u8> = root
+        .as_os_str()
+        .encode_wide()
+        .flat_map(u16::to_le_bytes)
+        .collect();
+    let guard = LocationLock::acquire(&Security::new().unwrap(), &namespace).unwrap();
+    std::fs::write(root.join("location-ready"), b"SYNTHETIC_READY").unwrap();
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(15);
+    while !root.join("location-finish").exists() {
+        assert!(
+            std::time::Instant::now() < deadline,
+            "finite synthetic child lifetime"
+        );
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    if std::env::var("CA04_LOCATION_SYNTHETIC_MODE").unwrap() == "abandon" {
+        std::process::exit(73);
+    }
+    drop(guard);
+}
+#[test]
+fn native_location_mutex_process_contention_release_and_abandonment() {
+    use windows_sys::Win32::System::Threading::OpenMutexW;
+    let fixture = Sandbox::new();
+    let security = Security::new().unwrap();
+    let namespace = location_namespace(&fixture);
+    let mut child = LocationChild::start(&fixture, "normal");
+    child.ready(&fixture);
+    assert!(
+        matches!(
+            LocationLock::acquire(&security, &namespace),
+            Err(StorageError::Busy)
+        ),
+        "independent process ownership blocks both-slot namespace"
+    );
+    child.finish(&fixture, 0);
+    drop(LocationLock::acquire(&security, &namespace).unwrap());
+    std::fs::remove_file(fixture.1.join("location-ready")).unwrap();
+    std::fs::remove_file(fixture.1.join("location-finish")).unwrap();
+    let mut child = LocationChild::start(&fixture, "abandon");
+    child.ready(&fixture);
+    // Retain an observer handle so the real abandoned kernel object survives
+    // the exiting owner's last handle; it is neither ownership nor authority.
+    let observer = Token(unsafe {
+        OpenMutexW(
+            READ_CONTROL | SYNCHRONIZE | 1,
+            0,
+            location_mutex_name(&security, &namespace).as_ptr(),
+        )
+    });
+    assert!(
+        !observer.0.is_null(),
+        "named location observer opens before abrupt owner exit"
+    );
+    child.finish(&fixture, 73);
+    assert!(
+        matches!(
+            LocationLock::acquire(&security, &namespace),
+            Err(StorageError::RecoveryRequired)
+        ),
+        "actual abandoned ownership refuses and requires recovery"
+    );
+    drop(LocationLock::acquire(&security, &namespace).unwrap());
+    drop(observer);
+}
+
+#[test]
+fn native_location_read_only_probe_refuses_denial_and_wrong_type() {
+    struct OwnedDeniedDirectory(File);
+    impl Drop for OwnedDeniedDirectory {
+        fn drop(&mut self) {
+            let disposition = FILE_DISPOSITION_INFO { DeleteFile: true };
+            // DELETE was granted at creation. Remove this exact owned empty
+            // directory through that handle, without querying denied attributes
+            // or repairing protection, including on an assertion unwind.
+            assert_ne!(
+                unsafe {
+                    SetFileInformationByHandle(
+                        self.0.as_raw_handle(),
+                        FileDispositionInfo,
+                        (&disposition as *const FILE_DISPOSITION_INFO).cast(),
+                        std::mem::size_of_val(&disposition) as u32,
+                    )
+                },
+                0
+            );
+        }
+    }
+    let fixture = location_fixture();
+    let owned_root = fixture.1.clone();
+    let ancestor = open_file(
+        &fixture.1,
+        FILE_READ_ATTRIBUTES | READ_CONTROL,
+        FILE_SHARE_READ | FILE_SHARE_WRITE,
+        OPEN_EXISTING,
+        None,
+    )
+    .unwrap();
+    let ancestor_security = security_bytes(&ancestor);
+    let canary = fixture.1.join("synthetic-denial-ancestor-canary");
+    std::fs::write(&canary, b"SYNTHETIC_DENIAL_ANCESTOR_UNCHANGED").unwrap();
+    let slots = location_slots(&fixture);
+    std::fs::write(&slots[0], b"SYNTHETIC_WRONG_OBJECT").unwrap();
+    let before = std::fs::read(&slots[0]).unwrap();
+    assert!(
+        matches!(probe_slots(&slots), Err(StorageError::UnsafePath)),
+        "file is never a directory/absent slot"
+    );
+    assert!(
+        std::fs::read(&slots[0]).unwrap() == before,
+        "probe leaves wrong-type bytes unchanged"
+    );
+    std::fs::remove_file(&slots[0]).unwrap();
+    let mut denied_sd = null_mut();
+    let sddl: Vec<u16> = "D:P(D;;0x00000001;;;WD)(A;;0x00110080;;;WD)(A;;GA;;;SY)\0"
+        .encode_utf16()
+        .collect();
+    assert_ne!(
+        unsafe {
+            ConvertStringSecurityDescriptorToSecurityDescriptorW(
+                sddl.as_ptr(),
+                SDDL_REVISION_1,
+                &mut denied_sd,
+                null_mut(),
+            )
+        },
+        0
+    );
+    let sd = Allocation(denied_sd);
+    let attrs = SECURITY_ATTRIBUTES {
+        nLength: std::mem::size_of::<SECURITY_ATTRIBUTES>() as u32,
+        lpSecurityDescriptor: sd.0,
+        bInheritHandle: 0,
+    };
+    assert_ne!(
+        unsafe { CreateDirectoryW(wide(&slots[0]).unwrap().as_ptr(), &attrs) },
+        0
+    );
+    let denied = OwnedDeniedDirectory(
+        open_file(
+            &slots[0],
+            DELETE,
+            FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+            OPEN_EXISTING,
+            None,
+        )
+        .unwrap(),
+    );
+    assert!(
+        matches!(probe_slots(&slots), Err(StorageError::AccessDenied)),
+        "metadata denial is never inferred absence"
+    );
+    drop(denied);
+    assert!(
+        probe_slots(&slots).unwrap() == [None, None],
+        "only verified absent leaves yield absence"
+    );
+    let missing_parent = [
+        fixture.1.join("missing-parent").join("slot"),
+        slots[1].clone(),
+    ];
+    assert!(
+        matches!(
+            probe_slots(&missing_parent),
+            Err(StorageError::ActiveStateUnknown)
+        ),
+        "missing unchecked ancestry is indeterminate, never absent"
+    );
+    assert!(
+        std::fs::read(&canary).unwrap() == b"SYNTHETIC_DENIAL_ANCESTOR_UNCHANGED",
+        "denied slot cleanup preserves ancestor canary bytes"
+    );
+    assert!(
+        security_bytes(&ancestor) == ancestor_security,
+        "denied slot cleanup preserves ancestor security"
+    );
+    drop(ancestor);
+    drop(fixture);
+    assert!(
+        !owned_root.exists(),
+        "exact journaled synthetic denial root is removed"
+    );
+}
+
+#[test]
+fn native_location_collision_and_replacement_refuse_before_access() {
+    let fixture = Sandbox::new();
+    let slots = location_slots(&fixture);
+    let namespace = location_namespace(&fixture);
+    let mut disk = Disk::at_location(&slots, true, &namespace).unwrap();
+    let root = bootstrap(&mut disk, true).unwrap();
+    let mut storage = Storage::create(disk, &root).unwrap();
+    let disk = &mut storage.disk;
+    let original_key = disk.read("key.cakp").unwrap().unwrap();
+    let original_control = disk.read("state.bin").unwrap().unwrap();
+    disk.stage("synthetic.bin", b"SYNTHETIC_ORIGINAL").unwrap();
+    disk.publish("synthetic.bin", None, b"SYNTHETIC_ORIGINAL")
+        .unwrap();
+    std::fs::create_dir(&slots[0]).unwrap();
+    assert!(
+        matches!(
+            disk.read("synthetic.bin"),
+            Err(StorageError::ExternalChange)
+        ),
+        "new competing root blocks read before selected bytes are returned"
+    );
+    assert!(
+        matches!(
+            disk.stage("other.bin", b"SYNTHETIC_NEW"),
+            Err(StorageError::ExternalChange)
+        ),
+        "new competing root blocks write before staging"
+    );
+    assert!(
+        !slots[1].join("other.bin.stage").exists(),
+        "collision refuses without new protected payload"
+    );
+    assert!(
+        std::fs::read(slots[1].join("synthetic.bin")).unwrap() == b"SYNTHETIC_ORIGINAL",
+        "collision preserves selected bytes"
+    );
+    assert!(
+        std::fs::read(slots[1].join("key.cakp")).unwrap() == original_key,
+        "collision preserves the actual synthetic DPAPI-protected root key bytes"
+    );
+    assert!(
+        std::fs::read(slots[1].join("state.bin")).unwrap() == original_control,
+        "collision preserves the actual encrypted synthetic control bytes"
+    );
+    drop(storage);
+    let observed = probe_slots(&slots).unwrap();
+    let security = Security::new().unwrap();
+    let mut watch = SlotWatch::new(&slots[0], &security).unwrap();
+    assert!(
+        std::fs::rename(&slots[0], fixture.1.join("synthetic-old-root")).is_err(),
+        "retained native ancestor sharing prevents external directory replacement"
+    );
+    watch.revalidate(&security).unwrap();
+    // Test-only comparison subcase: explicitly release our owned ancestor pins
+    // so the actual replacement can occur, retaining the prior leaf identity.
+    // Production SlotWatch always retains them; no production sharing is relaxed.
+    watch.parents.clear();
+    std::fs::rename(&slots[0], fixture.1.join("synthetic-old-root")).unwrap();
+    std::fs::create_dir(&slots[0]).unwrap();
+    assert!(
+        probe_slots(&slots).unwrap() != observed,
+        "replacement changes actual native object identity"
+    );
+    assert!(
+        matches!(
+            watch.revalidate(&security),
+            Err(StorageError::ExternalChange)
+        ),
+        "a replaced existing observed slot invalidates its retained identity guard"
+    );
+    assert!(
+        matches!(
+            Disk::at_location(&slots, false, &namespace),
+            Err(StorageError::ActiveStateUnknown)
+        ),
+        "both roots never select a fallback"
+    );
+    drop(watch);
+}
+#[test]
+fn native_location_failure_releases_mutex_and_retains_root_lock() {
+    let fixture = Sandbox::new();
+    let slots = location_slots(&fixture);
+    let namespace = location_namespace(&fixture);
+    let disk = Disk::at_location(&slots, true, &namespace).unwrap();
+    let security = Security::new().unwrap();
+    assert!(
+        matches!(
+            LocationLock::acquire(&security, &namespace),
+            Err(StorageError::Busy)
+        ),
+        "Disk retains the location guard for its complete lifetime"
+    );
+    assert!(
+        matches!(Disk::at(&slots[1], false), Err(StorageError::Busy)),
+        "legacy per-root lock remains held too"
+    );
+    drop(disk);
+    drop(LocationLock::acquire(&security, &namespace).unwrap());
+    assert!(
+        matches!(
+            Disk::at_location(&slots, true, &namespace),
+            Err(StorageError::AlreadyExists)
+        ),
+        "failed create refuses existing slot"
+    );
+    drop(LocationLock::acquire(&security, &namespace).unwrap());
+    std::fs::remove_dir_all(&slots[1]).unwrap();
+    std::fs::write(&slots[0], b"SYNTHETIC_COLLISION_FILE").unwrap();
+    assert!(
+        matches!(
+            Disk::at_location(&slots, false, &namespace),
+            Err(StorageError::UnsafePath)
+        ),
+        "failed probe refuses without losing reservation ownership"
+    );
+    drop(LocationLock::acquire(&security, &namespace).unwrap());
+    std::fs::remove_file(&slots[0]).unwrap();
+    std::fs::create_dir(&slots[1]).unwrap();
+    assert!(
+        matches!(
+            Disk::at_location(&slots, false, &namespace),
+            Err(StorageError::UnsafePath)
+        ),
+        "strict selected-root failure releases the already-acquired location owner"
+    );
+    drop(LocationLock::acquire(&security, &namespace).unwrap());
 }
 
 #[test]

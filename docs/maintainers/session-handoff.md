@@ -1,4 +1,15 @@
-# Session handoff: CA-05C/D -> CA-05E review stack
+# Session handoff: Windows compatibility
+
+As of 2026-10-15, PRs #14 and #15 are merged into main
+`727eb6154db1d7c4ac5db10a7868b6271cd55293`. The active branch is
+`codex/windows-compatibility-plan`. Read
+[the current packet](../next-pr.md) and
+[Windows storage compatibility](../windows-storage-compatibility.md) first.
+The owner authorized direct development outside engine approval bookkeeping;
+the audit log retains that instruction. Preserve pending engine records without
+claiming acceptance. Security, qualification and exact-head CI remain required.
+
+The following review-stack checkpoint is historical.
 
 ## Live-state checkpoint
 

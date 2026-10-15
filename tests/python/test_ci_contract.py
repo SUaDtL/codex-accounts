@@ -24,6 +24,13 @@ class DependencyAcquisitionContractTests(unittest.TestCase):
     def test_current_workflow_keeps_review_before_acquisition(self) -> None:
         check(ROOT)
 
+    def test_real_rust_proof_fixture_requires_reviewed_pinned_toolchain(self) -> None:
+        self.assertIn('id: proof_toolchain\n', self.text)
+        self.reject('id: proof_toolchain\n', 'id: omitted_proof_toolchain\n')
+        self.reject('run: rustup toolchain install 1.90.0 --profile minimal\n',
+                    'run: rustup toolchain install stable --profile minimal\n')
+        self.reject(" && steps.proof_toolchain.outcome == 'success'", '')
+
     def test_combined_native_commands_are_rejected(self) -> None:
         self.reject("run: python tools/check_dependencies.py", "run: |\n          python tools/check_dependencies.py\n          cargo fetch --locked")
 
