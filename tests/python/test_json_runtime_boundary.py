@@ -39,11 +39,11 @@ class JsonRuntimeBoundaryTests(unittest.TestCase):
         self.assertEqual(check_dependencies.check()['reviewed_packages'], 407)
 
     def test_runtime_cannot_gain_unreviewed_dependency_even_with_updated_manifest_hash(self):
-        review = json.loads((ROOT / 'docs/ca-06b-dependencies.json').read_text())
+        review = json.loads((ROOT / 'docs/ca-02b-dependencies.json').read_text())
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             for path in [*review['manifest_sha256'], *review['predecessor_sha256'],
-                         'docs/ca-06b-dependencies.json', 'Cargo.lock']:
+                         'docs/ca-02b-dependencies.json', 'Cargo.lock']:
                 (root / path).parent.mkdir(parents=True, exist_ok=True)
                 shutil.copyfile(ROOT / path, root / path)
             path = 'crates/runtime/Cargo.toml'
@@ -51,7 +51,7 @@ class JsonRuntimeBoundaryTests(unittest.TestCase):
             target.write_text(target.read_text().replace('[dependencies]',
                               '[dependencies]\nunreviewed = "=9.9.9"'), encoding='utf-8')
             review['manifest_sha256'][path] = hashlib.sha256(target.read_bytes()).hexdigest()
-            (root / 'docs/ca-06b-dependencies.json').write_text(json.dumps(review))
+            (root / 'docs/ca-02b-dependencies.json').write_text(json.dumps(review))
             with self.assertRaisesRegex(ValueError, 'Runtime dependency boundary'):
                 check_dependencies.check(root)
 

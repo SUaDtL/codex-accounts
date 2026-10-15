@@ -1,17 +1,35 @@
-# Current packet: Windows supervisor proof repair
+# Current packet: CA-02B cached primary signer
 
-PR #22 is merged as `6ffc3d4568364caae1dc5dc3a2d6402ef5cfee3b`. Its PR run
-38806743149 passed all six jobs, but post-merge run 38809063813 failed the aggregate
-supervisor proof before named native execution. The original cause is unknown.
-Resume `codex/supervisor-proof-diagnostics`; [validation](validation.md) records
-the reproduced fixture defects and bounded diagnostic repair. Preserve the same
-production supervisor, required native identities, timeouts and no-retry gates.
+PR #24's reviewed supervisor-fixture and diagnostic repair is joined into
+this branch. Its merge remains a prerequisite: require #24 green and merged,
+then verify this combined source/tree and completed hosted gates before
+merging #23. The original PR #22 post-merge failure remains recorded in
+[validation](validation.md); no deadline, case or qualification gate
+is waived.
 
-PR #23 (`codex/cached-primary-signer`) is open and its merge is held. After this
-repair's exact-head gates pass and it merges, reconcile that branch with current
-main and run fresh combined CI. A green result on its old base is insufficient.
-The standing engine workflow override permits continued direct work and
-conditional green merges; application security and qualification remain gates.
+PRs #14 through #22 are merged. Main is
+`6ffc3d4568364caae1dc5dc3a2d6402ef5cfee3b`; PR #22 passed all six jobs in
+run 38806743149, with all 108 native executions verified. Its separate post-merge
+run must also be inspected. Continue `codex/cached-primary-signer`, preserving its
+reviewed source and refreshing live PR/head/checks before publication or merge.
+
+[CA-02B](ca-02b-cached-primary-signer.md) adds bounded primary leaf observation
+from live successful cached WinTrust state, exactly-once cleanup and distinct
+unknown/failure states. Its additive feature review preserves all eight older
+records and the unchanged 407-package lock. One exact-build read-only collection
+succeeded; all installation authority remains disabled. Full combined-head hosted
+gates are still required, including every existing native case in both profiles.
+
+The next genuine Q0 gap is independently reviewed official distribution/signer/
+runtime binding and protected installation ancestry. Earlier read-only diagnostics
+refused registered ancestor index two with access denied, even for attribute-only
+and zero-desired-access directory opens. Preserve that evidence; do not change ACLs,
+elevate or infer all-principal protection from a current-token AccessCheck.
+Review a bounded diagnostic/evidence route before adding a large ACL parser.
+Effective Desktop home/backend/policy, resource and lifecycle semantics remain
+unresolved. No repeated version/schema command or synthetic codec closes them.
+The standing engine workflow override and conditional green merge authority
+continue; security and qualification gates remain intact.
 
 ## Historical CA-06B packet
 

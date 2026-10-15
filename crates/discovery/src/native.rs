@@ -20,6 +20,174 @@ use windows_sys::Win32::System::Threading::{GetCurrentProcess, OpenProcessToken}
 use windows_sys::Win32::System::WindowsProgramming::DRIVE_FIXED;
 
 pub struct Apartment(std::marker::PhantomData<std::rc::Rc<()>>);
+
+const MAX_SIGNER_CERT_BYTES: usize = 64 * 1024;
+const MAX_PROVIDER_CHAIN_ITEMS: u32 = 64;
+
+// Certificate bytes are private intermediate data, not a publisher decision.
+// Deliberately no Debug implementation exposing provider/certificate contents.
+pub enum CachedSignature {
+    NotEstablished,
+    AcceptedSignerUnavailable,
+    AcceptedLeaf(Vec<u8>),
+    CleanupFailed,
+}
+
+trait TrustProvider {
+    fn verify(&mut self) -> i32;
+    fn primary_leaf(&mut self) -> Option<Vec<u8>>;
+    fn close(&mut self) -> i32;
+}
+
+struct TrustGuard<T: TrustProvider> {
+    provider: T,
+    active: bool,
+}
+impl<T: TrustProvider> TrustGuard<T> {
+    fn close(&mut self) -> i32 {
+        // Disarm before calling out: even unwinding must not double-close state.
+        self.active = false;
+        self.provider.close()
+    }
+}
+impl<T: TrustProvider> Drop for TrustGuard<T> {
+    fn drop(&mut self) {
+        if self.active {
+            self.close();
+        }
+    }
+}
+
+fn observe_signature(provider: impl TrustProvider) -> CachedSignature {
+    let mut guard = TrustGuard {
+        provider,
+        active: true,
+    };
+    let observation = if guard.provider.verify() != 0 {
+        CachedSignature::NotEstablished
+    } else {
+        match guard.provider.primary_leaf() {
+            Some(bytes) if !bytes.is_empty() && bytes.len() <= MAX_SIGNER_CERT_BYTES => {
+                CachedSignature::AcceptedLeaf(bytes)
+            }
+            _ => CachedSignature::AcceptedSignerUnavailable,
+        }
+    };
+    if guard.close() != 0 {
+        return CachedSignature::CleanupFailed;
+    }
+    observation
+}
+
+fn bounded_chain(size: u32, expected: usize, count: u32) -> bool {
+    size as usize >= expected && (1..=MAX_PROVIDER_CHAIN_ITEMS).contains(&count)
+}
+
+struct NativeTrust {
+    data: WINTRUST_DATA,
+    action: windows_sys::core::GUID,
+}
+
+// SAFETY contract: Every nonnull provider/callback pointer must refer to a live,
+// correctly aligned SDK object, and nonnull certificate bytes must remain valid
+// for their declared bounded length until this function returns. NativeTrust
+// supplies only WinTrust-owned live state; tests supply owned SDK fixtures.
+unsafe fn copy_provider_leaf(
+    provider: *mut CRYPT_PROVIDER_DATA,
+    get_signer: impl FnOnce(*mut CRYPT_PROVIDER_DATA) -> *mut CRYPT_PROVIDER_SGNR,
+    get_cert: impl FnOnce(*mut CRYPT_PROVIDER_SGNR) -> *mut CRYPT_PROVIDER_CERT,
+) -> Option<Vec<u8>> {
+    // SAFETY: Per caller contract; optional pointers and counts are checked before
+    // obtaining subsequent objects. Nothing borrowed from the provider escapes.
+    unsafe {
+        let view = provider.as_ref()?;
+        if !bounded_chain(
+            view.cbStruct,
+            std::mem::size_of::<CRYPT_PROVIDER_DATA>(),
+            view.csSigners,
+        ) || view.pasSigners.is_null()
+            || view.dwError != 0
+            || view.dwFinalError != 0
+        {
+            return None;
+        }
+        let signer = get_signer(provider);
+        let view = signer.as_ref()?;
+        if !bounded_chain(
+            view.cbStruct,
+            std::mem::size_of::<CRYPT_PROVIDER_SGNR>(),
+            view.csCertChain,
+        ) || view.pasCertChain.is_null()
+            || view.dwError != 0
+        {
+            return None;
+        }
+        let certificate = get_cert(signer).as_ref()?;
+        if (certificate.cbStruct as usize) < std::mem::size_of::<CRYPT_PROVIDER_CERT>()
+            || certificate.dwError != 0
+        {
+            return None;
+        }
+        let context = certificate.pCert.as_ref()?;
+        let length = context.cbCertEncoded as usize;
+        if context.pbCertEncoded.is_null()
+            || length == 0
+            || length > MAX_SIGNER_CERT_BYTES
+            || context.dwCertEncodingType
+                & windows_sys::Win32::Security::Cryptography::X509_ASN_ENCODING
+                == 0
+        {
+            return None;
+        }
+        Some(std::slice::from_raw_parts(context.pbCertEncoded, length).to_vec())
+    }
+}
+impl TrustProvider for NativeTrust {
+    fn verify(&mut self) -> i32 {
+        self.data.dwStateAction = WTD_STATEACTION_VERIFY;
+        // SAFETY: Only ReadHandle::cached_signature constructs this adapter.
+        // Its live path, file-info and read-locked file outlive this entire call.
+        unsafe {
+            WinVerifyTrust(
+                null_mut(),
+                &mut self.action,
+                (&mut self.data as *mut WINTRUST_DATA).cast(),
+            )
+        }
+    }
+
+    fn primary_leaf(&mut self) -> Option<Vec<u8>> {
+        if self.data.hWVTStateData.is_null() {
+            return None;
+        }
+        // SAFETY: Called only after successful VERIFY and before matching CLOSE.
+        // Provider-owned pointers are from WinTrust, never supplied by input data.
+        // Each optional pointer/structure/count is checked before the next step;
+        // no pointer or borrowed certificate slice escapes this live state.
+        unsafe {
+            let provider = WTHelperProvDataFromStateData(self.data.hWVTStateData);
+            copy_provider_leaf(
+                provider,
+                // Primary signer index zero, never a timestamp countersigner.
+                |p| WTHelperGetProvSignerFromChain(p, 0, 0, 0),
+                |s| WTHelperGetProvCertFromChain(s, 0),
+            )
+        }
+    }
+
+    fn close(&mut self) -> i32 {
+        self.data.dwStateAction = WTD_STATEACTION_CLOSE;
+        // SAFETY: The same action/data and live input references used by VERIFY;
+        // TrustGuard calls this exactly once, including unsuccessful verification.
+        unsafe {
+            WinVerifyTrust(
+                null_mut(),
+                &mut self.action,
+                (&mut self.data as *mut WINTRUST_DATA).cast(),
+            )
+        }
+    }
+}
 impl Apartment {
     pub fn enter() -> Result<Self, ReadError> {
         // SAFETY: Called on this thread and balanced on this same thread. The Rc
@@ -326,9 +494,9 @@ impl ReadHandle {
         }
         Ok(false)
     }
-    pub fn cached_signature(&self) -> bool {
+    pub fn cached_signature(&self) -> CachedSignature {
         let Ok(name) = wide(&self.path) else {
-            return false;
+            return CachedSignature::NotEstablished;
         };
         // SAFETY: All-zero defaults have valid null optional pointers. All live
         // pointers below refer to owned stack/file data for both synchronous calls.
@@ -346,26 +514,10 @@ impl ReadHandle {
         data.dwProvFlags = WTD_CACHE_ONLY_URL_RETRIEVAL
             | WTD_REVOCATION_CHECK_CHAIN_EXCLUDE_ROOT
             | WTD_DISABLE_MD2_MD4;
-        let mut action = WINTRUST_ACTION_GENERIC_VERIFY_V2;
-        // SAFETY: Handles and all nested pointers live through verification and
-        // cleanup. Cached-only retrieval forbids network certificate retrieval.
-        let status = unsafe {
-            WinVerifyTrust(
-                null_mut(),
-                &mut action,
-                (&mut data as *mut WINTRUST_DATA).cast(),
-            )
-        };
-        data.dwStateAction = WTD_STATEACTION_CLOSE;
-        // SAFETY: Required matching close, including when verification failed.
-        unsafe {
-            WinVerifyTrust(
-                null_mut(),
-                &mut action,
-                (&mut data as *mut WINTRUST_DATA).cast(),
-            )
-        };
-        status == 0
+        observe_signature(NativeTrust {
+            data,
+            action: WINTRUST_ACTION_GENERIC_VERIFY_V2,
+        })
     }
 }
 
@@ -476,6 +628,199 @@ fn writable(file: &File, directory: bool) -> Result<bool, ReadError> {
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
+
+    struct ModelTrust {
+        events: std::rc::Rc<std::cell::RefCell<Vec<&'static str>>>,
+        verify_status: i32,
+        close_status: i32,
+        leaf: Option<Vec<u8>>,
+        panic_extract: bool,
+    }
+    impl TrustProvider for ModelTrust {
+        fn verify(&mut self) -> i32 {
+            self.events.borrow_mut().push("verify");
+            self.verify_status
+        }
+        fn primary_leaf(&mut self) -> Option<Vec<u8>> {
+            self.events.borrow_mut().push("copy_leaf");
+            assert!(!self.panic_extract, "synthetic extraction unwind");
+            self.leaf.take()
+        }
+        fn close(&mut self) -> i32 {
+            self.events.borrow_mut().push("close");
+            self.close_status
+        }
+    }
+
+    #[test]
+    fn cached_signer_model_closes_once_and_extracts_only_after_success() {
+        for (verify_status, close_status, leaf, expected) in [
+            (1, 0, Some(vec![1]), "not_established"),
+            (0, 0, None, "unavailable"),
+            (0, 0, Some(Vec::new()), "unavailable"),
+            (0, 0, Some(vec![7; MAX_SIGNER_CERT_BYTES]), "leaf"),
+            (
+                0,
+                0,
+                Some(vec![7; MAX_SIGNER_CERT_BYTES + 1]),
+                "unavailable",
+            ),
+            (0, 1, Some(vec![1]), "cleanup"),
+            (1, 1, Some(vec![1]), "cleanup"),
+        ] {
+            let events = std::rc::Rc::new(std::cell::RefCell::new(Vec::new()));
+            let observation = observe_signature(ModelTrust {
+                events: events.clone(),
+                verify_status,
+                close_status,
+                leaf,
+                panic_extract: false,
+            });
+            let state = match observation {
+                CachedSignature::NotEstablished => "not_established",
+                CachedSignature::AcceptedSignerUnavailable => "unavailable",
+                CachedSignature::AcceptedLeaf(bytes) => {
+                    assert_eq!(bytes, vec![7; MAX_SIGNER_CERT_BYTES]);
+                    "leaf"
+                }
+                CachedSignature::CleanupFailed => "cleanup",
+            };
+            assert_eq!(state, expected);
+            assert_eq!(
+                *events.borrow(),
+                if verify_status == 0 {
+                    vec!["verify", "copy_leaf", "close"]
+                } else {
+                    vec!["verify", "close"]
+                }
+            );
+        }
+        let events = std::rc::Rc::new(std::cell::RefCell::new(Vec::new()));
+        let provider = ModelTrust {
+            events: events.clone(),
+            verify_status: 0,
+            close_status: 0,
+            leaf: None,
+            panic_extract: true,
+        };
+        assert!(
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| observe_signature(provider)))
+                .is_err()
+        );
+        assert_eq!(*events.borrow(), vec!["verify", "copy_leaf", "close"]);
+    }
+
+    struct CertificateFixture {
+        provider: CRYPT_PROVIDER_DATA,
+        signer: Box<CRYPT_PROVIDER_SGNR>,
+        cert: Box<CRYPT_PROVIDER_CERT>,
+        context: Box<windows_sys::Win32::Security::Cryptography::CERT_CONTEXT>,
+        bytes: Vec<u8>,
+    }
+    impl CertificateFixture {
+        fn new(length: usize) -> Self {
+            let bytes = vec![9; length];
+            let mut context = Box::new(windows_sys::Win32::Security::Cryptography::CERT_CONTEXT {
+                dwCertEncodingType: windows_sys::Win32::Security::Cryptography::X509_ASN_ENCODING,
+                pbCertEncoded: bytes.as_ptr().cast_mut(),
+                cbCertEncoded: length as u32,
+                ..Default::default()
+            });
+            let mut cert = Box::new(CRYPT_PROVIDER_CERT {
+                cbStruct: std::mem::size_of::<CRYPT_PROVIDER_CERT>() as u32,
+                pCert: &mut *context,
+                ..Default::default()
+            });
+            let mut signer = Box::new(CRYPT_PROVIDER_SGNR {
+                cbStruct: std::mem::size_of::<CRYPT_PROVIDER_SGNR>() as u32,
+                csCertChain: 1,
+                pasCertChain: &mut *cert,
+                ..Default::default()
+            });
+            let provider = CRYPT_PROVIDER_DATA {
+                cbStruct: std::mem::size_of::<CRYPT_PROVIDER_DATA>() as u32,
+                csSigners: 1,
+                pasSigners: &mut *signer,
+                ..Default::default()
+            };
+            Self {
+                provider,
+                signer,
+                cert,
+                context,
+                bytes,
+            }
+        }
+        fn copy(
+            &mut self,
+            null_provider: bool,
+            null_signer: bool,
+            null_cert: bool,
+        ) -> Option<Vec<u8>> {
+            let p = if null_provider {
+                null_mut()
+            } else {
+                &mut self.provider
+            };
+            let s = if null_signer {
+                null_mut()
+            } else {
+                &mut *self.signer
+            };
+            let c = if null_cert {
+                null_mut()
+            } else {
+                &mut *self.cert
+            };
+            // SAFETY: All nonnull pointers refer to owned aligned SDK fixtures;
+            // their byte allocation stays live and matches every declared length.
+            unsafe { copy_provider_leaf(p, |_| s, |_| c) }
+        }
+    }
+
+    #[test]
+    fn cached_signer_owned_provider_fixture_enforces_nulls_counts_and_der_bound() {
+        for length in [0, 1, MAX_SIGNER_CERT_BYTES, MAX_SIGNER_CERT_BYTES + 1] {
+            let mut fixture = CertificateFixture::new(length);
+            let copy = fixture.copy(false, false, false);
+            if (1..=MAX_SIGNER_CERT_BYTES).contains(&length) {
+                let copy = copy.unwrap();
+                fixture.bytes.fill(0);
+                assert_eq!(copy, vec![9; length]); // independent owned copy
+            } else {
+                assert!(copy.is_none());
+            }
+        }
+        for case in 0..21 {
+            let mut f = CertificateFixture::new(3);
+            match case {
+                3 => f.provider.cbStruct = 0,
+                4 => f.provider.csSigners = 0,
+                5 => f.provider.csSigners = MAX_PROVIDER_CHAIN_ITEMS + 1,
+                6 => f.provider.pasSigners = null_mut(),
+                7 => f.provider.dwError = 1,
+                8 => f.provider.dwFinalError = 1,
+                9 => f.signer.cbStruct = 0,
+                10 => f.signer.csCertChain = 0,
+                11 => f.signer.csCertChain = MAX_PROVIDER_CHAIN_ITEMS + 1,
+                12 => f.signer.pasCertChain = null_mut(),
+                13 => f.signer.dwError = 1,
+                14 => f.cert.cbStruct = 0,
+                15 => f.cert.dwError = 1,
+                16 => f.cert.pCert = null(),
+                17 => f.context.pbCertEncoded = null_mut(),
+                18 => f.context.dwCertEncodingType = 0,
+                19 => f.context.cbCertEncoded = 0,
+                20 => f.context.cbCertEncoded = (MAX_SIGNER_CERT_BYTES + 1) as u32,
+                _ => {}
+            }
+            // The oversized claimed buffer is refused before forming a slice.
+            assert!(
+                f.copy(case == 0, case == 1, case == 2).is_none(),
+                "case {case}"
+            );
+        }
+    }
     use std::sync::atomic::{AtomicUsize, Ordering};
     static NEXT: AtomicUsize = AtomicUsize::new(0);
     struct Fixture(PathBuf);
@@ -631,7 +976,10 @@ pub(crate) mod tests {
         let mut handle = ReadHandle::open(&path, false).unwrap();
         assert_eq!(handle.bytes(128).unwrap(), b"SYNTHETIC_DATA");
         assert!(handle.current_user_can_replace_or_modify().unwrap());
-        assert!(!handle.cached_signature());
+        assert!(matches!(
+            handle.cached_signature(),
+            CachedSignature::NotEstablished
+        ));
         assert!(handle.revalidate().is_ok());
     }
 

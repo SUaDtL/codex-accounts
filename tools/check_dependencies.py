@@ -7,8 +7,8 @@ import tomllib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-REVIEW = 'docs/ca-06b-dependencies.json'
-REVIEW_SHA256 = '2fb9f49d7b9e9ddb2d27f562ce6f45f506c5313fc3f8b6836f76b33201a456b1'
+REVIEW = 'docs/ca-02b-dependencies.json'
+REVIEW_SHA256 = 'bccbfe779b29b99d5dfe0f4df3a6d45585c1580e656d35c08ecfbee8b31edc60'
 HISTORICAL_REVIEW_SHA256 = {
     'docs/ca-02-dependencies.json': 'ceaffa36b058d90fef01df21634610938aa47755edd8b6a15f7adc7257f6cc5f',
     'docs/ca-03b-dependencies.json': '0071f27fcdd6dd9aba04aee06e9cb75b2177be7fae7999980f05a19c31563c7d',
@@ -17,6 +17,7 @@ HISTORICAL_REVIEW_SHA256 = {
     'docs/ca-04b-dependencies.json': 'ffdec4f5fbaecb40d4992964702e212fd5c5c112cfa3791566168f16463dfae9',
     'docs/ca-05b-dependencies.json': 'af5b9762e7d36ce15bd824edb8354defb95d21570e5818ddf7ea86813fa88f0d',
     'docs/ca-05f-dependencies.json': '118e242fe79f17eaf98ec7ad86e02c2818aaebf2bf7881653e1756074b4c478c',
+    'docs/ca-06b-dependencies.json': '2fb9f49d7b9e9ddb2d27f562ce6f45f506c5313fc3f8b6836f76b33201a456b1',
 }
 
 
@@ -53,6 +54,16 @@ def direct_boundaries(root: Path) -> None:
                                                       'features': ['config-json']}},
             }}):
         raise ValueError('Shell dependency boundary changed')
+    discovery = tomllib.loads((root / 'crates/discovery/Cargo.toml').read_text(encoding='utf-8'))
+    sdk = discovery.get('target', {}).get('cfg(windows)', {}).get('dependencies', {}).get('windows-sys')
+    if sdk != {'version': '=0.61.2', 'features': [
+            'Win32_Foundation', 'Win32_Security', 'Win32_Security_Authorization',
+            'Win32_Security_Cryptography', 'Win32_Security_Cryptography_Catalog',
+            'Win32_Security_Cryptography_Sip', 'Win32_Security_WinTrust',
+            'Win32_Storage_FileSystem', 'Win32_System_Com', 'Win32_System_Threading',
+            'Win32_System_WindowsProgramming', 'Win32_System_IO', 'Win32_System_Ioctl',
+            'Win32_System_SystemServices']}:
+        raise ValueError('Discovery SDK dependency boundary changed')
 
 
 def package_map(items: list) -> dict:
@@ -72,11 +83,17 @@ def check(root: Path = ROOT) -> dict[str, int | str]:
     lock_bytes = (root / 'Cargo.lock').read_bytes()
     lock = tomllib.loads(lock_bytes.decode('utf-8'))
     prior_packages = []
+    original_packages = []
     for path, digest in HISTORICAL_REVIEW_SHA256.items():
         raw = (root / path).read_bytes()
         if hashlib.sha256(raw).hexdigest() != digest:
             raise ValueError('Prior review bytes changed')
         previous = review_json(raw)
+        if path == 'docs/ca-06b-dependencies.json':
+            if (len(prior_packages) != 58 or len(previous['packages']) != 349
+                    or package_map(previous['retained_package_identity']) != package_map(prior_packages)):
+                raise ValueError('Dependency graph changed; update the scoped review')
+            original_packages = prior_packages.copy()
         prior_packages += previous['packages']
     raw = (root / REVIEW).read_bytes()
     review = review_json(raw)
@@ -85,12 +102,14 @@ def check(root: Path = ROOT) -> dict[str, int | str]:
     if review['predecessor_sha256'] != HISTORICAL_REVIEW_SHA256:
         raise ValueError('Prior review set changed')
     if (review['schema'] != 'codex-accounts/dependency-review/v1'
-            or review['packet'] != 'CA-06B' or review['status'] != 'source_reviewed'):
+            or review['packet'] != 'CA-02B' or review['status'] != 'source_reviewed'):
         raise ValueError('Unknown or incomplete dependency review')
     actual_packages = [p for p in lock['package'] if 'source' in p]
     expected_packages = prior_packages + review['packages']
     actual, expected = package_map(actual_packages), package_map(expected_packages)
-    if (len(prior_packages) != 58 or len(review['packages']) != 349
+    # Historical packages are additive contributions; retained identities are
+    # equality assertions only and must never be concatenated a second time.
+    if (len(original_packages) != 58 or len(prior_packages) != 407 or review['packages'] != []
             or len(expected) != 407 or actual != expected
             or package_map(review['retained_package_identity']) != package_map(prior_packages)):
         raise ValueError('Dependency graph changed; update the scoped review')

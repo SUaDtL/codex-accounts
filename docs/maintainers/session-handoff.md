@@ -1,18 +1,29 @@
-# Session handoff: Windows supervisor proof repair
+# Session handoff: CA-02B cached primary signer
 
-Current main is merged PR #22, `6ffc3d4568364caae1dc5dc3a2d6402ef5cfee3b`, tree
-`b001811290f68cbbe46e98b88d1b78df83392d64`. Its PR run 38806743149 passed all six
-jobs and 108 native executions. Post-merge run 38809063813 failed the twelve-test/
-four-native supervisor proof and did not execute the named native inventory.
-The old reporter discarded failure IDs; the original cause remains unknown.
+PR #24's reviewed supervisor-fixture and diagnostic repair is joined into
+this branch. Its merge remains a prerequisite: require #24 green and merged,
+then verify this combined source/tree and completed hosted gates before
+merging #23. The original PR #22 post-merge failure remains recorded in
+[validation](../validation.md); no deadline, case or qualification gate
+is waived.
 
-Continue `codex/supervisor-proof-diagnostics` through [the current packet](../next-pr.md).
-The repair fixes a reproduced handle-number assertion and cleanup-poison test
-isolation, and adds bounded safe failure diagnostics. Production supervision,
-deadlines, required cases and no-retry semantics remain unchanged. PR #23's
-reviewed cached signer work stays open; merge this repair only on green, join
-the new base into #23, and require fresh combined checks before its merge.
-No Desktop qualification or account operation follows from either test result.
+Current checkpoint: PR #22 merged source `5f5cdf724a5349bbc62bac93ee2ce0b702f2e116`
+as `6ffc3d4568364caae1dc5dc3a2d6402ef5cfee3b`; source, tested merge
+`a36528fdaf145bf091331f30ee51fead0f2b3ff6` and actual merge share tree
+`b001811290f68cbbe46e98b88d1b78df83392d64`. All six PR jobs passed in
+run 38806743149. Inspected Windows output proves 108 native executions,
+398=344+54 compiled partitions, the bundled-navigation test in both profiles and
+mandatory supervisor proof. Its post-merge run is a separate observation.
+
+Resume `codex/cached-primary-signer` through [the current packet](../next-pr.md).
+The [signer increment](../ca-02b-cached-primary-signer.md) has independent source
+and additive dependency/checker review, 254 Python tests and all eleven local
+combined-workspace validation stages passing. One exact selected-image observation
+reported cached trust and the bounded primary leaf digest; it remains unqualified.
+Final hosted gates remain required. The next Q0 work should address real binding
+and ancestry evidence, preserving prior access-denied results and all remaining
+home/backend/policy/resource/lifecycle unknowns. The owner-approved engine override
+does not waive them, authorize ACL repair or enable credential operations.
 
 ## Historical CA-06B handoff
 

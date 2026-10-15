@@ -9,6 +9,11 @@ execution. This observation creates no such binding.
 
 ## Read-only contract
 
+CA-02B adds a structured [cached primary signer observation](ca-02b-cached-primary-signer.md)
+to each inspected image. A successful cached trust result and leaf digest remain
+observations, never publisher approval. Cleanup failure suppresses accepted trust
+and identity. No collection or qualification follows merely from this source change.
+
 `--registered-image` requires both an opaque `--candidate` ID and
 `--registered-metadata`. It accepts at most one validated package-relative `.exe`.
 Absolute, parent-relative, device, UNC and alternate-stream paths refuse. The

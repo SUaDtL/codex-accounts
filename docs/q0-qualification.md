@@ -10,6 +10,11 @@ The owner selected this host's registered Desktop for read-only Q0 work. The
 public-package/image equality and a contained original-image version result.
 Those private experiments do not change this shipped reader's no-execution
 contract, qualify the installation or enable credential operations.
+The [CA-02B signer increment](ca-02b-cached-primary-signer.md) adds fixed cached
+primary-leaf observation states. Use only the explicit metadata/image route for
+that read-only collection; it does not require a nominated home or configuration
+read. Native tests and a certificate digest do not close official publisher,
+protected ancestry, runtime role or effective-home obligations.
 
 ## Prerequisites
 
