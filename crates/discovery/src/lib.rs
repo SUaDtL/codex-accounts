@@ -82,6 +82,7 @@ pub struct Options {
     pub(crate) home: Option<PathBuf>,
     pub(crate) local: bool,
     pub(crate) registered_metadata: bool,
+    pub(crate) registered_image: Option<String>,
 }
 impl fmt::Debug for Options {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -123,6 +124,11 @@ pub fn options(args: impl IntoIterator<Item = String>) -> Result<Options, ReadEr
             }
             "--show-local-paths" => result.local = true,
             "--registered-metadata" => result.registered_metadata = true,
+            "--registered-image" => {
+                let relative = args.next().ok_or(ReadError::Usage)?;
+                validate_relative_executable(&relative)?;
+                result.registered_image = Some(relative);
+            }
             _ => return Err(ReadError::Usage),
         }
     }
@@ -133,6 +139,11 @@ pub fn options(args: impl IntoIterator<Item = String>) -> Result<Options, ReadEr
         && (result.candidate.is_none()
             || result.runtime_relative.is_some()
             || result.home.is_some())
+    {
+        return Err(ReadError::Usage);
+    }
+    if result.registered_image.is_some()
+        && (!result.registered_metadata || result.candidate.is_none())
     {
         return Err(ReadError::Usage);
     }
@@ -417,6 +428,62 @@ mod tests {
             "a".repeat(64)
         ])
         .is_err());
+    }
+
+    #[test]
+    fn registered_image_requires_metadata_and_rejects_unsafe_or_conflicting_options() {
+        let base = vec![
+            "--candidate".to_owned(),
+            "a".repeat(64),
+            "--registered-metadata".to_owned(),
+        ];
+        let mut valid = base.clone();
+        valid.extend([
+            "--registered-image".into(),
+            "images/SYNTHETIC_CANARY.exe".into(),
+        ]);
+        let parsed = options(valid.clone()).unwrap();
+        assert!(!format!("{parsed:?}").contains("SYNTHETIC_CANARY"));
+        for args in [
+            vec!["--registered-image".into(), "image.exe".into()],
+            vec![
+                "--candidate".into(),
+                "a".repeat(64),
+                "--registered-image".into(),
+                "image.exe".into(),
+            ],
+        ] {
+            assert!(options(args).is_err());
+        }
+        for bad in [
+            "../image.exe",
+            "C:\\image.exe",
+            "\\\\server\\image.exe",
+            "\\\\?\\C:\\image.exe",
+            "image.exe:stream",
+            "CON.exe",
+            "auth.json",
+            "config.toml",
+            "history.jsonl",
+            "not-executable",
+        ] {
+            let mut args = base.clone();
+            args.extend(["--registered-image".into(), bad.into()]);
+            assert!(options(args).is_err());
+        }
+        for tail in [
+            vec!["--registered-image"],
+            vec!["--registered-image", "other.exe"],
+            vec!["--runtime-relative", "other.exe"],
+            vec!["--candidate-home", "SYNTHETIC_CANARY"],
+        ] {
+            let mut args = valid.clone();
+            args.extend(tail.into_iter().map(str::to_owned));
+            assert!(options(args).is_err());
+        }
+        let mut missing = base;
+        missing.push("--registered-image".into());
+        assert!(options(missing).is_err());
     }
 
     #[test]

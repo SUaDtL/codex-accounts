@@ -18,10 +18,10 @@ class PartitionTests(unittest.TestCase):
         return collections.Counter({('tests::ordinary','test'):2,('tests::bench','benchmark'):1})
     def test_compiled_partition_is_complete_disjoint_and_counts_duplicate_cross_crate_names(self):
         self.assertEqual(workspace.verify_partition(self.full(),self.rest()),len(native.inventory()))
-        self.assertEqual(len(native.inventory()),51)
+        self.assertEqual(len(native.inventory()),54)
         args=workspace.selectors()
         self.assertEqual(args[0],'--exact')
-        self.assertEqual(args[1::2],['--skip']*51)
+        self.assertEqual(args[1::2],['--skip']*54)
         self.assertEqual(args[2::2],[p+c for p,c in native.inventory()])
     def test_missing_duplicated_extra_or_unassigned_skips_cannot_pass(self):
         first=next(iter(self.full()))
@@ -118,7 +118,7 @@ class IndependentNativeTests(unittest.TestCase):
                               + proof.LOCATION_CASES + proof.PROFILE_LEGACY_CASES)]
         self.assertEqual(len(added), 18)
         self.assertEqual(native.inventory()[:45], tuple(inherited + added))
-        self.assertEqual(len(set(native.inventory())), 51)
+        self.assertEqual(len(set(native.inventory())), 54)
         for prefix, name in added:
             for profile in ('debug', 'release'):
                 command = native.case_command(profile, prefix, name)
@@ -143,6 +143,9 @@ class IndependentNativeTests(unittest.TestCase):
             ('windows_reader::tests::', 'native_registered_metadata_refuses_sharing_hardlinks_and_registration_drift'),
             ('windows_reader::tests::', 'native_registered_metadata_retains_manifest_root_and_images_through_reobservation'),
             ('windows_reader::tests::', 'native_registered_metadata_accepts_one_utf8_bom_and_refuses_invalid_prefixes'),
+            ('windows_reader::tests::', 'native_registered_image_is_separate_redacted_and_retained_through_reobservation'),
+            ('windows_reader::tests::', 'native_registered_image_refuses_invalid_leaf_and_registration_changes'),
+            ('windows_reader::tests::', 'native_registered_image_rejects_junction_ancestor_without_target_read'),
         )
         self.assertEqual(native.inventory()[45:], expected)
         for prefix, name in expected:

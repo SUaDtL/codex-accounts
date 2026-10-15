@@ -2,6 +2,40 @@ use serde_json::Value;
 use std::process::Command;
 
 #[test]
+fn registered_image_cli_documents_explicit_mode_and_redacts_refusals() {
+    let binary = env!("CARGO_BIN_EXE_codex-accounts-discovery");
+    let output = Command::new(binary).arg("--help").output().unwrap();
+    assert!(output.status.success());
+    assert!(String::from_utf8(output.stdout)
+        .unwrap()
+        .contains("--registered-image"));
+    for image in [
+        "SYNTHETIC_CANARY.json",
+        "../SYNTHETIC_CANARY.exe",
+        "C:\\SYNTHETIC_CANARY.exe",
+    ] {
+        let output = Command::new(binary)
+            .args([
+                "--candidate",
+                &"a".repeat(64),
+                "--registered-metadata",
+                "--registered-image",
+                image,
+            ])
+            .output()
+            .unwrap();
+        assert_eq!(output.status.code(), Some(2));
+        assert!(output.stderr.is_empty());
+        let text = String::from_utf8(output.stdout).unwrap();
+        assert!(!text.contains("SYNTHETIC"));
+        let report: Value = serde_json::from_str(&text).unwrap();
+        assert_eq!(report["error"], "E_PATH_UNSAFE");
+        assert_eq!(report["qualified"], false);
+        assert_eq!(report["credential_mutation_enabled"], false);
+    }
+}
+
+#[test]
 fn registered_metadata_help_and_invalid_combinations_are_redacted() {
     let binary = env!("CARGO_BIN_EXE_codex-accounts-discovery");
     let help = Command::new(binary).arg("--help").output().unwrap();

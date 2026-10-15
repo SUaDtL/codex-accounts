@@ -1,11 +1,11 @@
-# Session handoff: Windows compatibility
+# Session handoff: registered runtime candidate observation
 
-As of 2026-10-15, PRs #14 and #15 are merged into main
-`727eb6154db1d7c4ac5db10a7868b6271cd55293`. The active branch is
-`codex/windows-compatibility-plan`. Read
+As of 2026-10-15, PRs #14, #15 and #16 are merged into main
+`9389c33b7bc8d41fee92f14046eebd546c5c86f2`. The active branch is
+`codex/runtime-contract-observation`. Read
 [the current packet](../next-pr.md) and
 [Windows storage compatibility](../windows-storage-compatibility.md) first.
-The owner authorized direct development outside engine approval bookkeeping;
+The owner authorized continued direct development outside engine approval bookkeeping;
 the audit log retains that instruction. Preserve pending engine records without
 claiming acceptance. Security, qualification and exact-head CI remain required.
 

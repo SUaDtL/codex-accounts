@@ -82,6 +82,19 @@ Each declared image remains a separate unqualified observation. A successful
 metadata read is useful Q0 input, not completed Q0 or authority to run an image,
 read credentials or add a compatibility record.
 
+To observe one additional executable within that same registered package:
+
+```powershell
+$relativeImage = Read-Host 'Package-relative executable candidate (no drive prefix)'
+.\target\debug\codex-accounts-discovery.exe --candidate $id --registered-metadata --registered-image $relativeImage
+```
+
+The optional `nominated_image` is separate from manifest-declared images. Its
+provenance is caller nomination and its role remains unqualified. This flag does
+not launch a runtime, read configuration/auth/history, or accept external paths.
+It cannot be combined with the strict mode's `--runtime-relative` or
+`--candidate-home` flags. See [the observation contract](registered-image-observation.md).
+
 ## Expected redacted result
 
 A completed report always has `qualified: false` and

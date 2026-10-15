@@ -1,5 +1,30 @@
 # Validation and evidence boundary
 
+## Merged PR #16: Windows storage and registered metadata
+
+PR #16 merged as `9389c33b7bc8d41fee92f14046eebd546c5c86f2`. Reviewed head
+`5729693d99b93f93e8dac2c00255e36ce3e80541` passed all six jobs in
+[run 38761237982](https://github.com/SUaDtL/codex-accounts/actions/runs/38761237982).
+The source and tested merge `67974269ecf5188edf74244a37e328b9886e411d` share tree
+`65082c2815639a22e46dd3dae8b798701b9295b4`, also preserved by the actual merge.
+Local and inspected hosted Windows logs each contain 102 successful named native
+executions: 51 cases per profile. The compiled 343-case inventory has a complete,
+disjoint 292-case workspace complement and 51 native cases. Three existing owner
+two-user helpers remain ignored / NOT RUN. Local Python ran 206 cases with one
+existing POSIX-only skip. Formatting, Clippy, both-profile doctests, optimized
+build, dependency review and source/workflow projections passed.
+
+Earlier restoration timeouts remain recorded. Scheduling internally parallel
+restart suites serially in the outer runner preserved every assertion, all cases,
+the 180-second deadline and no-retry behavior; the final full runs passed.
+Independent security, coverage and combined source reviews found zero material
+issues. Real registered metadata inspection succeeds for package 26.1007.9446.0
+after the regression-backed UTF-8 BOM fix. This establishes no runtime role,
+effective home/backend/policy, publisher authority, credential access or Q0-Q5
+qualification. See [Windows compatibility](windows-storage-compatibility.md).
+These exact-source results do not transfer to the next increment or substitute
+for inspection of its final head and completed CI.
+
 ## CA-05E / PR #15: synthetic driver and test-proof follow-up
 
 Preceding head `caeb46c42efe4ff22926c3d7ac817a580556c59e`, tree
