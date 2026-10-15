@@ -5,6 +5,8 @@ use super::super::codec::{RUNTIME_IMAGE_SHA256, RUNTIME_VERSION, SCHEMA_MANIFEST
 use super::*;
 #[path = "codec_login_tests.rs"]
 mod managed;
+#[path = "codec_rates_tests.rs"]
+mod rates;
 
 const INIT: &str = r#"{"codexHome":"C:\\SYNTHETIC_HOME","platformFamily":"windows","platformOs":"windows","userAgent":"SYNTHETIC_AGENT"}"#;
 fn bind() -> (
@@ -300,12 +302,7 @@ fn codec_unsent_response_and_unimplemented_methods_never_bypass_receipts() {
         c.consume(&mut s, &mut d, frame).unwrap_err().primary,
         SessionError::UnsentResponse
     );
-    for method in [
-        Method::LoginStart,
-        Method::LoginCancel,
-        Method::RateLimitsRead,
-        Method::Initialized,
-    ] {
+    for method in [Method::LoginStart, Method::LoginCancel, Method::Initialized] {
         let (mut s, mut d, _peer, c, _cancel) = bind();
         assert_eq!(
             c.queue(&mut s, &mut d, method).unwrap_err().primary,
@@ -369,7 +366,7 @@ fn codec_binding_constants_pin_the_actual_collected_runtime_and_manifest() {
     );
     assert_eq!(
         SCHEMA_MANIFEST_SHA256,
-        "8a371a4eef9b1f58797e0704e798fe8c9899c35d4264285f4554d18b4540f7b2"
+        "a87f649f36c3a2787182bedd125002cf1a2eff54c46383b04e7d1431a7dd758e"
     );
 }
 

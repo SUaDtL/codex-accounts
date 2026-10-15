@@ -1,5 +1,8 @@
 # CA-05G: private managed-login wire codec
 
+Merged in [PR #20](https://github.com/SUaDtL/codex-accounts/pull/20); the
+[validation record](validation.md) binds its reviewed source, tested tree and CI.
+
 This extends the [CA-05F codec](ca-05f-schema-codec.md) over the same private
 synthetic driver. It enables no production constructor, runtime launch, browser,
 credential IO or qualified account operation.
@@ -57,7 +60,7 @@ Local runtime debug/release each pass 152 ordinary tests (127 library, 14 framin
 with one existing POSIX-only skip on Windows. Formatting, strict workspace/all-target
 Clippy and schema/spec/dependency/workflow checks pass. Independent security and
 coverage/schema reviews found no actionable issue. Final combined-head hosted
-CI remains required before merge; these local
+CI passed for PR #20; these local
 results do not transfer to a later source head.
 
 No dependencies, native test deadlines, compatibility records or qualification

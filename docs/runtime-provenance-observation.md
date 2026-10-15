@@ -98,6 +98,10 @@ CA-05G adds five exact managed-login/cancellation schema files from the same
 captured output: nineteen selected files / 443,473 bytes. Its manifest records the
 prior selection hash and has SHA-256
 `8a371a4eef9b1f58797e0704e798fe8c9899c35d4264285f4554d18b4540f7b2`.
+CA-05H selects three more original rate-limit files, giving twenty-two files /
+457,451 bytes. The current selection retains CA-05G's hash as its predecessor;
+its manifest SHA-256 is
+`a87f649f36c3a2787182bedd125002cf1a2eff54c46383b04e7d1431a7dd758e`.
 The original collection, executable binding and every generated-file hash remain
 unchanged; no new runtime invocation occurred. Omitted files remain private and
 are represented by metadata only.

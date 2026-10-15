@@ -1,6 +1,35 @@
 # Validation and evidence boundary
 
-## CA-05G: managed-login wire codec candidate
+## CA-05H: private rate-limit wire observations candidate
+
+The [rate-limit codec](ca-05h-rate-limit-codec.md) adds fifteen actual-driver
+tests without runtime IO, polling, cache merge or credit operations. Fresh local
+debug/release each pass 167 ordinary runtime tests and five compile-fail doctests.
+Both Windows workspace complements pass, with complete/disjoint 397=343+54
+compiled inventories per profile; the 54 isolated native cases remain mandatory
+in each hosted profile. Python runs 232 tests with one existing POSIX-only skip
+on Windows. Formatting, strict workspace/all-target Clippy, workspace doctests,
+optimized all-target build and schema/spec/dependency/workflow checks pass.
+
+Independent security, coverage and schema review found no actionable issue and
+compared all three new files to original captured bytes while preserving all
+prior files and the full 317-entry inventory. The first integrated runtime run
+failed the old explicit manifest assertion; updating that assertion to the actual
+new selection pin restored the full suite. Three isolated safeguard-removal
+failures and their restored green results remain separate regression evidence.
+Final combined-head hosted checks are still required before merge. No dependency,
+catalog, native deadline, security or application qualification gate changes.
+
+## Merged CA-05G / PR #20: managed-login wire codec
+
+PR #20 merged as `67c6f157993ed786025fc6b57305a3eb433fa7f5`. Source
+`ac92dac0ee1afa941cd10a289e7d458f3abae0be`, tested merge
+`d504ac64f62719418fbdc0f514a0f1b7834336c2` and actual merge share tree
+`407dc829e452cabc7c55878fc23eedb681c2cc4b`. All six jobs passed in
+[PR run 38796177485](https://github.com/SUaDtL/codex-accounts/actions/runs/38796177485).
+The inspected Windows log confirms 108 native executions, 66 codec executions,
+two cancellation-join executions, complete/disjoint 382=328+54 compiled partitions
+per profile and twelve supervisor tests including four actual Windows fixtures.
 
 The [private managed-login codec](ca-05g-managed-login-codec.md) adds sixteen
 actual-driver test groups and one session cancellation-notification regression.
@@ -13,7 +42,7 @@ were independently compared against the original admitted collection.
 
 Two isolated safeguard-removal controls fail their intended assertions, then
 are restored. Cancellation without intent has a failing-before/passing-after
-category regression. Final combined-head hosted CI remains required. No local
+category regression. Later increments require their own combined-head CI. No local
 result establishes application qualification or transfers to a later source.
 The inherited native cases, process-supervision proof, deadlines, no-retry rule,
 dependency graph and empty compatibility catalog are unchanged.
