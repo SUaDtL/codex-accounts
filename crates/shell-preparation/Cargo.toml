@@ -1,0 +1,12 @@
+[package]
+name = "codex-accounts-shell-preparation"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+[lints]
+workspace = true
+[target.'cfg(windows)'.dependencies]
+tauri = { version = "=2.12.4", default-features = false, features = ["wry", "custom-protocol"] }
+[target.'cfg(windows)'.build-dependencies]
+tauri-build = { version = "=2.7.3", default-features = false, features = ["config-json"] }

@@ -26,3 +26,6 @@ Thumbs.db
 
 # Explicit two-user synthetic evidence artifact; never repository source.
 /crates/vault-crypto/ca03b-synthetic.dpapi
+
+# Tauri-generated definitions are build output, not permission grants.
+/crates/shell-preparation/gen/

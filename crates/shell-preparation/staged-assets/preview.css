@@ -1,0 +1,76 @@
+:root {
+  color-scheme: light;
+  --canvas: #f3f5f8;
+  --surface: #ffffff;
+  --ink: #182437;
+  --muted: #45546b;
+  --accent: #244fc2;
+  --line: #c4ccda;
+  --notice: #edf2ff;
+  --disabled: #e6eaf0;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 100%;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--canvas); color: var(--ink); line-height: 1.6; }
+a { color: var(--accent); text-underline-offset: .2em; }
+:focus-visible { outline: 3px solid var(--accent); outline-offset: 4px; }
+.skip { position: absolute; left: 1rem; top: -8rem; padding: .75rem 1rem; background: var(--surface); z-index: 2; }
+.skip:focus { top: 1rem; }
+.topbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 1rem; padding: 1rem 2rem; border-bottom: 1px solid var(--line); background: var(--surface); }
+.brand { font-size: 1.15rem; font-weight: 750; letter-spacing: -.025em; }
+.layout { display: grid; grid-template-columns: 13rem minmax(0, 1fr); max-width: 100rem; margin: auto; }
+aside { padding: 2rem 1rem; }
+nav { display: grid; gap: .4rem; }
+nav a { padding: .75rem 1rem; border-radius: .65rem; font-weight: 650; text-decoration: none; }
+nav a[aria-current="page"] { color: var(--surface); background: var(--accent); }
+.aside-note { color: var(--muted); font-size: .875rem; padding: 1rem; }
+main { min-width: 0; padding: 2.5rem clamp(1rem, 3vw, 3rem); }
+h1 { font-size: clamp(1.9rem, 4vw, 2.75rem); line-height: 1.15; margin: .4rem 0 .75rem; letter-spacing: -.04em; }
+h2 { font-size: 1.15rem; line-height: 1.4; margin: .2rem 0 .8rem; }
+p { margin: .5rem 0 1rem; }
+.lead, .aside-note, dt, footer { color: var(--muted); }
+.lead { max-width: 55rem; }
+.eyebrow { font-size: .75rem; font-weight: 750; letter-spacing: .1em; color: var(--muted); }
+.notice { padding: 1.25rem 1.5rem; background: var(--notice); border: 1px solid var(--line); border-left: 4px solid var(--accent); border-radius: .75rem; margin: 1.75rem 0; }
+.notice h2 { font-size: 1rem; }
+.notice p { margin-bottom: 0; }
+.installation { padding: 1.25rem 0; }
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 21rem), 1fr)); gap: 1rem; align-items: start; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: .9rem; padding: 1.5rem; min-width: 0; margin-bottom: 1rem; }
+.card-heading, .toolbar, .actions { display: flex; gap: .65rem; flex-wrap: wrap; align-items: center; }
+.card-heading { justify-content: space-between; margin-bottom: 1rem; }
+.toolbar { margin-bottom: 1.25rem; }
+.badge { display: inline-block; padding: .2rem .7rem; border: 1px solid var(--line); border-radius: 2rem; color: var(--ink); background: var(--notice); font-size: .8rem; font-weight: 650; }
+dl { margin: .75rem 0 1.25rem; }
+dt { font-size: .85rem; }
+dd { margin: 0 0 .7rem; font-weight: 550; }
+.facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr)); gap: 1rem; }
+button { min-height: 2.75rem; font: inherit; font-size: .875rem; font-weight: 600; padding: .6rem .85rem; border: 1px solid var(--line); border-radius: .5rem; white-space: normal; }
+button:disabled { color: var(--muted); background: var(--disabled); cursor: not-allowed; opacity: 1; }
+details { border-top: 1px solid var(--line); padding: .8rem 0; }
+summary { cursor: pointer; font-weight: 650; min-height: 2.75rem; padding: .4rem 0; }
+details p { max-width: 65rem; }
+h1, h2, p, dd, bdi, .badge, button, summary { overflow-wrap: anywhere; }
+footer { padding-top: 1.5rem; margin-top: 1.5rem; border-top: 1px solid var(--line); font-size: .8rem; }
+@media (max-width: 48rem) {
+  .layout { grid-template-columns: minmax(0, 1fr); }
+  aside { padding: .75rem 1rem 0; }
+  nav { display: flex; flex-wrap: wrap; }
+  .aside-note { display: none; }
+  main { padding-top: 1rem; }
+  .topbar { padding: 1rem; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+}
+@media (forced-colors: active) {
+  :focus-visible { outline-color: Highlight; }
+  nav a[aria-current="page"] { border: 2px solid Highlight; }
+  .badge, .notice, .card, button { border-color: CanvasText; }
+}
+@media print {
+  .skip, aside, .toolbar, .actions { display: none; }
+  .layout { display: block; }
+  .card { break-inside: avoid; }
+}

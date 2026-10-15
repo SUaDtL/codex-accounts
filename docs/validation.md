@@ -1,6 +1,56 @@
 # Validation and evidence boundary
 
-## CA-05H: private rate-limit wire observations candidate
+## CA-06B: Windows static developer shell candidate
+
+The [static shell](ca-06b-static-preview.md) adds no application commands or
+native account integration. Additive source/license/advisory review covers the
+exact 407-package lock, preserving all seven predecessor records. Independent
+dependency/checker and shell/security reviews found no remaining actionable issue.
+Two source-checker findings (URL-bearing attributes/CSS escapes and malformed
+configuration diagnostics) were fixed and their regressions passed before the
+combined source snapshot.
+
+One clean copied-source validation ran all eleven stages successfully in 503.705
+seconds: dependency, schema, static asset, specification and workflow checks,
+formatting, debug complement, doctests, optimized build, release complement and
+strict all-target Clippy. Each profile proves a complete/disjoint 398=344+54
+compiled partition: 341 passed, three existing owner-run two-user cases ignored,
+and 54 native cases filtered for their separate mandatory runner. All eight
+doctests pass. This is local snapshot evidence, not final-head hosted proof.
+Final Python verification runs 250 tests successfully with one existing
+POSIX-only skip on Windows. Eight static-preview tool regressions cover asset
+drift, active content, malformed input, path links, bounded reads and fixed errors.
+Existing strict JSON depth/duplicate and the new bundled-navigation regression
+pass with the expanded graph. No native case or deadline was removed.
+
+A separately built static-context executable created one responsive owned window
+and a fresh owned WebView profile, accepted WM_CLOSE, exited normally and left its
+owned job empty. Optional owned-client capture produced no accepted image;
+rendered HTML, interaction and accessibility remain UNOBSERVED. The first launcher
+attempt refused before launch because Cargo's output had two hard links; an
+exclusive byte-identical private copy satisfied the unchanged single-link check.
+This is a source-equivalent context smoke, not a final-workspace GUI receipt or
+network/filesystem isolation claim. No original Desktop image was invoked.
+
+Final combined-head Python/source checks and all inherited hosted jobs remain
+required before merge, including every isolated native execution in both profiles.
+No complete Q0-Q5 requirement or release scenario is closed.
+
+## Merged CA-05H / PR #21
+
+Source `69599d5ad29044979bc35f970575515aa0266ef1`, tested merge
+`f5e0208a393e124d03ca38acfce8e4bab19e627a` and actual merge
+`e11471f6840502e90b33f5686dccd5fd2d0f452f` share tree
+`8edf5fa3a40b2997010b5c0837ea8745de31d32d`. All six jobs passed in
+[PR run 38799021210](https://github.com/SUaDtL/codex-accounts/actions/runs/38799021210)
+and [main run 38801230587](https://github.com/SUaDtL/codex-accounts/actions/runs/38801230587).
+Both inspected Windows logs confirm 108 native executions, 96 codec executions,
+two cancellation-join executions, 397=343+54 compiled partitions per profile and
+twelve supervisor tests including four actual Windows fixture methods.
+PR #20's separate post-merge run 38797855057 also passed all six jobs with its
+own reviewed tree and the Windows counts recorded below.
+
+## Preserved CA-05H local implementation evidence
 
 The [rate-limit codec](ca-05h-rate-limit-codec.md) adds fifteen actual-driver
 tests without runtime IO, polling, cache merge or credit operations. Fresh local
@@ -17,7 +67,7 @@ prior files and the full 317-entry inventory. The first integrated runtime run
 failed the old explicit manifest assertion; updating that assertion to the actual
 new selection pin restored the full suite. Three isolated safeguard-removal
 failures and their restored green results remain separate regression evidence.
-Final combined-head hosted checks are still required before merge. No dependency,
+Final hosted evidence is recorded above. No dependency,
 catalog, native deadline, security or application qualification gate changes.
 
 ## Merged CA-05G / PR #20: managed-login wire codec

@@ -1,4 +1,24 @@
-# Current packet: CA-05H private rate-limit wire observations
+# Current packet: CA-06B Windows static preview
+
+PRs #14 through #21 are merged. Main is
+`e11471f6840502e90b33f5686dccd5fd2d0f452f`; PR #21 and its post-merge run passed
+all six jobs. Continue `codex/windows-static-preview`, inspecting its live PR and
+checks before publication or merge. The owner authorized direct development and
+conditional green merges under the standing engine workflow override. Application
+security, qualification and hosted CI remain mandatory.
+
+This packet adds a Windows-only Tauri developer shell for the three existing
+disabled synthetic pages. Read [its scope and checks](ca-06b-static-preview.md) and
+the additive [dependency review](ca-06b-dependencies.json). No application commands,
+credential/native adapter or installer is enabled. Full Q0 through Q5 remain open.
+After its exact-head gates pass, the next bounded chunk is cached primary signer
+observation in the existing read-only discovery reader: preserve held-image
+identity, cache-only trust, structured unknowns and all qualification refusals.
+That chunk needs its own additive dependency feature review and final combined CI.
+It must not execute the nominated image, infer publisher binding from a leaf hash,
+or read real auth/configuration/history.
+
+## Historical CA-05H packet
 
 PRs #14 through #20 are merged; current main is
 `67c6f157993ed786025fc6b57305a3eb433fa7f5`. Continue on

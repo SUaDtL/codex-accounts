@@ -1,4 +1,23 @@
-# Session handoff: CA-05H private rate-limit codec
+# Session handoff: CA-06B Windows static preview
+
+Current checkpoint: PRs #14 through #21 are merged; main is
+`e11471f6840502e90b33f5686dccd5fd2d0f452f`. PR #21 run 38799021210 and post-merge
+run 38801230587 passed all six jobs. Both inspected Windows logs prove 108 native
+executions, 96 codec executions, two cancellation-join executions and complete,
+disjoint 397=343+54 compiled inventories per profile. No original-image command
+was repeated for CA-05H's schema selection.
+
+Resume `codex/windows-static-preview` through [the current packet](../next-pr.md).
+The Windows-only static shell retains disabled synthetic controls and no backend;
+its exact additive graph and guarded asset staging are recorded in
+[CA-06B](../ca-06b-static-preview.md). Final hosted gates are still required.
+The next separately reviewed chunk is cached primary signer observation, preserving
+all unresolved Q0 fields and the reader's no-execution boundary. Do not integrate
+its two SDK features without an additive review that preserves prior records.
+The owner extended the standing engine workflow override and conditional green
+merge authority. This does not waive security, exact-head tests or qualification.
+
+## Historical CA-05H handoff
 
 As of 2026-10-15, PRs #14 through #20 are merged into main
 `67c6f157993ed786025fc6b57305a3eb433fa7f5`. The active branch is
