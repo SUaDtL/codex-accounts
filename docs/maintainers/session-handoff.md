@@ -1,4 +1,24 @@
-# Session handoff: CA-06B Windows static preview
+# Session handoff: CA-02B cached primary signer
+
+Current checkpoint: PR #22 merged source `5f5cdf724a5349bbc62bac93ee2ce0b702f2e116`
+as `6ffc3d4568364caae1dc5dc3a2d6402ef5cfee3b`; source, tested merge
+`a36528fdaf145bf091331f30ee51fead0f2b3ff6` and actual merge share tree
+`b001811290f68cbbe46e98b88d1b78df83392d64`. All six PR jobs passed in
+run 38806743149. Inspected Windows output proves 108 native executions,
+398=344+54 compiled partitions, the bundled-navigation test in both profiles and
+mandatory supervisor proof. Its post-merge run is a separate observation.
+
+Resume `codex/cached-primary-signer` through [the current packet](../next-pr.md).
+The [signer increment](../ca-02b-cached-primary-signer.md) has independent source
+and additive dependency/checker review, 254 Python tests and all eleven local
+combined-workspace validation stages passing. One exact selected-image observation
+reported cached trust and the bounded primary leaf digest; it remains unqualified.
+Final hosted gates remain required. The next Q0 work should address real binding
+and ancestry evidence, preserving prior access-denied results and all remaining
+home/backend/policy/resource/lifecycle unknowns. The owner-approved engine override
+does not waive them, authorize ACL repair or enable credential operations.
+
+## Historical CA-06B handoff
 
 Current checkpoint: PRs #14 through #21 are merged; main is
 `e11471f6840502e90b33f5686dccd5fd2d0f452f`. PR #21 run 38799021210 and post-merge

@@ -1,6 +1,43 @@
 # Validation and evidence boundary
 
-## CA-06B: Windows static developer shell candidate
+## CA-02B: cached primary signer candidate
+
+The [signer observation](ca-02b-cached-primary-signer.md) retains the original
+read-only image/registration boundary, with bounded owned DER copying from live
+cached WinTrust state and exactly-once cleanup. A genuine missing-field regression
+failed before implementation. Independent source and additive dependency/checker
+reviews found no actionable issue. No package is added to the 407-package lock;
+all eight historical reviews remain immutable.
+
+Fresh local Python runs 254 tests successfully with one existing platform skip.
+All eleven combined-source stages pass in 493.862 seconds: checks, formatting,
+debug/release complements, eight doctests, optimized all-target build and strict
+workspace Clippy. Each complete/disjoint inventory is 401=347+54: 344 passed,
+three existing owner-run cases ignored and 54 native cases filtered for their
+mandatory separate hosted execution. All copied/original input hashes remained
+stable, all owned jobs emptied, and no native inventory case/deadline was removed.
+
+One reviewed release diagnostic then observed the selected registered Desktop
+26.1007.9446.0 x64 without executing its image or reading real config/auth/history.
+It exited zero with empty owned job, stable collector/source/image/registration
+and a primary leaf digest matching the prior static extraction. Exact image,
+collector and report digests are in the increment record. The result is cached
+signature evidence, not publisher approval, protected ancestry, effective-home
+proof or complete Q0 qualification. Final exact-head hosted gates remain required.
+
+## Merged CA-06B / PR #22
+
+Source `5f5cdf724a5349bbc62bac93ee2ce0b702f2e116`, tested merge
+`a36528fdaf145bf091331f30ee51fead0f2b3ff6` and actual merge
+`6ffc3d4568364caae1dc5dc3a2d6402ef5cfee3b` share tree
+`b001811290f68cbbe46e98b88d1b78df83392d64`. All six jobs passed in
+[PR run 38806743149](https://github.com/SUaDtL/codex-accounts/actions/runs/38806743149).
+The inspected Windows log proves 108 native executions, 96 codec executions,
+two cancellation-join and two bundled-navigation executions, complete/disjoint
+398=344+54 compiled partitions per profile and twelve supervisor tests including
+four actual Windows fixture methods. Post-merge CI is a separate observation.
+
+## Preserved CA-06B local implementation evidence
 
 The [static shell](ca-06b-static-preview.md) adds no application commands or
 native account integration. Additive source/license/advisory review covers the

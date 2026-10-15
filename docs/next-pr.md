@@ -1,4 +1,30 @@
-# Current packet: CA-06B Windows static preview
+# Current packet: CA-02B cached primary signer
+
+PRs #14 through #22 are merged. Main is
+`6ffc3d4568364caae1dc5dc3a2d6402ef5cfee3b`; PR #22 passed all six jobs in
+run 38806743149, with all 108 native executions verified. Its separate post-merge
+run must also be inspected. Continue `codex/cached-primary-signer`, preserving its
+reviewed source and refreshing live PR/head/checks before publication or merge.
+
+[CA-02B](ca-02b-cached-primary-signer.md) adds bounded primary leaf observation
+from live successful cached WinTrust state, exactly-once cleanup and distinct
+unknown/failure states. Its additive feature review preserves all eight older
+records and the unchanged 407-package lock. One exact-build read-only collection
+succeeded; all installation authority remains disabled. Full combined-head hosted
+gates are still required, including every existing native case in both profiles.
+
+The next genuine Q0 gap is independently reviewed official distribution/signer/
+runtime binding and protected installation ancestry. Earlier read-only diagnostics
+refused registered ancestor index two with access denied, even for attribute-only
+and zero-desired-access directory opens. Preserve that evidence; do not change ACLs,
+elevate or infer all-principal protection from a current-token AccessCheck.
+Review a bounded diagnostic/evidence route before adding a large ACL parser.
+Effective Desktop home/backend/policy, resource and lifecycle semantics remain
+unresolved. No repeated version/schema command or synthetic codec closes them.
+The standing engine workflow override and conditional green merge authority
+continue; security and qualification gates remain intact.
+
+## Historical CA-06B packet
 
 PRs #14 through #21 are merged. Main is
 `e11471f6840502e90b33f5686dccd5fd2d0f452f`; PR #21 and its post-merge run passed

@@ -1,16 +1,16 @@
 # Codex Accounts: start here
 
-Bootstrap revision **2.7.0** · Checkpoint **2026-10-15** · Repository **SUaDtL/codex-accounts**.
+Bootstrap revision **2.8.0** · Checkpoint **2026-10-15** · Repository **SUaDtL/codex-accounts**.
 This is session routing, not an application release or a second roadmap.
 
 ## Resume from live work, not the original bootstrap
 
-PRs **#14** through **#21** are merged. Main is
-`e11471f6840502e90b33f5686dccd5fd2d0f452f`, including the private synthetic
+PRs **#14** through **#22** are merged. Main is
+`6ffc3d4568364caae1dc5dc3a2d6402ef5cfee3b`, including the private synthetic
 transport driver, guarded Windows storage, explicit registered-image observation
 native-test process supervision and the pinned CA-05F handshake/account-read
 codec, CA-05G managed-login/cancellation and CA-05H rate-limit decoding. Continue
-CA-06B on `codex/windows-static-preview`;
+CA-02B on `codex/cached-primary-signer`;
 do not reopen the historical review stack. Refresh actual refs and checks.
 The owner authorized the same standing engine workflow override for this next
 increment; application security, qualification and CI remain required.
@@ -22,7 +22,9 @@ remain unavailable. Contained original-image version and schema experiments now
 pin `codex-cli 0.162.0-alpha.17.2`; the private CA-05F decoder uses its actual
 handshake/account-read shapes. Managed-login/cancel/notification decoding is merged;
 rate-limit observations are merged without polling, cache merging or credit
-operations. The current packet adds a Windows-only disabled static Tauri preview.
+operations. The Windows-only disabled static Tauri preview is merged. The current
+packet adds bounded cached primary signer observation; one selected-image
+collection succeeded without granting installation or credential authority.
 This [partial evidence](docs/runtime-provenance-observation.md)
 does not qualify an adapter. `docs/next-pr.md` owns the bounded next step;
 old Project snapshots and an earlier head's green result do not override live work.

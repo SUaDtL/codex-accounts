@@ -74,8 +74,8 @@ class DependencyReviewTests(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.root = Path(self.tmp.name)
-        manifest = json.loads((ROOT / 'docs/ca-06b-dependencies.json').read_text())
-        paths = list(manifest['manifest_sha256']) + list(manifest['predecessor_sha256']) + ['Cargo.lock', 'docs/ca-06b-dependencies.json']
+        manifest = json.loads((ROOT / 'docs/ca-02b-dependencies.json').read_text())
+        paths = list(manifest['manifest_sha256']) + list(manifest['predecessor_sha256']) + ['Cargo.lock', 'docs/ca-02b-dependencies.json']
         for relative in paths:
             target = self.root / relative
             target.parent.mkdir(parents=True, exist_ok=True)
@@ -83,7 +83,7 @@ class DependencyReviewTests(unittest.TestCase):
         self.review = manifest
 
     def fail_with(self, review):
-        (self.root / 'docs/ca-06b-dependencies.json').write_text(json.dumps(review))
+        (self.root / 'docs/ca-02b-dependencies.json').write_text(json.dumps(review))
         with self.assertRaises(ValueError):
             check_dependencies.check(self.root)
 
@@ -148,7 +148,7 @@ class DependencyReviewTests(unittest.TestCase):
                     f'{package} = {{ version = "={version}", features = ["{feature}"] }}'))
                 review = copy.deepcopy(self.review)
                 review['manifest_sha256'][relative] = hashlib.sha256(path.read_bytes()).hexdigest()
-                (self.root / 'docs/ca-06b-dependencies.json').write_text(json.dumps(review))
+                (self.root / 'docs/ca-02b-dependencies.json').write_text(json.dumps(review))
                 with self.assertRaisesRegex(ValueError, 'Runtime dependency boundary'):
                     check_dependencies.check(self.root)
 

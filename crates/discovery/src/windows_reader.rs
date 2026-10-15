@@ -31,6 +31,34 @@ fn hash_bytes(bytes: &[u8]) -> Result<String, ReadError> {
     bounded(CryptographicBuffer::EncodeToHexString(&hash).map_err(winerr)?)
 }
 
+fn signature_report(
+    observation: crate::native::CachedSignature,
+) -> Result<(&'static str, Value), ReadError> {
+    use crate::native::CachedSignature;
+    let (signature, state, leaf_hash) = match observation {
+        CachedSignature::NotEstablished => {
+            ("not_established_offline", "not_established_offline", None)
+        }
+        CachedSignature::AcceptedSignerUnavailable => (
+            "cached_trust_accepted_not_official_identity",
+            "signer_unavailable",
+            None,
+        ),
+        CachedSignature::AcceptedLeaf(bytes) => (
+            "cached_trust_accepted_not_official_identity",
+            "observed_not_publisher_approval",
+            Some(hash_bytes(&bytes)?),
+        ),
+        CachedSignature::CleanupFailed => {
+            ("not_established_offline", "cleanup_not_established", None)
+        }
+    };
+    Ok((
+        signature,
+        json!({"state": state, "leaf_der_sha256": leaf_hash}),
+    ))
+}
+
 #[derive(Clone, PartialEq, Eq)]
 struct Candidate {
     id: String,
@@ -284,11 +312,7 @@ fn binary_from_handle(
         CryptographicBuffer::EncodeToHexString(&digest.GetValueAndReset().map_err(winerr)?)
             .map_err(winerr)?,
     )?;
-    let signature = if handle.cached_signature() {
-        "cached_trust_accepted_not_official_identity"
-    } else {
-        "not_established_offline"
-    };
+    let (signature, primary_signer) = signature_report(handle.cached_signature())?;
     let writable = if partial {
         Value::String("unknown".into())
     } else {
@@ -298,6 +322,7 @@ fn binary_from_handle(
     let mut result = json!({"state": "observed", "sha256": hash, "size_bytes": total,
         "pe_machine": machine, "x64_image": machine == 0x8664,
         "signature": signature, "signature_mode": "cached_only_no_url_retrieval",
+        "primary_signer": primary_signer,
         "publisher_binding": "not_reviewed", "current_user_can_replace_or_modify": writable,
         "native_read_identity_stable": true, "file_version": "not_established",
         "path_protection": "read_handle_checks_not_complete_write_adapter",
@@ -765,6 +790,10 @@ mod tests {
         assert!(report.get("desktop").is_none());
         assert!(report.get("runtime").is_none());
         for image in report["images"].as_array().unwrap() {
+            assert_eq!(
+                image["primary_signer"],
+                json!({"state": "not_established_offline", "leaf_der_sha256": null})
+            );
             assert_eq!(image["current_user_can_replace_or_modify"], "unknown");
             assert_eq!(image["executable_role"], "unqualified_manifest_candidate");
             assert_eq!(image["qualified"], false);
@@ -791,6 +820,45 @@ mod tests {
                 b"SYNTHETIC_NEVER_READ"
             );
         }
+    }
+
+    #[test]
+    fn cached_signer_report_distinguishes_identity_missing_and_cleanup_without_raw_der() {
+        use crate::native::CachedSignature;
+        let _apartment = Apartment::enter().unwrap();
+        for (input, expected_signature, expected_state) in [
+            (
+                CachedSignature::NotEstablished,
+                "not_established_offline",
+                "not_established_offline",
+            ),
+            (
+                CachedSignature::AcceptedSignerUnavailable,
+                "cached_trust_accepted_not_official_identity",
+                "signer_unavailable",
+            ),
+            (
+                CachedSignature::CleanupFailed,
+                "not_established_offline",
+                "cleanup_not_established",
+            ),
+        ] {
+            let (signature, report) = signature_report(input).unwrap();
+            assert_eq!(signature, expected_signature);
+            assert_eq!(
+                report,
+                json!({"state": expected_state, "leaf_der_sha256": null})
+            );
+        }
+        let (signature, report) =
+            signature_report(CachedSignature::AcceptedLeaf(b"abc".to_vec())).unwrap();
+        assert_eq!(signature, "cached_trust_accepted_not_official_identity");
+        assert_eq!(
+            report,
+            json!({"state": "observed_not_publisher_approval",
+            "leaf_der_sha256": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"})
+        );
+        assert!(!report.to_string().contains("abc"));
     }
 
     #[test]

@@ -10,7 +10,7 @@ import unittest
 from tools import check_dependencies as checker
 
 ROOT = Path(__file__).resolve().parents[2]
-REVIEW = 'docs/ca-06b-dependencies.json'
+REVIEW = 'docs/ca-02b-dependencies.json'
 
 
 class Ca06Dependencies(unittest.TestCase):
@@ -19,6 +19,7 @@ class Ca06Dependencies(unittest.TestCase):
         self.addCleanup(temporary.cleanup)
         self.root = Path(temporary.name)
         self.review = json.loads((ROOT / REVIEW).read_text(encoding='utf8'))
+        self.ca06 = json.loads((ROOT / 'docs/ca-06b-dependencies.json').read_text(encoding='utf8'))
         for relative in [*self.review['manifest_sha256'],
                          *self.review['predecessor_sha256'], REVIEW, 'Cargo.lock']:
             dest = self.root / relative
@@ -47,9 +48,9 @@ class Ca06Dependencies(unittest.TestCase):
                 self.write_review(changed)
                 self.refuse('Prior review bytes')
                 path.write_bytes(original)
-        self.assertEqual(len(self.review['predecessor_sha256']), 7)
+        self.assertEqual(len(self.review['predecessor_sha256']), 8)
 
-    def test_new_review_status_packages_features_and_manifest_claims_are_immutable(self):
+    def test_ca06_review_status_packages_features_and_manifest_claims_remain_immutable(self):
         for mutate in [
             lambda r: r.update(status='pending'),
             lambda r: r['packages'].pop(),
@@ -58,22 +59,22 @@ class Ca06Dependencies(unittest.TestCase):
             lambda r: r['manifest_sha256'].update({'Cargo.toml': '0' * 64}),
             lambda r: r['predecessor_sha256'].pop('docs/ca-05f-dependencies.json'),
         ]:
-            changed = copy.deepcopy(self.review)
+            changed = copy.deepcopy(self.ca06)
             mutate(changed)
-            self.write_review(changed)
-            self.refuse('Current review bytes')
+            (self.root / 'docs/ca-06b-dependencies.json').write_text(json.dumps(changed), encoding='utf8')
+            self.refuse('Prior review bytes')
 
     def test_duplicate_json_keys_never_collapse(self):
         path = self.root / REVIEW
         text = path.read_text(encoding='utf8')
-        path.write_text(text.replace('"packet": "CA-06B",',
-                        '"packet": "CA-06B", "packet": "CA-06B",'), encoding='utf8')
+        path.write_text(text.replace('"packet": "CA-02B",',
+                        '"packet": "CA-02B", "packet": "CA-02B",'), encoding='utf8')
         self.refuse('Duplicate review key')
 
     def test_lock_checksum_source_version_and_duplicate_entries_refuse(self):
         path = self.root / 'Cargo.lock'
         original = path.read_text(encoding='utf8')
-        first = self.review['packages'][0]
+        first = self.ca06['packages'][0]
         for altered in [
             original.replace(first['checksum'], '0' * 64),
             original.replace(first['source'], 'git+https://synthetic.invalid/repo', 1),
