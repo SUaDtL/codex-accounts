@@ -140,6 +140,9 @@ fn manifest_executables(root: &Path) -> Result<Vec<String>, ReadError> {
 
 fn parse_manifest(bytes: &[u8], registered: Option<&Candidate>) -> Result<Vec<String>, ReadError> {
     let text = std::str::from_utf8(bytes).map_err(|_| ReadError::InvalidMetadata)?;
+    // WinRT takes decoded XML text, so remove only the optional encoding marker.
+    // Validate UTF-8 first; another marker or malformed prefix remains invalid XML.
+    let text = text.strip_prefix('\u{feff}').unwrap_or(text);
     let doc = XmlDocument::new().map_err(winerr)?;
     let settings = XmlLoadSettings::new().map_err(winerr)?;
     settings.SetProhibitDtd(true).map_err(winerr)?;
@@ -582,6 +585,33 @@ mod tests {
                 std::fs::read(fixture.0.root.join(file)).unwrap(),
                 b"SYNTHETIC_NEVER_READ"
             );
+        }
+    }
+
+    #[test]
+    fn native_registered_metadata_accepts_one_utf8_bom_and_refuses_invalid_prefixes() {
+        let _apartment = Apartment::enter().unwrap();
+        let fixture = MetadataFixture::new();
+        let path = fixture.0.root.join("AppxManifest.xml");
+        let manifest = std::fs::read(&path).unwrap();
+        let mut prefixed = b"\xef\xbb\xbf".to_vec();
+        prefixed.extend_from_slice(&manifest);
+        std::fs::write(&path, &prefixed).unwrap();
+        let report = fixture.collect().unwrap();
+        assert_eq!(report["manifest_identity_matches_registration"], true);
+        assert_eq!(report["images"].as_array().unwrap().len(), 2);
+        assert_eq!(report["qualified"], false);
+        assert_eq!(manifest_executables(&fixture.0.root).unwrap().len(), 2);
+        for prefix in [
+            b"\xef\xbb\xbf\xef\xbb\xbf".as_slice(),
+            b"x\xef\xbb\xbf",
+            b"\xef\xbb",
+            b"\xff",
+        ] {
+            let mut invalid = prefix.to_vec();
+            invalid.extend_from_slice(&manifest);
+            std::fs::write(&path, invalid).unwrap();
+            assert!(matches!(fixture.collect(), Err(ReadError::InvalidMetadata)));
         }
     }
 
