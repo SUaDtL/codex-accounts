@@ -474,7 +474,7 @@ fn writable(file: &File, directory: bool) -> Result<bool, ReadError> {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use std::sync::atomic::{AtomicUsize, Ordering};
     static NEXT: AtomicUsize = AtomicUsize::new(0);
@@ -764,16 +764,35 @@ mod tests {
 
     #[test]
     fn native_junction_leaf_and_ancestor_are_rejected() {
-        use windows_sys::Win32::System::Ioctl::FSCTL_SET_REPARSE_POINT;
-        use windows_sys::Win32::System::SystemServices::IO_REPARSE_TAG_MOUNT_POINT;
-        use windows_sys::Win32::System::IO::DeviceIoControl;
         let fixture = Fixture::new();
         let target = fixture.0.join("target");
         let junction = fixture.0.join("junction");
         std::fs::create_dir(&target).unwrap();
         std::fs::create_dir(&junction).unwrap();
         std::fs::write(target.join("synthetic.exe"), b"SYNTHETIC_DATA").unwrap();
-        let name = wide(&junction).unwrap();
+        install_synthetic_junction(&junction, &target);
+        let leaf = ReadHandle::open(&junction, true);
+        let child = ReadHandle::open(&junction.join("synthetic.exe"), false);
+        let registered_leaf = RegisteredRoot::open(&junction);
+        let registered = RegisteredRoot::open(&fixture.0).unwrap();
+        let registered_child = registered.open_relative("junction/synthetic.exe");
+        drop(registered);
+        std::fs::remove_dir(&junction).unwrap();
+        assert!(matches!(leaf, Err(ReadError::UnsafePath)));
+        assert!(matches!(child, Err(ReadError::UnsafePath)));
+        assert!(matches!(registered_leaf, Err(ReadError::UnsafePath)));
+        assert!(matches!(registered_child, Err(ReadError::UnsafePath)));
+        assert_eq!(
+            std::fs::read(target.join("synthetic.exe")).unwrap(),
+            b"SYNTHETIC_DATA"
+        );
+    }
+
+    pub(crate) fn install_synthetic_junction(junction: &Path, target: &Path) {
+        use windows_sys::Win32::System::Ioctl::FSCTL_SET_REPARSE_POINT;
+        use windows_sys::Win32::System::SystemServices::IO_REPARSE_TAG_MOUNT_POINT;
+        use windows_sys::Win32::System::IO::DeviceIoControl;
+        let name = wide(junction).unwrap();
         // SAFETY: This write is restricted to an empty directory created by the
         // test. The production reader never creates a reparse point or writes.
         let raw = unsafe {
@@ -823,20 +842,5 @@ mod tests {
         };
         drop(handle);
         assert_ne!(installed, 0);
-        let leaf = ReadHandle::open(&junction, true);
-        let child = ReadHandle::open(&junction.join("synthetic.exe"), false);
-        let registered_leaf = RegisteredRoot::open(&junction);
-        let registered = RegisteredRoot::open(&fixture.0).unwrap();
-        let registered_child = registered.open_relative("junction/synthetic.exe");
-        drop(registered);
-        std::fs::remove_dir(&junction).unwrap();
-        assert!(matches!(leaf, Err(ReadError::UnsafePath)));
-        assert!(matches!(child, Err(ReadError::UnsafePath)));
-        assert!(matches!(registered_leaf, Err(ReadError::UnsafePath)));
-        assert!(matches!(registered_child, Err(ReadError::UnsafePath)));
-        assert_eq!(
-            std::fs::read(target.join("synthetic.exe")).unwrap(),
-            b"SYNTHETIC_DATA"
-        );
     }
 }

@@ -314,11 +314,24 @@ fn binary_from_handle(
     Ok(result)
 }
 
+#[cfg(test)]
 fn collect_registered(
     selected: &Candidate,
     local: bool,
     reobserve: impl FnOnce() -> Result<Vec<Candidate>, ReadError>,
 ) -> Result<Value, ReadError> {
+    collect_registered_image(selected, local, None, reobserve)
+}
+
+fn collect_registered_image(
+    selected: &Candidate,
+    local: bool,
+    nominated: Option<&str>,
+    reobserve: impl FnOnce() -> Result<Vec<Candidate>, ReadError>,
+) -> Result<Value, ReadError> {
+    if let Some(relative) = nominated {
+        validate_relative_executable(relative)?;
+    }
     let root = RegisteredRoot::open(&selected.root)?;
     let mut manifest = root.open_relative("AppxManifest.xml")?;
     let bytes = manifest.bytes(MAX_CONFIG_BYTES)?;
@@ -335,6 +348,17 @@ fn collect_registered(
         )?);
         handles.push(image);
     }
+    let nominated_image = if let Some(relative) = nominated {
+        let mut image = root.open_relative(relative)?;
+        let mut observation =
+            binary_from_handle(&mut image, &selected.root.join(relative), local, true)?;
+        observation["provenance"] = json!("caller_nominated_package_relative");
+        observation["executable_role"] = json!("unqualified_nominated_image");
+        handles.push(image);
+        Some(observation)
+    } else {
+        None
+    };
     if reobserve()?
         .iter()
         .filter(|c| c.id == selected.id)
@@ -348,14 +372,18 @@ fn collect_registered(
     for image in &handles {
         image.revalidate()?;
     }
-    Ok(
-        json!({"observation_scope": "partial_registered_root_and_declared_images",
+    let mut report = json!({"observation_scope": "partial_registered_root_and_declared_images",
         "outer_ancestry_validation": "not_established", "registration_stable_during_inspection": true,
         "manifest_identity_matches_registration": true, "manifest_application_count": executables.len(),
         "images": images, "publisher_binding": "unknown", "runtime_role": "unknown",
         "effective_home": "unknown", "effective_backend": "unknown", "effective_policy": "unknown",
-        "qualified": false, "credential_mutation_enabled": false}),
-    )
+        "qualified": false, "credential_mutation_enabled": false});
+    if let Some(observation) = nominated_image {
+        report["nominated_image"] = observation;
+        report["observation_scope"] =
+            json!("partial_registered_root_declared_and_nominated_images");
+    }
+    Ok(report)
 }
 
 fn config_observation(home: Option<&Path>) -> DeclaredConfig {
@@ -414,7 +442,12 @@ pub fn inspect(opts: &Options) -> Result<Value, ReadError> {
     };
     let selected = &candidates[index];
     if opts.registered_metadata {
-        report["registered_metadata"] = collect_registered(selected, opts.local, self::candidates)?;
+        report["registered_metadata"] = collect_registered_image(
+            selected,
+            opts.local,
+            opts.registered_image.as_deref(),
+            self::candidates,
+        )?;
         return Ok(report);
     }
     // Hold the registered package root throughout inspection. No nominated
@@ -529,6 +562,178 @@ mod tests {
         fn drop(&mut self) {
             let _ = std::fs::remove_dir_all(&self.0.root);
         }
+    }
+
+    #[test]
+    fn native_registered_image_is_separate_redacted_and_retained_through_reobservation() {
+        use std::os::windows::fs::OpenOptionsExt;
+        let _apartment = Apartment::enter().unwrap();
+        let fixture = MetadataFixture::new();
+        let relative = "images/SYNTHETIC_NOMINATED_CANARY.exe";
+        std::fs::create_dir(fixture.0.root.join("images")).unwrap();
+        std::fs::copy(
+            fixture.0.root.join("first.exe"),
+            fixture.0.root.join(relative),
+        )
+        .unwrap();
+        let mut guards = Vec::new();
+        for file in ["config.toml", "auth.json", "history.jsonl"] {
+            std::fs::write(fixture.0.root.join(file), b"SYNTHETIC_NEVER_READ").unwrap();
+            guards.push(
+                std::fs::OpenOptions::new()
+                    .read(true)
+                    .share_mode(0)
+                    .open(fixture.0.root.join(file))
+                    .unwrap(),
+            );
+        }
+        let original = fixture.collect().unwrap();
+        crate::native::take_opened_paths();
+        let report = collect_registered_image(&fixture.0, false, Some(relative), || {
+            for file in ["AppxManifest.xml", "first.exe", "second.exe", relative] {
+                assert!(std::fs::OpenOptions::new()
+                    .write(true)
+                    .open(fixture.0.root.join(file))
+                    .is_err());
+                assert!(std::fs::rename(
+                    fixture.0.root.join(file),
+                    fixture.0.root.join("substitution.exe")
+                )
+                .is_err());
+            }
+            assert!(std::fs::rename(
+                fixture.0.root.join("images"),
+                fixture.0.root.join("replaced")
+            )
+            .is_err());
+            Ok(vec![fixture.0.clone()])
+        })
+        .unwrap();
+        assert_eq!(report["images"], original["images"]);
+        assert_eq!(report["images"].as_array().unwrap().len(), 2);
+        assert_eq!(
+            report["nominated_image"]["provenance"],
+            "caller_nominated_package_relative"
+        );
+        assert_eq!(
+            report["nominated_image"]["executable_role"],
+            "unqualified_nominated_image"
+        );
+        assert_eq!(
+            report["nominated_image"]["current_user_can_replace_or_modify"],
+            "unknown"
+        );
+        assert_eq!(report["nominated_image"]["qualified"], false);
+        assert_eq!(
+            report["nominated_image"]["credential_mutation_enabled"],
+            false
+        );
+        for field in [
+            "publisher_binding",
+            "runtime_role",
+            "effective_home",
+            "effective_backend",
+            "effective_policy",
+        ] {
+            assert_eq!(report[field], "unknown");
+        }
+        assert_eq!(report["outer_ancestry_validation"], "not_established");
+        assert!(report.get("runtime").is_none());
+        assert!(!encode(&report).unwrap().contains("SYNTHETIC"));
+        let opened = crate::native::take_opened_paths();
+        assert!(opened.iter().any(|p| p == &fixture.0.root.join(relative)));
+        assert!(opened.iter().all(|p| p.is_dir()
+            || [
+                "AppxManifest.xml",
+                "first.exe",
+                "second.exe",
+                "SYNTHETIC_NOMINATED_CANARY.exe"
+            ]
+            .iter()
+            .any(|name| p.file_name().is_some_and(|f| f == *name))));
+        let local = collect_registered_image(&fixture.0, true, Some(relative), || {
+            Ok(vec![fixture.0.clone()])
+        })
+        .unwrap();
+        assert!(
+            local["nominated_image"]["local_display_only_do_not_share"]["path"]
+                .as_str()
+                .unwrap()
+                .contains("SYNTHETIC_NOMINATED_CANARY")
+        );
+        drop(guards);
+        for file in ["config.toml", "auth.json", "history.jsonl"] {
+            assert_eq!(
+                std::fs::read(fixture.0.root.join(file)).unwrap(),
+                b"SYNTHETIC_NEVER_READ"
+            );
+        }
+    }
+
+    #[test]
+    fn native_registered_image_rejects_junction_ancestor_without_target_read() {
+        let _apartment = Apartment::enter().unwrap();
+        let fixture = MetadataFixture::new();
+        let outside = MetadataFixture::new();
+        let junction = fixture.0.root.join("images");
+        std::fs::create_dir(&junction).unwrap();
+        crate::native::tests::install_synthetic_junction(&junction, &outside.0.root);
+        crate::native::take_opened_paths();
+        let result = collect_registered_image(&fixture.0, false, Some("images/first.exe"), || {
+            Ok(vec![fixture.0.clone()])
+        });
+        let opened = crate::native::take_opened_paths();
+        std::fs::remove_dir(&junction).unwrap();
+        assert!(matches!(result, Err(ReadError::UnsafePath)));
+        assert!(!opened
+            .iter()
+            .any(|path| path.starts_with(&outside.0.root) || path == &junction.join("first.exe")));
+        assert!(outside.0.root.join("first.exe").is_file());
+    }
+
+    #[test]
+    fn native_registered_image_refuses_invalid_leaf_and_registration_changes() {
+        let _apartment = Apartment::enter().unwrap();
+        let fixture = MetadataFixture::new();
+        let relative = "images/nominated.exe";
+        std::fs::create_dir(fixture.0.root.join("images")).unwrap();
+        let path = fixture.0.root.join(relative);
+        let collect = || {
+            collect_registered_image(&fixture.0, false, Some(relative), || {
+                Ok(vec![fixture.0.clone()])
+            })
+        };
+        assert!(matches!(collect(), Err(ReadError::Missing)));
+        std::fs::write(&path, b"SYNTHETIC_INVALID_PE").unwrap();
+        assert!(matches!(collect(), Err(ReadError::InvalidMetadata)));
+        std::fs::copy(fixture.0.root.join("first.exe"), &path).unwrap();
+        let writer = std::fs::OpenOptions::new().write(true).open(&path).unwrap();
+        assert!(matches!(collect(), Err(ReadError::SharingViolation)));
+        drop(writer);
+        let alias = fixture.0.root.join("alias.exe");
+        std::fs::hard_link(&path, &alias).unwrap();
+        assert!(matches!(collect(), Err(ReadError::UnsafePath)));
+        std::fs::remove_file(alias).unwrap();
+        let mut changed = fixture.0.clone();
+        changed.version[0] += 1;
+        assert!(matches!(
+            collect_registered_image(&fixture.0, false, Some(relative), || Ok(vec![changed])),
+            Err(ReadError::Changed)
+        ));
+        let mut mismatched = fixture.0.clone();
+        mismatched.publisher.push('x');
+        assert!(matches!(
+            collect_registered_image(&mismatched, false, Some(relative), || Ok(vec![
+                mismatched.clone()
+            ])),
+            Err(ReadError::InvalidMetadata)
+        ));
+        assert!(matches!(
+            collect_registered_image(&fixture.0, false, Some("../outside.exe"), || Ok(vec![
+                fixture.0.clone()
+            ])),
+            Err(ReadError::UnsafePath)
+        ));
     }
 
     #[test]

@@ -13,6 +13,7 @@ fn main() {
             With no arguments, list sanitized candidate IDs.\n\
             --candidate ID             Inspect a selected opaque package ID\n\
             --registered-metadata      Explicit partial metadata only; requires candidate; no home/runtime flags\n\
+            --registered-image PATH    Optional package-relative .exe in metadata mode; role remains unqualified\n\
             --runtime-relative PATH    Optional .exe inside that same package (role unqualified)\n\
             --candidate-home PATH      Optional nominated home; config.toml declaration only\n\
             --show-local-paths         TERMINAL ONLY; refuses redirected output\n\
