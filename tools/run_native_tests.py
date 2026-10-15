@@ -88,13 +88,31 @@ def inventory() -> tuple[tuple[str, str], ...]:
 MAX_OUTPUT = 1024 * 1024
 FAULTS = {b'AccessDenied', b'Disappeared', b'Incomplete', b'Changed', b'Bound',
           b'QuitUnavailable', b'Timeout', b'HelperStuck', b'QualificationMissing'}
+COORDINATOR_FAULTS = {
+    b'Refused': {b'Binding', b'Policy', b'Consent', b'Busy', b'Writers',
+                 b'ExternalChange', b'HelperStuck', b'Write', b'LoginRequired',
+                 b'Cleanup', b'Cancelled', b'Launch', b'InvalidData', b'Interrupted'},
+    b'Storage': {b'UnsupportedPlatform', b'UnsafePath', b'AccessDenied', b'Busy',
+                 b'Missing', b'AlreadyExists', b'Io', b'Corrupt', b'KeyUnavailable',
+                 b'RecoveryRequired', b'ExternalChange', b'InputLimit', b'InvalidData',
+                 b'IdentityMismatch', b'StaleParent', b'ActiveStateUnknown',
+                 b'ActiveProfile', b'Referenced', b'LaterStartupRequired', b'SwitchPending'},
+}
 
 
 def failure_categories(output: bytes) -> list[str]:
     # Match only the fixed enum after Rust's unwrap diagnostic, never arbitrary
     # panic text. Unknown values and canaries are not exported.
     values = re.findall(rb'called `Result::unwrap\(\)` on an `Err` value: ([A-Za-z]+)(?:\r?\n|$)', output[:MAX_OUTPUT])
-    return sorted({value.decode('ascii') for value in values if value in FAULTS})
+    categories = {value.decode('ascii') for value in values if value in FAULTS}
+    # SwitchError wraps fixed fieldless enums; do not export arbitrary Debug data.
+    nested = re.findall(
+        rb'called `Result::unwrap\(\)` on an `Err` value: ([A-Za-z]+)\(([A-Za-z]+)\)(?:\r?\n|$)',
+        output[:MAX_OUTPUT])
+    categories.update((wrapper + b'(' + value + b')').decode('ascii')
+                      for wrapper, value in nested
+                      if value in COORDINATOR_FAULTS.get(wrapper, ()))
+    return sorted(categories)
 
 
 def verify(output: bytes, returncode: int, cases: tuple[str, ...] = CASES, *, prefix: str = PREFIX) -> None:

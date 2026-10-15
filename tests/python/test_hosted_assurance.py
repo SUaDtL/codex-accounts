@@ -67,6 +67,21 @@ class NativeProofTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 run_native_tests.run()
 
+    def test_nested_coordinator_failure_categories_are_fixed_and_complete(self):
+        prefix = b'called `Result::unwrap()` on an `Err` value: '
+        output = (prefix + b'Refused(HelperStuck)\r\n' +
+                  prefix + b'Storage(Busy)\n' + prefix + b'Refused(HelperStuck)\n')
+        self.assertEqual(run_native_tests.failure_categories(output),
+                         ['Refused(HelperStuck)', 'Storage(Busy)'])
+
+    def test_nested_diagnostics_never_export_unknown_wrappers_values_or_bodies(self):
+        prefix = b'called `Result::unwrap()` on an `Err` value: '
+        for value in (b'Refused(SYNTHETIC_SECRET)', b'PRIVATE(HelperStuck)',
+                      b'Refused(HelperStuck_SECRET)', b'Refused(HelperStuck) PRIVATE_PATH',
+                      b'Refused(Storage(HelperStuck))', b'Refused(AccessDenied)'):
+            with self.subTest(value=value):
+                self.assertEqual(run_native_tests.failure_categories(prefix + value + b'\n'), [])
+
 
 class IsolatedBuildTests(unittest.TestCase):
     def status(self):
