@@ -6,12 +6,15 @@ use serde::de::{self, Deserialize, DeserializeSeed, IgnoredAny, MapAccess, Visit
 #[path = "codec_login.rs"]
 mod managed;
 pub(super) use managed::{CancelStatus, Presence};
+#[path = "codec_rates.rs"]
+mod rates;
+pub(super) use rates::{ReadObservation, Snapshot};
 
 pub(super) const RUNTIME_VERSION: &str = "0.162.0-alpha.17.2";
 pub(super) const RUNTIME_IMAGE_SHA256: &str =
     "e98c516f1c8935789aabe9122ee7e05ec4c3efd1ba6acf179242e031c495b99e";
 pub(super) const SCHEMA_MANIFEST_SHA256: &str =
-    "8a371a4eef9b1f58797e0704e798fe8c9899c35d4264285f4554d18b4540f7b2";
+    "a87f649f36c3a2787182bedd125002cf1a2eff54c46383b04e7d1431a7dd758e";
 const TEXT_LIMIT: usize = 4096;
 
 /// Retained untrusted text has a zeroizing owner and no payload diagnostics.
@@ -326,6 +329,8 @@ impl<'de> Deserialize<'de> for Envelope {
 pub(super) enum CodecEvent {
     Initialized(InitializeObservation),
     Account(AccountObservation),
+    RateLimits(ReadObservation),
+    RateLimitsUpdated(Snapshot),
     LoginStarted {
         auth_url: Secret,
     },
@@ -357,6 +362,7 @@ impl<'de> DeserializeSeed<'de> for ResultSeed {
                 InitializeObservation::deserialize(d).map(CodecEvent::Initialized)
             }
             Method::AccountRead => AccountObservation::deserialize(d).map(CodecEvent::Account),
+            Method::RateLimitsRead => ReadObservation::deserialize(d).map(CodecEvent::RateLimits),
             _ => Err(invalid()),
         }
     }
@@ -436,7 +442,10 @@ impl Codec {
         method: Method,
     ) -> Result<IssuedRequest, DriverError> {
         self.gate(session, driver)?;
-        if !matches!(method, Method::Initialize | Method::AccountRead) {
+        if !matches!(
+            method,
+            Method::Initialize | Method::AccountRead | Method::RateLimitsRead
+        ) {
             return Err(self.fail(session, driver, SessionError::MethodUnavailable));
         }
         let request = session
@@ -446,6 +455,7 @@ impl Codec {
         let body = match method {
             Method::Initialize => format!("{{\"id\":{id},\"method\":\"initialize\",\"params\":{{\"clientInfo\":{{\"name\":\"local_codex_switcher\",\"version\":\"0.1.0\"}}}}}}\n"),
             Method::AccountRead => format!("{{\"id\":{id},\"method\":\"account/read\",\"params\":{{\"refreshToken\":false}}}}\n"),
+            Method::RateLimitsRead => format!("{{\"id\":{id},\"method\":\"account/rateLimits/read\",\"params\":{{\"excludeResetCreditDetails\":true}}}}\n"),
             _ => unreachable!(),
         };
         driver.queue_request(session, &request, Zeroizing::new(body.into_bytes()))?;
@@ -479,6 +489,9 @@ impl Codec {
             if envelope.id.is_some() {
                 return Err(self.fail(session, driver, SessionError::UnexpectedServerRequest));
             }
+            if method.as_str() == "account/rateLimits/updated" {
+                return self.rate_notification(session, driver, bytes);
+            }
             return self.notification(session, driver, bytes, method.as_str());
         }
         if envelope.result == envelope.error {
@@ -501,7 +514,11 @@ impl Codec {
         }
         if !matches!(
             method,
-            Method::Initialize | Method::AccountRead | Method::LoginStart | Method::LoginCancel
+            Method::Initialize
+                | Method::AccountRead
+                | Method::RateLimitsRead
+                | Method::LoginStart
+                | Method::LoginCancel
         ) {
             return Err(self.fail(session, driver, SessionError::MethodUnavailable));
         }

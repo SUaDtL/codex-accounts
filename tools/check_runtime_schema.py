@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SCHEMA_DIR = Path('crates/runtime/schema/codex-0.162.0-alpha.17.2')
 RUNTIME_VERSION = '0.162.0-alpha.17.2'
 RUNTIME_IMAGE_SHA256 = 'e98c516f1c8935789aabe9122ee7e05ec4c3efd1ba6acf179242e031c495b99e'
-MANIFEST_SHA256 = '8a371a4eef9b1f58797e0704e798fe8c9899c35d4264285f4554d18b4540f7b2'
+MANIFEST_SHA256 = 'a87f649f36c3a2787182bedd125002cf1a2eff54c46383b04e7d1431a7dd758e'
 
 
 class SchemaError(ValueError):
@@ -102,7 +102,7 @@ def check(root: Path = ROOT) -> dict[str, int | str | bool]:
     require(hashlib.sha256(inventory).hexdigest() == manifest['inventory_sha256'],
             'schema_inventory_digest_refused')
     included = set(manifest['included_files'])
-    require(actual_files == included | {'manifest.json'} and len(included) == 19,
+    require(actual_files == included | {'manifest.json'} and len(included) == 22,
             'schema_subset_refused')
     indexed = {row['relative_name']: row for row in rows}
     for name in included:

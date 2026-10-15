@@ -1,15 +1,16 @@
 # Codex Accounts: start here
 
-Bootstrap revision **2.5.0** · Checkpoint **2026-10-15** · Repository **SUaDtL/codex-accounts**.
+Bootstrap revision **2.6.0** · Checkpoint **2026-10-15** · Repository **SUaDtL/codex-accounts**.
 This is session routing, not an application release or a second roadmap.
 
 ## Resume from live work, not the original bootstrap
 
-PRs **#14** through **#19** are merged. Main is
-`e75ef1618984f1eac79cb7d28d0ae6410353a26c`, including the private synthetic
+PRs **#14** through **#20** are merged. Main is
+`67c6f157993ed786025fc6b57305a3eb433fa7f5`, including the private synthetic
 transport driver, guarded Windows storage, explicit registered-image observation
 native-test process supervision and the pinned CA-05F handshake/account-read
-codec. Continue CA-05G on `codex/managed-login-codec`;
+codec and CA-05G managed-login/cancellation decoding. Continue CA-05H on
+`codex/private-rate-limit-codec-integration`;
 do not reopen the historical review stack. Refresh actual refs and checks.
 The owner authorized the same standing engine workflow override for this next
 increment; application security, qualification and CI remain required.
@@ -19,8 +20,9 @@ CA-05E uses owned in-memory endpoints, not native pipes or an official helper.
 Production constructors, native helper/login/credential IO and qualification
 remain unavailable. Contained original-image version and schema experiments now
 pin `codex-cli 0.162.0-alpha.17.2`; the private CA-05F decoder uses its actual
-handshake/account-read shapes. The next private codec increment adds managed
-login/cancel/notification decoding with the existing sequencer. This [partial evidence](docs/runtime-provenance-observation.md)
+handshake/account-read shapes. Managed-login/cancel/notification decoding is merged;
+the next private increment adds bounded rate-limit observations without polling,
+cache merging or credit operations. This [partial evidence](docs/runtime-provenance-observation.md)
 does not qualify an adapter. `docs/next-pr.md` owns the bounded next step;
 old Project snapshots and an earlier head's green result do not override live work.
 

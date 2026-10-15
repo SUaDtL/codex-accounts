@@ -1,8 +1,8 @@
-# Session handoff: CA-05G managed-login codec
+# Session handoff: CA-05H private rate-limit codec
 
-As of 2026-10-15, PRs #14 through #19 are merged into main
-`e75ef1618984f1eac79cb7d28d0ae6410353a26c`. The active branch is
-`codex/managed-login-codec`. Read
+As of 2026-10-15, PRs #14 through #20 are merged into main
+`67c6f157993ed786025fc6b57305a3eb433fa7f5`. The active branch is
+`codex/private-rate-limit-codec-integration`. Read
 [the current packet](../next-pr.md) and
 [Windows storage compatibility](../windows-storage-compatibility.md) first.
 The owner authorized continued direct development outside engine approval bookkeeping;
@@ -20,11 +20,11 @@ contained original invocation with exit and cleanup verified. CA-05F owns privat
 handshake/account-read decoding from the pinned schema; full Q0 and production authority
 remain open. Never substitute the private experiment for a shipped adapter.
 
-PR #19 and its post-merge CI are green on the same tested tree. CA-05G now extends
-only the private wire codec and a bounded cancellation-notification transition;
+PR #20 passed all six PR jobs and merged the reviewed tree. Its post-merge CI
+is a separate observation. CA-05H extends only private rate-limit wire observations;
 the native helper, credential integration and production constructors remain
 unavailable. Preserve the existing driver/session rather than adding another
-sequencer. Final evidence belongs to CA-05G's own head and completed checks.
+sequencer. Final evidence belongs to CA-05H's own head and completed checks.
 
 The following review-stack checkpoint is historical.
 
