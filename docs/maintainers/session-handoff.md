@@ -1,5 +1,12 @@
 # Session handoff: CA-02B cached primary signer
 
+PR #24's reviewed supervisor-fixture and diagnostic repair is joined into
+this branch. Its merge remains a prerequisite: require #24 green and merged,
+then verify this combined source/tree and completed hosted gates before
+merging #23. The original PR #22 post-merge failure remains recorded in
+[validation](../validation.md); no deadline, case or qualification gate
+is waived.
+
 Current checkpoint: PR #22 merged source `5f5cdf724a5349bbc62bac93ee2ce0b702f2e116`
 as `6ffc3d4568364caae1dc5dc3a2d6402ef5cfee3b`; source, tested merge
 `a36528fdaf145bf091331f30ee51fead0f2b3ff6` and actual merge share tree
