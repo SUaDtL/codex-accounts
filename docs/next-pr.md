@@ -1,13 +1,21 @@
-# Current packet: Windows storage and registered metadata
+# Current packet: explicit registered image observation
 
-PRs #14 and #15 are merged; current main is
-`727eb6154db1d7c4ac5db10a7868b6271cd55293`. Continue on
-`codex/windows-compatibility-plan`, preserving the existing implementation.
+PRs #14, #15 and #16 are merged; current main is
+`9389c33b7bc8d41fee92f14046eebd546c5c86f2`. Continue on
+`codex/runtime-contract-observation`, preserving the existing implementation.
 The older review-stack instructions below are historical and do not reopen those
 PRs. [Windows storage compatibility](windows-storage-compatibility.md) records the
 current storage behavior, verification limits, owner-authorized engine workflow
-override and next registered-metadata boundary. No application qualification or
-security gate is waived.
+override and implemented registered-metadata boundary. The next Q0 increment adds
+one explicitly nominated package-relative executable image to that read-only
+observation. It must retain root/internal/image handles through registration and
+identity revalidation, keep declared images separate, and preserve unknown
+publisher/runtime/home/backend/policy and ancestry. No candidate execution,
+configuration/auth/history read, qualified binding or credential operation is
+enabled. Keep strict inspection and existing metadata flag refusals intact.
+No application qualification or security gate is waived.
+See [the selected observation contract](registered-image-observation.md) and the
+updated [Q0 collection procedure](q0-qualification.md).
 
 ## Historical CA-05E review packet
 

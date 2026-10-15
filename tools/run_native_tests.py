@@ -74,6 +74,9 @@ DISCOVERY_CASES = (
     ('windows_reader::tests::', 'native_registered_metadata_refuses_sharing_hardlinks_and_registration_drift'),
     ('windows_reader::tests::', 'native_registered_metadata_retains_manifest_root_and_images_through_reobservation'),
     ('windows_reader::tests::', 'native_registered_metadata_accepts_one_utf8_bom_and_refuses_invalid_prefixes'),
+    ('windows_reader::tests::', 'native_registered_image_is_separate_redacted_and_retained_through_reobservation'),
+    ('windows_reader::tests::', 'native_registered_image_refuses_invalid_leaf_and_registration_changes'),
+    ('windows_reader::tests::', 'native_registered_image_rejects_junction_ancestor_without_target_read'),
 )
 WORKERS = 2
 

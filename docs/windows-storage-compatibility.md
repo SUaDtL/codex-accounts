@@ -66,15 +66,18 @@ both profiles before restoration. The reader never reads configuration,
 credentials or history in that mode, launches a candidate, or converts inventory
 into qualification authority. See [the Q0 procedure](q0-qualification.md).
 
-CI now requires 51 named native cases per profile: all 27 inherited cases, 18
+PR #16's CI required 51 named native cases per profile: all 27 inherited cases, 18
 storage cases and six metadata cases. The workspace complement is checked against
 its actual compiled inventory. A hosted source-job failure exposed the real Rust
 adversary's missing toolchain prerequisite; the reviewed 1.90.0 installation and
 its successful outcome are now mandatory, with the actual adversary unchanged.
 The local expanded storage run passed all 18 new cases in both profiles, but the
 inherited restoration restart test exceeded its unchanged 180-second limit in
-both profiles. Those failures remain recorded; the PR remains a draft while
-combined validation and final-head hosted checks complete.
+both profiles. Those failures remain recorded. The final source subsequently
+passed all 102 named native executions locally and in inspected hosted output;
+all six jobs passed in run 38761237982. PR #16 merged as
+`9389c33b7bc8d41fee92f14046eebd546c5c86f2`. These results are exact-source
+implementation evidence, not Desktop qualification.
 
 The unchanged restoration test subsequently passed alone in 159 seconds under
 the same 180-second deadline. Restart suites already run four fixture workers
