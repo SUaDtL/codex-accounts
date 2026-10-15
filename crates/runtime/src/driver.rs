@@ -12,6 +12,8 @@ use zeroize::Zeroize;
 #[path = "driver_io.rs"]
 mod io;
 use io::{Chunk, ReadEnd, ReadStep, Stream, WriteEnd, CHUNK_BYTES};
+#[path = "codec.rs"]
+mod codec;
 
 const STDERR_TOTAL_LIMIT: usize = MAX_PENDING_BYTES;
 

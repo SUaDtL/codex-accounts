@@ -1,5 +1,66 @@
 # Validation and evidence boundary
 
+## CA-05F: pinned schema and private codec candidate
+
+The reviewed original-image collector admitted 317 JSON files / 3,590,402 bytes
+with exit 0, signaled parent, empty job, completed drains and successful profile
+deletion. Fourteen exact generated files and the complete digest inventory are
+pinned publicly. This is a contained local Q0 experiment, not actual server/RPC,
+effective Desktop-home proof or installation qualification. See
+[the provenance record](runtime-provenance-observation.md).
+
+The [private codec](ca-05f-schema-codec.md) adds seventeen actual-synthetic-driver
+tests, retaining every prior runtime case. Fresh local runtime debug/release each
+pass 135 ordinary cases and five compile-fail doctests. The Python suite runs
+232 tests with one existing POSIX-only skip on Windows. All seven schema-checker
+tests pass, including actual owned Windows junction refusal. Dependency/spec/
+workflow/schema checks, formatting, strict workspace/all-target Clippy and diff
+checks pass. Independent security and coverage/schema reviews found no actionable
+issue. Two isolated safeguard-removal controls fail for the intended assertions
+before restoration; the notification/request diagnostic fix has a regression.
+
+The first combined Python run exposed a missing explicit unsafe prohibition in
+the new test file and a stale exact dependency-map assertion. Both were corrected
+without weakening either guard; the full suite then passed. The two earlier
+schema-checker findings, Python 3.11 junction fallback and CLI traceback exposure,
+have reviewed fixes and passing owned-junction/fixed-output regressions.
+
+Final exact-head hosted checks remain required. The 54 native case identities per
+profile, supervisor proof, deadlines and no-retry behavior are unchanged. No
+catalog entry, production constructor, native helper, login, credential IO or
+completed Q0-Q5 acceptance follows from this candidate.
+
+## Merged PRs #17 and #18: image observation and CI process ownership
+
+PR #17's source `2261c3b385cd3948cb4f685a27b92487602cf73c`, tested merge
+`5c53a3640cd0b63b020a3c44061fa5dd9d288f5a` and actual merge
+`96767e850fa503e975505ad976c89aa2a0502d8f` share tree
+`6a110686859bf17ccdeca35910280592a7f53ce7`. All six jobs passed in
+[PR run 38770382714](https://github.com/SUaDtL/codex-accounts/actions/runs/38770382714),
+including 108 named native executions, 54 per profile. The 348-case Windows
+compiled inventory partitions into 294 complement and 54 native cases per profile.
+The later main failures below remain part of the record.
+
+PR #18 merged as `b734f0c0f02010e59c736d1abc758172cd9e171b` after source
+`7ba570a0e6d392890334677c483a303c90b89b25` passed all six jobs in
+[PR run 38779539609](https://github.com/SUaDtL/codex-accounts/actions/runs/38779539609).
+Source, tested merge `c5e78518e2d733a16a0c93ce0481cdbb9de7b7f9` and actual merge
+share tree `a52618515cbe9fbc4615af3f89598024d6e9711b`. Inspected Windows output
+proves all 108 required native executions with no missing/duplicate/extra identity,
+both complete/disjoint compiled partitions and the mandatory 12-test supervisor
+proof including four actual Windows fixture methods. Per-case deadlines and
+no-retry behavior remain unchanged. These are exact-source CI results, not an
+explanation of the preceding storage failures or completed Desktop qualification.
+The post-merge [main run 38782120146](https://github.com/SUaDtL/codex-accounts/actions/runs/38782120146)
+also passed all six jobs at `b734f0c`; its Windows log independently contains all
+108 required native passes and the same 12-test/four-native-method supervisor
+proof. Later changed source must obtain its own checks.
+
+The [partial runtime provenance record](runtime-provenance-observation.md) separately
+documents the selected registered image's public-source equality and one contained
+original-image version observation. Its private experiment is outside product CI;
+schema, native integration and full Q0-Q5 acceptance remain open.
+
 ## Merged PR #16: Windows storage and registered metadata
 
 PR #16 merged as `9389c33b7bc8d41fee92f14046eebd546c5c86f2`. Reviewed head
@@ -358,8 +419,8 @@ including 12 supervisor tests and four actual Windows fixture methods. The stric
 Windows proof gate rejects missing, duplicate, skipped or expected-failure fixtures;
 CI requires that gate before the unchanged native inventory. Actual nested-job and
 discovery integration passed four selected case/profile invocations. Independent
-security review found no material issue. Final combined-head hosted evidence remains
-required; no Desktop or release qualification follows from these tests.
+security review found no material issue. The final combined-head hosted result is
+recorded above; no Desktop or release qualification follows from these tests.
 
 ## Historical next-implementation checkpoint
 

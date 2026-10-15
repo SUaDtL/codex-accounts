@@ -37,6 +37,8 @@ class SpecificationTests(unittest.TestCase):
                 self.assertEqual(parsed["dependencies"], {
                     "codex-accounts-vault": {"path": "../vault", "version": "=0.1.0"},
                     "zeroize": {"version": "=1.8.2", "default-features": False, "features": ["alloc"]},
+                    "serde": "=1.0.229",
+                    "serde_json": "=1.0.145",
                 })
             else:
                 self.assertNotIn("dependencies", parsed)
