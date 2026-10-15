@@ -9,6 +9,10 @@ import tempfile
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
+try:
+    from . import windows_process
+except ImportError:
+    import windows_process
 
 ROOT = Path(__file__).resolve().parents[1]
 PREFIX = 'native::lifecycle::tests::'
@@ -151,10 +155,13 @@ def run_case(profile: str, prefix: str, case: str) -> dict:
         # Each case still has its own process and synthetic roots. No retry loop.
         # The job limit and the existing child watchdogs bound native hangs.
         with tempfile.TemporaryFile() as output:
-            result = subprocess.run(case_command(profile, prefix, case), cwd=ROOT,
-                                    stdout=output, stderr=output, timeout=180, check=False)
-            output.seek(0)
-            output_bytes = output.read(MAX_OUTPUT + 1)
+            try:
+                result = windows_process.run(case_command(profile, prefix, case), cwd=ROOT,
+                                             stdout=output, stderr=output, timeout=180, check=False)
+            finally:
+                # A timeout remains failure, but its fixed diagnostics are evidence.
+                output.seek(0)
+                output_bytes = output.read(MAX_OUTPUT + 1)
             verify(output_bytes, result.returncode, (case,), prefix=prefix)
         passed = True
     except (OSError, ValueError, subprocess.SubprocessError):
@@ -177,8 +184,8 @@ def run_profile(profile: str) -> bool:
         command += ['--release']
     try:
         with tempfile.TemporaryFile() as output:
-            result = subprocess.run(command, cwd=ROOT, stdout=output, stderr=output,
-                                    timeout=180, check=False)
+            result = windows_process.run(command, cwd=ROOT, stdout=output, stderr=output,
+                                         timeout=180, check=False)
         if result.returncode != 0:
             return False
     except (OSError, subprocess.SubprocessError):

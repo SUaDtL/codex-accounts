@@ -17,6 +17,15 @@ def results(scope: str) -> dict:
 
 
 class CiGateTests(unittest.TestCase):
+    def test_windows_process_supervision_is_required_without_replacing_native_cases(self) -> None:
+        sample = results('rust-windows')
+        sample.pop('supervisor_tests', None)
+        self.assertFalse(assess('rust-windows', json.dumps(sample)))
+        sample['supervisor_tests'] = {'outcome': 'success'}
+        self.assertTrue(assess('rust-windows', json.dumps(sample)))
+        sample.pop('native_tests')
+        self.assertFalse(assess('rust-windows', json.dumps(sample)))
+
     def test_source_gate_requires_successful_pinned_proof_toolchain(self) -> None:
         sample = results('source')
         sample.pop('proof_toolchain', None)

@@ -16,7 +16,7 @@ REQUIRED = {
     "jobs": ("source-and-python", "rust-models", "isolated-build"),
     "isolated": ("checkout", "revision", "dependency_review", "toolchain", "dependencies", "isolated"),
 }
-REQUIRED["rust-windows"] = REQUIRED["rust"] + ("native_tests",)
+REQUIRED["rust-windows"] = REQUIRED["rust"] + ("supervisor_tests", "native_tests")
 
 
 def _unique_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:

@@ -83,6 +83,8 @@ class DependencyAcquisitionContractTests(unittest.TestCase):
         self.reject("fail-fast: false", "fail-fast: true")
 
     def test_native_evidence_cannot_be_omitted_or_changed_to_literal_success(self) -> None:
+        self.reject("run: python tools/check_windows_process.py", "run: echo success")
+        self.reject(" && steps.supervisor_tests.outcome == 'success'", "")
         self.reject("run: python tools/run_native_tests.py", "run: echo success")
         self.reject(" && matrix.os == 'windows-latest'", " && matrix.os == 'ubuntu-24.04'")
         self.reject("          CI_MATRIX_OS: ${{ matrix.os }}", "          CI_MATRIX_OS: ubuntu-24.04")

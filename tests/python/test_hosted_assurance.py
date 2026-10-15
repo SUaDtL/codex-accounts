@@ -82,6 +82,17 @@ class NativeProofTests(unittest.TestCase):
             with self.subTest(value=value):
                 self.assertEqual(run_native_tests.failure_categories(prefix + value + b'\n'), [])
 
+    def test_timeout_keeps_partial_fixed_diagnostics_and_remains_failure(self):
+        def timeout(command, **kwargs):
+            self.assertEqual(kwargs['timeout'], 180)
+            kwargs['stdout'].write(b'called `Result::unwrap()` on an `Err` value: Storage(Busy)\n')
+            raise subprocess.TimeoutExpired(command, 180)
+        prefix, case = run_native_tests.inventory()[0]
+        with patch.object(run_native_tests.windows_process, 'run', side_effect=timeout):
+            record = run_native_tests.run_case('debug', prefix, case)
+        self.assertEqual(record['result'], 'failed')
+        self.assertEqual(record['failure_categories'], ['Storage(Busy)'])
+
 
 class IsolatedBuildTests(unittest.TestCase):
     def status(self):

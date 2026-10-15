@@ -129,9 +129,13 @@ jobs:
         id: release_tests
         if: ${{ !cancelled() && steps.toolchain.outcome == 'success' && steps.dependency_review.outcome == 'success' && steps.dependencies.outcome == 'success' }}
         run: python tools/ci_workspace_tests.py release
+      - name: Verify Windows process supervision
+        id: supervisor_tests
+        if: ${{ !cancelled() && steps.toolchain.outcome == 'success' && steps.dependency_review.outcome == 'success' && steps.dependencies.outcome == 'success' && matrix.os == 'windows-latest' }}
+        run: python tools/check_windows_process.py
       - name: Verify named Windows native execution
         id: native_tests
-        if: ${{ !cancelled() && steps.toolchain.outcome == 'success' && steps.dependency_review.outcome == 'success' && steps.dependencies.outcome == 'success' && matrix.os == 'windows-latest' }}
+        if: ${{ !cancelled() && steps.toolchain.outcome == 'success' && steps.dependency_review.outcome == 'success' && steps.dependencies.outcome == 'success' && matrix.os == 'windows-latest' && steps.supervisor_tests.outcome == 'success' }}
         run: python tools/run_native_tests.py
       - name: Lint workspace (Cargo offline)
         id: clippy

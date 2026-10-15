@@ -332,7 +332,36 @@ digest; all 43 requirements and 34 acceptance IDs remain. That amendment is not 
 qualification record. Native discovery and structural identity/generation evidence
 do not prove effective official identity, process quiescence or live operation safety.
 
-## Next eligible implementation
+## 2026-10-15: PR #17 post-merge native failure and runner repair
+
+PR #17 merged as `96767e850fa503e975505ad976c89aa2a0502d8f` after source
+`2261c3b385cd3948cb4f685a27b92487602cf73c` passed all six jobs and 108 named
+native executions in run `38770382714`. Its post-merge run `38772365458` failed
+debug `ca04c_process_restart_restoration_boundaries` (64.547 seconds) and release
+`ca04c_process_restart_forward_boundaries` (82.375 seconds). Their nested storage/
+coordinator categories were omitted by the reporter; the exact cause remains unknown.
+The earlier green run does not erase this failure. A local raw debug reproduction
+finished assertions in 191.64 seconds, exceeding the required 180-second gate;
+release forward finished in 121.41 seconds. Neither explains the original errors.
+
+The follow-up retains only allowlisted nested error categories and bounded partial
+diagnostics on timeout. Native cases and prebuilds now start suspended, join their
+own kill-on-close job before resume, and require owned root/member exit plus empty
+job accounting. Unproven cleanup blocks later launches in that interpreter.
+The case deadline stays 180 seconds; cleanup has a separate five-second failure
+bound. All 54 identities per profile, serial outer restart execution, two ordinary
+workers and no-retry behavior remain required. This fixes process ownership and
+observability; it is not a claim to have fixed the original storage failure.
+
+Fresh local verification passed 224 Python tests with one existing POSIX-only skip,
+including 12 supervisor tests and four actual Windows fixture methods. The strict
+Windows proof gate rejects missing, duplicate, skipped or expected-failure fixtures;
+CI requires that gate before the unchanged native inventory. Actual nested-job and
+discovery integration passed four selected case/profile invocations. Independent
+security review found no material issue. Final combined-head hosted evidence remains
+required; no Desktop or release qualification follows from these tests.
+
+## Historical next-implementation checkpoint
 
 Finish the CA-05C/D -> CA-05E review stack and inspect its exact-head checks. `next-pr.md` selects the
 bounded follow-on, not automatic runtime/login/UI integration. The single roadmap,
