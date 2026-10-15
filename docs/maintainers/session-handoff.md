@@ -1,4 +1,20 @@
-# Session handoff: CA-06B Windows static preview
+# Session handoff: Windows supervisor proof repair
+
+Current main is merged PR #22, `6ffc3d4568364caae1dc5dc3a2d6402ef5cfee3b`, tree
+`b001811290f68cbbe46e98b88d1b78df83392d64`. Its PR run 38806743149 passed all six
+jobs and 108 native executions. Post-merge run 38809063813 failed the twelve-test/
+four-native supervisor proof and did not execute the named native inventory.
+The old reporter discarded failure IDs; the original cause remains unknown.
+
+Continue `codex/supervisor-proof-diagnostics` through [the current packet](../next-pr.md).
+The repair fixes a reproduced handle-number assertion and cleanup-poison test
+isolation, and adds bounded safe failure diagnostics. Production supervision,
+deadlines, required cases and no-retry semantics remain unchanged. PR #23's
+reviewed cached signer work stays open; merge this repair only on green, join
+the new base into #23, and require fresh combined checks before its merge.
+No Desktop qualification or account operation follows from either test result.
+
+## Historical CA-06B handoff
 
 Current checkpoint: PRs #14 through #21 are merged; main is
 `e11471f6840502e90b33f5686dccd5fd2d0f452f`. PR #21 run 38799021210 and post-merge

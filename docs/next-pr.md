@@ -1,4 +1,19 @@
-# Current packet: CA-06B Windows static preview
+# Current packet: Windows supervisor proof repair
+
+PR #22 is merged as `6ffc3d4568364caae1dc5dc3a2d6402ef5cfee3b`. Its PR run
+38806743149 passed all six jobs, but post-merge run 38809063813 failed the aggregate
+supervisor proof before named native execution. The original cause is unknown.
+Resume `codex/supervisor-proof-diagnostics`; [validation](validation.md) records
+the reproduced fixture defects and bounded diagnostic repair. Preserve the same
+production supervisor, required native identities, timeouts and no-retry gates.
+
+PR #23 (`codex/cached-primary-signer`) is open and its merge is held. After this
+repair's exact-head gates pass and it merges, reconcile that branch with current
+main and run fresh combined CI. A green result on its old base is insufficient.
+The standing engine workflow override permits continued direct work and
+conditional green merges; application security and qualification remain gates.
+
+## Historical CA-06B packet
 
 PRs #14 through #21 are merged. Main is
 `e11471f6840502e90b33f5686dccd5fd2d0f452f`; PR #21 and its post-merge run passed
