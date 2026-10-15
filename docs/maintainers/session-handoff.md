@@ -1,4 +1,21 @@
-# Session handoff: CA-02B cached primary signer
+# Session handoff: static Desktop runtime-selection evidence
+
+Current main is `9b3cc2dffc2be77f47d868918b9d9a2c5b42acee`, after ordered green
+merges of #24 and #23. #24's separate main run also passed; refresh #23's main
+run 38815869659. [Validation](../validation.md) records source, tested and actual
+merge identities and full Windows inventories. Continue
+`codex/desktop-runtime-binding-evidence` through [the current packet](../next-pr.md).
+
+One selected-build READ_CONTROL-only ancestor observation returned access denied,
+with stable registration and complete owned cleanup. Protection remains unknown.
+The single historical-package metadata attempt refused with its specific cause
+unavailable; do not invent a network/package-drift diagnosis or retry a new build.
+Next is separately reviewed static bootstrap evidence. Never execute packaged
+source or use static selection rules to infer live effective home/policy.
+Standing engine-workflow override and conditional green merge authority continue;
+all application qualification, security and real CI gates remain intact.
+
+## Historical CA-02B handoff
 
 PR #24's reviewed supervisor-fixture and diagnostic repair is joined into
 this branch. Its merge remains a prerequisite: require #24 green and merged,

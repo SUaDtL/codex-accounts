@@ -8,10 +8,12 @@ native lifecycle primitives are development libraries, not an account manager.**
 
 ## Current implementation
 
-PR #23 includes the reviewed PR #24 supervisor repair. Merge #24 only on green,
-then require the combined signer branch's exact-head gates before its merge.
+PRs #24 and #23 merged after their exact-source CI gates passed. The supervisor
+repair also passed its separate main run; refresh the signer's post-merge run.
+Next is bounded static Desktop runtime-selection evidence. Fresh selected-build
+ancestor metadata access was denied; protection and qualification remain unknown.
 
-PRs #14 through #22 are merged. CA-05F/G/H provide private schema-pinned
+PRs #14 through #24 are merged. CA-05F/G/H provide private schema-pinned
 handshake, account-read, managed-login/cancellation and rate-limit codecs over
 synthetic endpoints. CA-06B adds a Windows-only Tauri developer preview of the
 existing disabled pages, with no application commands or native adapter. See

@@ -1,5 +1,43 @@
 # Validation and evidence boundary
 
+## PRs #24 and #23 merged; selected-build ancestor denial
+
+Supervisor repair [PR #24](https://github.com/SUaDtL/codex-accounts/pull/24)
+passed all six jobs in run 38812293928 and merged as
+`d5680a5c212ac68d1a0c71ea571b80128f2c1b8c`. Reviewed source `fcb0888`, tested
+merge `4419a719d4e2a38d8e08a61b267ac576232380d7` and actual merge share tree
+`5cb9fe18d83eab48b8453214eb004ff3296a6611`. Separate main run 38814063142
+also passed all six jobs. Both Windows logs prove 108 named native executions,
+398=344+54 compiled cases per profile and 12 supervisor tests/four actual fixtures.
+These later passes do not identify the original PR #22 post-merge failure cause.
+
+Signer [PR #23](https://github.com/SUaDtL/codex-accounts/pull/23) joined that repair
+in reviewed source `c7245dee0563ada92e8cc5ed6ed172cf2efddaf0`. All six jobs passed
+in combined run 38813448749 at tested merge
+`042549652aa4139a7b4634425f9522504305018b`. Actual merge
+`9b3cc2dffc2be77f47d868918b9d9a2c5b42acee` has the same
+`7b4f4de95c0a730e60a551e053de18673d4488dc` tree. Inspected Windows output proves
+108 named native executions, 401=347+54 compiled cases per profile, 96 codec
+executions and the unchanged supervisor proof. The combined local Python suite
+passed 260 tests with one existing platform skip. Its separate main run
+38815869659 is still pending at this record; PR green is not post-merge green.
+
+After #24 merged, one independently reviewed read-only observation selected
+Desktop 26.1007.9446.0 x64 and checked registration before/after. Ancestor indices
+zero and one attribute handles succeeded; index two READ_CONTROL-only open
+returned Win32 5 (access denied). No security descriptor was queried, all owned
+handles closed and the owned job emptied. Observation SHA-256 is
+`888bc7a9a55a8975d750d9b5f25704592145604d0f1d58e1ef5701934a795dd8`.
+Target identity/tag and protected ancestry remain unknown. No ACL, privilege,
+configuration, credential or history change occurred; no installed executable ran.
+
+One separately reviewed historical-package metadata attempt refused, child exit
+one, in 1.205 seconds with an empty owned job. Its generic private reporter lost
+the specific failure category, so package drift or network refusal is not proved.
+No metadata was admitted and no retry/new-build fallback occurred. Resource-body
+acquisition remains unestablished. Static runtime-selection evidence is the next
+bounded investigation; no observation enables account operations or qualification.
+
 ## PR #22 post-merge supervision failure and bounded fixture repair
 
 PR #22 merged as `6ffc3d4568364caae1dc5dc3a2d6402ef5cfee3b`, with the same

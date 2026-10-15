@@ -1,16 +1,16 @@
 # Codex Accounts: start here
 
-Bootstrap revision **2.8.1** · Checkpoint **2026-10-15** · Repository **SUaDtL/codex-accounts**.
+Bootstrap revision **2.9.0** · Checkpoint **2026-10-15** · Repository **SUaDtL/codex-accounts**.
 This is session routing, not an application release or a second roadmap.
 
 ## Resume from live work, not the original bootstrap
 
-PRs **#14** through **#22** are merged. Main is
-`6ffc3d4568364caae1dc5dc3a2d6402ef5cfee3b`, including the private synthetic
+PRs **#14** through **#24** are merged. Main is
+`9b3cc2dffc2be77f47d868918b9d9a2c5b42acee`, including the private synthetic
 transport driver, guarded Windows storage, explicit registered-image observation
 native-test process supervision and the pinned CA-05F handshake/account-read
 codec, CA-05G managed-login/cancellation and CA-05H rate-limit decoding. Continue
-CA-02B on `codex/cached-primary-signer`;
+static runtime-selection evidence on `codex/desktop-runtime-binding-evidence`;
 do not reopen the historical review stack. Refresh actual refs and checks.
 The owner authorized the same standing engine workflow override for this next
 increment; application security, qualification and CI remain required.
@@ -23,18 +23,18 @@ pin `codex-cli 0.162.0-alpha.17.2`; the private CA-05F decoder uses its actual
 handshake/account-read shapes. Managed-login/cancel/notification decoding is merged;
 rate-limit observations are merged without polling, cache merging or credit
 operations. The Windows-only disabled static Tauri preview is merged. The current
-packet adds bounded cached primary signer observation; one selected-image
+checkpoint includes bounded cached primary signer observation; one selected-image
 collection succeeded without granting installation or credential authority.
 This [partial evidence](docs/runtime-provenance-observation.md)
 does not qualify an adapter. `docs/next-pr.md` owns the bounded next step;
 old Project snapshots and an earlier head's green result do not override live work.
 
-PR #24's reviewed supervisor-fixture and diagnostic repair is joined into
-this branch. Its merge remains a prerequisite: require #24 green and merged,
-then verify this combined source/tree and completed hosted gates before
-merging #23. The original PR #22 post-merge failure remains recorded in
-[validation](docs/validation.md); no deadline, case or qualification gate
-is waived.
+PRs #24 and #23 passed their exact-source CI gates and merged. The supervisor
+repair also passed its separate main run; refresh the signer's post-merge run.
+The fresh selected-build ancestor metadata observation was denied. Continue
+bounded static bootstrap inspection with ancestry and qualification unknown.
+The original PR #22 failure remains recorded in [validation](docs/validation.md);
+no deadline, case or qualification gate is waived.
 
 ## Minimum reading order
 
