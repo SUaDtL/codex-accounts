@@ -9,6 +9,10 @@ import tempfile
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
+try:
+    from . import windows_process
+except ImportError:
+    import windows_process
 
 ROOT = Path(__file__).resolve().parents[1]
 PREFIX = 'native::lifecycle::tests::'
@@ -88,13 +92,31 @@ def inventory() -> tuple[tuple[str, str], ...]:
 MAX_OUTPUT = 1024 * 1024
 FAULTS = {b'AccessDenied', b'Disappeared', b'Incomplete', b'Changed', b'Bound',
           b'QuitUnavailable', b'Timeout', b'HelperStuck', b'QualificationMissing'}
+COORDINATOR_FAULTS = {
+    b'Refused': {b'Binding', b'Policy', b'Consent', b'Busy', b'Writers',
+                 b'ExternalChange', b'HelperStuck', b'Write', b'LoginRequired',
+                 b'Cleanup', b'Cancelled', b'Launch', b'InvalidData', b'Interrupted'},
+    b'Storage': {b'UnsupportedPlatform', b'UnsafePath', b'AccessDenied', b'Busy',
+                 b'Missing', b'AlreadyExists', b'Io', b'Corrupt', b'KeyUnavailable',
+                 b'RecoveryRequired', b'ExternalChange', b'InputLimit', b'InvalidData',
+                 b'IdentityMismatch', b'StaleParent', b'ActiveStateUnknown',
+                 b'ActiveProfile', b'Referenced', b'LaterStartupRequired', b'SwitchPending'},
+}
 
 
 def failure_categories(output: bytes) -> list[str]:
     # Match only the fixed enum after Rust's unwrap diagnostic, never arbitrary
     # panic text. Unknown values and canaries are not exported.
     values = re.findall(rb'called `Result::unwrap\(\)` on an `Err` value: ([A-Za-z]+)(?:\r?\n|$)', output[:MAX_OUTPUT])
-    return sorted({value.decode('ascii') for value in values if value in FAULTS})
+    categories = {value.decode('ascii') for value in values if value in FAULTS}
+    # SwitchError wraps fixed fieldless enums; do not export arbitrary Debug data.
+    nested = re.findall(
+        rb'called `Result::unwrap\(\)` on an `Err` value: ([A-Za-z]+)\(([A-Za-z]+)\)(?:\r?\n|$)',
+        output[:MAX_OUTPUT])
+    categories.update((wrapper + b'(' + value + b')').decode('ascii')
+                      for wrapper, value in nested
+                      if value in COORDINATOR_FAULTS.get(wrapper, ()))
+    return sorted(categories)
 
 
 def verify(output: bytes, returncode: int, cases: tuple[str, ...] = CASES, *, prefix: str = PREFIX) -> None:
@@ -133,10 +155,13 @@ def run_case(profile: str, prefix: str, case: str) -> dict:
         # Each case still has its own process and synthetic roots. No retry loop.
         # The job limit and the existing child watchdogs bound native hangs.
         with tempfile.TemporaryFile() as output:
-            result = subprocess.run(case_command(profile, prefix, case), cwd=ROOT,
-                                    stdout=output, stderr=output, timeout=180, check=False)
-            output.seek(0)
-            output_bytes = output.read(MAX_OUTPUT + 1)
+            try:
+                result = windows_process.run(case_command(profile, prefix, case), cwd=ROOT,
+                                             stdout=output, stderr=output, timeout=180, check=False)
+            finally:
+                # A timeout remains failure, but its fixed diagnostics are evidence.
+                output.seek(0)
+                output_bytes = output.read(MAX_OUTPUT + 1)
             verify(output_bytes, result.returncode, (case,), prefix=prefix)
         passed = True
     except (OSError, ValueError, subprocess.SubprocessError):
@@ -159,8 +184,8 @@ def run_profile(profile: str) -> bool:
         command += ['--release']
     try:
         with tempfile.TemporaryFile() as output:
-            result = subprocess.run(command, cwd=ROOT, stdout=output, stderr=output,
-                                    timeout=180, check=False)
+            result = windows_process.run(command, cwd=ROOT, stdout=output, stderr=output,
+                                         timeout=180, check=False)
         if result.returncode != 0:
             return False
     except (OSError, subprocess.SubprocessError):

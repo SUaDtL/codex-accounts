@@ -67,6 +67,32 @@ class NativeProofTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 run_native_tests.run()
 
+    def test_nested_coordinator_failure_categories_are_fixed_and_complete(self):
+        prefix = b'called `Result::unwrap()` on an `Err` value: '
+        output = (prefix + b'Refused(HelperStuck)\r\n' +
+                  prefix + b'Storage(Busy)\n' + prefix + b'Refused(HelperStuck)\n')
+        self.assertEqual(run_native_tests.failure_categories(output),
+                         ['Refused(HelperStuck)', 'Storage(Busy)'])
+
+    def test_nested_diagnostics_never_export_unknown_wrappers_values_or_bodies(self):
+        prefix = b'called `Result::unwrap()` on an `Err` value: '
+        for value in (b'Refused(SYNTHETIC_SECRET)', b'PRIVATE(HelperStuck)',
+                      b'Refused(HelperStuck_SECRET)', b'Refused(HelperStuck) PRIVATE_PATH',
+                      b'Refused(Storage(HelperStuck))', b'Refused(AccessDenied)'):
+            with self.subTest(value=value):
+                self.assertEqual(run_native_tests.failure_categories(prefix + value + b'\n'), [])
+
+    def test_timeout_keeps_partial_fixed_diagnostics_and_remains_failure(self):
+        def timeout(command, **kwargs):
+            self.assertEqual(kwargs['timeout'], 180)
+            kwargs['stdout'].write(b'called `Result::unwrap()` on an `Err` value: Storage(Busy)\n')
+            raise subprocess.TimeoutExpired(command, 180)
+        prefix, case = run_native_tests.inventory()[0]
+        with patch.object(run_native_tests.windows_process, 'run', side_effect=timeout):
+            record = run_native_tests.run_case('debug', prefix, case)
+        self.assertEqual(record['result'], 'failed')
+        self.assertEqual(record['failure_categories'], ['Storage(Busy)'])
+
 
 class IsolatedBuildTests(unittest.TestCase):
     def status(self):

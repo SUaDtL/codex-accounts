@@ -129,7 +129,9 @@ def check_contract(text: str) -> None:
     ]:
         command(rust, identifier, value, RUST_IF)
     native_if = RUST_IF[:-3] + " && matrix.os == 'windows-latest' }}"
-    command(rust, "native_tests", "python tools/run_native_tests.py", native_if)
+    command(rust, "supervisor_tests", "python tools/check_windows_process.py", native_if)
+    command(rust, "native_tests", "python tools/run_native_tests.py",
+            native_if[:-3] + " && steps.supervisor_tests.outcome == 'success' }}")
     if "          CI_MATRIX_OS: ${{ toJSON(matrix.os) }}" in text:
         raise ValueError("Lane must retain the actual unquoted value")
     if "          CI_MATRIX_OS: ${{ matrix.os }}\n" not in step(rust, "assess"):
@@ -161,7 +163,7 @@ def check_contract(text: str) -> None:
 
     expected_ids = {
         source: {"checkout", "revision", "spec", "dependency_review", "workflow_contract", "proof_toolchain", "python", "source_evidence", "source_upload", "assess"},
-        rust: {"checkout", "revision", "dependency_review", "toolchain", "dependencies", "compiler", "host", "format", "tests", "doctests", "release_build", "release_tests", "native_tests", "clippy", "assess"},
+        rust: {"checkout", "revision", "dependency_review", "toolchain", "dependencies", "compiler", "host", "format", "tests", "doctests", "release_build", "release_tests", "supervisor_tests", "native_tests", "clippy", "assess"},
         isolated: {"checkout", "revision", "dependency_review", "toolchain", "dependencies", "isolated", "assess"},
         "ci-gate": {"checkout", "assess"},
     }

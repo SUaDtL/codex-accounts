@@ -99,7 +99,7 @@ class IndependentNativeTests(unittest.TestCase):
             with lock:
                 active.remove(name)
             return {'native_case': name, 'result': 'passed'}
-        with patch.object(native.subprocess, 'run', return_value=subprocess.CompletedProcess([], 0)), \
+        with patch.object(native.windows_process, 'run', return_value=subprocess.CompletedProcess([], 0)), \
              patch.object(native, 'run_case', side_effect=case), redirect_stdout(io.StringIO()):
             self.assertTrue(native.run_profile('debug'))
         self.assertEqual(overlaps, [])
@@ -164,7 +164,7 @@ class IndependentNativeTests(unittest.TestCase):
         def case(profile,prefix,name):
             seen.append((prefix,name))
             return {'native_case':name,'result':'failed' if name==native.CASES[0] else 'passed'}
-        with patch.object(native.subprocess,'run',return_value=subprocess.CompletedProcess([],0)) as build, \
+        with patch.object(native.windows_process,'run',return_value=subprocess.CompletedProcess([],0)) as build, \
              patch.object(native,'run_case',side_effect=case),redirect_stdout(io.StringIO()):
             self.assertFalse(native.run_profile('debug'))
         self.assertCountEqual(seen,native.inventory())
@@ -179,13 +179,13 @@ class IndependentNativeTests(unittest.TestCase):
             if name==native.CASES[0]:raise RuntimeError('SYNTHETIC_PRIVATE_PATH')
             return {'native_case':name,'result':'passed'}
         output=io.StringIO()
-        with patch.object(native.subprocess,'run',return_value=subprocess.CompletedProcess([],0)), \
+        with patch.object(native.windows_process,'run',return_value=subprocess.CompletedProcess([],0)), \
              patch.object(native,'run_case',side_effect=case),redirect_stdout(output):
             self.assertFalse(native.run_profile('release'))
         self.assertCountEqual(seen,native.inventory())
         self.assertNotIn('SYNTHETIC_PRIVATE_PATH',output.getvalue())
     def test_failed_preparation_never_executes_stale_test_binaries(self):
-        with patch.object(native.subprocess,'run',return_value=subprocess.CompletedProcess([],1)), \
+        with patch.object(native.windows_process,'run',return_value=subprocess.CompletedProcess([],1)), \
              patch.object(native,'run_case') as case:
             self.assertFalse(native.run_profile('debug'))
             case.assert_not_called()
@@ -194,7 +194,7 @@ class IndependentNativeTests(unittest.TestCase):
         def fail(command,**kwargs):
             kwargs['stdout'].write(b'SYNTHETIC_SECRET_CANNOT_LEAVE_LOCAL_OUTPUT\n')
             return subprocess.CompletedProcess(command,1)
-        with patch.object(native.subprocess,'run',side_effect=fail):
+        with patch.object(native.windows_process,'run',side_effect=fail):
             record=native.run_case('debug',prefix,name)
         self.assertEqual(record['result'],'failed')
         self.assertIn('elapsed_seconds',record)
