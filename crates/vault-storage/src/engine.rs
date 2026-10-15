@@ -43,6 +43,60 @@ fn open_state(root: &RootKey, bytes: &[u8]) -> Result<State, StorageError> {
     codec::read_state(data.expose())
 }
 
+/// Borrowed recognition boundary: it cannot publish, create or erase anything.
+/// The authenticated control selects every registry context; envelope headers
+/// and independently valid registries never establish an existing-store anchor.
+struct RecognitionFiles<'a, D: Files>(&'a D);
+impl<D: Files> Files for RecognitionFiles<'_, D> {
+    fn read(&self, name: &str) -> Result<Option<Vec<u8>>, StorageError> {
+        self.0.read(name)
+    }
+    fn list(&self) -> Result<Vec<String>, StorageError> {
+        self.0.list()
+    }
+    fn stage(&mut self, _: &str, _: &[u8]) -> Result<(), StorageError> {
+        Err(StorageError::InvalidData)
+    }
+    fn publish(&mut self, _: &str, _: Option<&[u8]>, _: &[u8]) -> Result<(), StorageError> {
+        Err(StorageError::InvalidData)
+    }
+    fn erase(&mut self, _: &str, _: &[u8]) -> Result<(), StorageError> {
+        Err(StorageError::InvalidData)
+    }
+}
+pub(crate) fn recognize_existing(disk: &impl Files, root: &RootKey) -> Result<(), StorageError> {
+    let current = disk.read("state.bin")?;
+    let stage = disk.read("state.bin.stage")?;
+    let previous = current
+        .as_deref()
+        .map(|bytes| open_state(root, bytes))
+        .transpose()?;
+    let next = stage.as_deref().map(|bytes| open_state(root, bytes));
+    match next {
+        Some(Ok(next)) => {
+            if next.parent != current.as_deref().map(digest)
+                || next.sequence
+                    != previous
+                        .as_ref()
+                        .map_or(Some(1), |s| s.sequence.checked_add(1))
+                        .ok_or(StorageError::Corrupt)?
+            {
+                return Err(StorageError::ExternalChange);
+            }
+            if let Some(reference) = &next.current {
+                let registry = Storage::load_registry(&RecognitionFiles(disk), root, reference)?;
+                Storage::verify_registry_on(&RecognitionFiles(disk), root, &registry)?;
+            }
+        }
+        Some(Err(_)) | None if current.is_none() => return Err(StorageError::RecoveryRequired),
+        // A torn stage is recognized only with the authenticated committed anchor.
+        // Existing bounded interrupted-control checks keep repair reachable.
+        Some(Err(_)) | None => {}
+    }
+    Storage::interrupted_control(RecognitionFiles(disk), root, current, stage)?;
+    Ok(())
+}
+
 pub(crate) struct Storage<D: Files> {
     pub(crate) disk: D,
     state: State,
