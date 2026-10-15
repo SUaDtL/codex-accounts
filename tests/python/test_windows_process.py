@@ -45,7 +45,9 @@ class SupervisionTests(unittest.TestCase):
         FakeProcess.events = []
         FakeProcess.code = 0
         FakeProcess.fails = None
-        owned._launch_blocked = False
+        poison = patch.object(owned, '_launch_blocked', False)
+        poison.start()
+        self.addCleanup(poison.stop)
         self.output = tempfile.TemporaryFile()
         self.addCleanup(self.output.close)
     def run_owned(self, timeout=1, check=False):
@@ -118,7 +120,7 @@ class SupervisionTests(unittest.TestCase):
 @unittest.skipUnless(sys.platform == 'win32', 'Windows native supervisor fixture')
 class NativeProcessTests(unittest.TestCase):
     def setUp(self):
-        owned._launch_blocked = False
+        self.assertFalse(owned._launch_blocked, 'owned_process_cleanup_poisoned')
     def invoke(self, script, *, timeout=10, observer=None):
         with tempfile.TemporaryFile() as output:
             native = owned._Process
@@ -200,15 +202,53 @@ class NativeProcessTests(unittest.TestCase):
             handle = msvcrt.get_osfhandle(write_fd)
             script = ('import ctypes; from ctypes import wintypes; k=ctypes.WinDLL("kernel32",use_last_error=True); '
                       'k.GetHandleInformation.argtypes=[wintypes.HANDLE,ctypes.POINTER(wintypes.DWORD)]; '
-                      'flags=wintypes.DWORD(); print(k.GetHandleInformation(' + str(handle) + ',ctypes.byref(flags)))')
+                      'k.CreateEventW.argtypes=[wintypes.LPVOID,wintypes.BOOL,wintypes.BOOL,wintypes.LPCWSTR]; '
+                      'k.CreateEventW.restype=wintypes.HANDLE; '
+                      'k.WriteFile.argtypes=[wintypes.HANDLE,wintypes.LPCVOID,wintypes.DWORD,ctypes.POINTER(wintypes.DWORD),wintypes.LPVOID]; '
+                      'flags=wintypes.DWORD(); events=[]\n'
+                      'for _ in range(4096):\n'
+                      ' if k.GetHandleInformation(' + str(handle) + ',ctypes.byref(flags)): break\n'
+                      ' event=k.CreateEventW(None,True,False,None)\n'
+                      ' if not event: raise RuntimeError("synthetic event allocation failed")\n'
+                      ' events.append(event)\n'
+                      'assert k.GetHandleInformation(' + str(handle) + ',ctypes.byref(flags))\n'
+                      'count=wintypes.DWORD()\n'
+                      'k.WriteFile(' + str(handle) + ',b"P",1,ctypes.byref(count),None)\n'
+                      'print("SYNTHETIC_HANDLE_VALID")')
             unrelated = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(60)'])
             try:
                 result, output = self.invoke(script)
                 self.assertEqual(result.returncode, 0)
-                self.assertEqual(output.strip(), b'0')
+                self.assertIn(b'SYNTHETIC_HANDLE_VALID', output)
                 self.assertIsNone(unrelated.poll())
+                # A valid child handle number may denote a different object.
+                # Test the actual pipe effect, never numerical handle absence.
                 os.write(write_fd, b'X')
                 self.assertEqual(os.read(read_fd, 1), b'X')
+
+                # Sensitivity control: deliberately add the ambient pipe to the
+                # real owned child's HANDLE_LIST, retaining its ctypes storage
+                # through CreateProcess. The semantic assertion MUST catch P.
+                real_update = owned._UpdateAttribute
+                retained_lists = []
+                def leak_only_fixture_pipe(attributes, flags, attribute, value, size, previous, returned):
+                    self.assertEqual(attribute, 0x20002)
+                    self.assertEqual(size, ctypes.sizeof(owned.W.HANDLE) * 2)
+                    original = ctypes.cast(value, ctypes.POINTER(owned.W.HANDLE))
+                    handles = (owned.W.HANDLE * 3)(original[0], original[1], handle)
+                    retained_lists.append(handles)
+                    return real_update(attributes, flags, attribute, handles,
+                                       ctypes.sizeof(handles), previous, returned)
+                with patch.object(owned, '_UpdateAttribute', leak_only_fixture_pipe):
+                    result, output = self.invoke(script)
+                self.assertEqual(result.returncode, 0)
+                self.assertIn(b'SYNTHETIC_HANDLE_VALID', output)
+                self.assertEqual(len(retained_lists), 1)
+                os.write(write_fd, b'X')
+                with self.assertRaises(AssertionError):
+                    self.assertEqual(os.read(read_fd, 1), b'X')
+                self.assertEqual(os.read(read_fd, 1), b'X')
+                self.assertIsNone(unrelated.poll())
             finally:
                 unrelated.kill()
                 unrelated.wait(timeout=5)

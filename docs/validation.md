@@ -1,5 +1,46 @@
 # Validation and evidence boundary
 
+## PR #22 post-merge supervision failure and bounded fixture repair
+
+PR #22 merged as `6ffc3d4568364caae1dc5dc3a2d6402ef5cfee3b`, with the same
+`b001811290f68cbbe46e98b88d1b78df83392d64` tree as reviewed source
+`5f5cdf724a5349bbc62bac93ee2ce0b702f2e116`. All six PR jobs passed in run
+38806743149; inspected Windows output proves 108 native executions, 398=344+54
+compiled partitions per profile, bundled navigation in both profiles and the
+required twelve supervisor tests/four native fixture identities.
+
+Its separate [main run 38809063813](https://github.com/SUaDtL/codex-accounts/actions/runs/38809063813)
+failed the aggregate supervisor proof in 4.955 seconds. The reporter discarded
+failure IDs and tracebacks, so the original failing assertion/cause is unknown.
+Named native execution did not run. The earlier green result does not erase this
+failure; PR #23's signer merge remains held for this repair and fresh combined CI.
+
+A controlled child reproduced a faulty fixture assumption: a non-inherited
+handle's numeric value can denote a different valid child object. The old
+`GetHandleInformation == 0` assertion failed despite restricted inheritance.
+The replacement probes the actual private pipe effect. A child with a valid
+unrelated same-number handle cannot write to that pipe; intentionally adding the
+pipe to the real owned child's handle list makes the same assertion detect the
+leak. Parent pipe usability and the unrelated owned process remain checked.
+
+Two no-process regressions also failed before correction: native fixture setup
+cleared real cleanup poison, and model setup failed to restore it. Native setup
+now refuses existing poison before any child creation; model tests temporarily
+isolate their synthetic flag and restore the previous real value afterward.
+
+Failure reporting adds only allowlisted test IDs and fixed categories, bounded
+to twelve rows with truncation indicated. Raw exceptions, tracebacks, assertion
+payloads, paths and subtest parameters remain private. Canary/hostile-formatting
+tests verify that boundary; the passing JSON summary is unchanged.
+
+All eight focused gate tests and the actual twelve-test/four-native proof pass
+locally. The full Python suite passes 256 tests with one existing POSIX-only skip
+on Windows. Independent review of all three changed Python files found no material
+issue. Production `windows_process.py`, the exact native inventory, operation and
+cleanup deadlines, no-skip assessment and no-retry policy are unchanged. These
+reproduced fixture defects do not establish the original hosted failure's cause.
+Final combined-head hosted checks remain mandatory before merge.
+
 ## CA-06B: Windows static developer shell candidate
 
 The [static shell](ca-06b-static-preview.md) adds no application commands or

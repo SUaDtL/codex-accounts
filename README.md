@@ -8,7 +8,7 @@ native lifecycle primitives are development libraries, not an account manager.**
 
 ## Current implementation
 
-PRs #14 through #21 are merged. CA-05F/G/H provide private schema-pinned
+PRs #14 through #22 are merged. CA-05F/G/H provide private schema-pinned
 handshake, account-read, managed-login/cancellation and rate-limit codecs over
 synthetic endpoints. CA-06B adds a Windows-only Tauri developer preview of the
 existing disabled pages, with no application commands or native adapter. See
@@ -66,8 +66,9 @@ broad history migration belongs in this product.
 New sessions: read [CODEX_ACCOUNTS_START_HERE.md](CODEX_ACCOUNTS_START_HERE.md),
 [the handoff](docs/maintainers/session-handoff.md) and [parallel-work boundaries](docs/maintainers/parallel-work.md).
 The [open-asks register](docs/maintainers/open-asks.md) separates owner evidence from
-safe implementation work. Resume CA-06B, refreshing live refs/open PRs before
-execution. PRs #14 through #21 are merged. The original CA-02
+safe implementation work. Resume the supervisor proof repair, refreshing live
+refs/open PRs before execution. PR #23's signer work is held for the repair and
+fresh combined CI. PRs #14 through #22 are merged. The original CA-02
 Project routing is superseded.
 
 The normative [specification](docs/local-codex-switcher-spec.html) owns behavior
