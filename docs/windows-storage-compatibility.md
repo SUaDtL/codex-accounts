@@ -1,7 +1,7 @@
-# Windows storage compatibility
+# Windows storage and metadata compatibility
 
 This increment follows merged PRs #14 and #15 (main `727eb6154db1d7c4ac5db10a7868b6271cd55293`).
-It implements the storage portion of the Windows compatibility work. It does not
+It implements guarded storage placement and registered metadata inspection. It does not
 qualify Desktop or enable account switching.
 
 ## Storage behavior
@@ -34,7 +34,8 @@ duplicate, ignored, failed or malformed results. Negative fixtures verify the
 reserved-only collision and pending-recovery assertions without claiming a
 production defect or retroactive production RED.
 
-The Python suite has 201 cases, with one existing POSIX-only skip on Windows.
+The storage baseline ran 201 Python cases. The combined increment runs 206,
+with one existing POSIX-only skip on Windows.
 Formatting, Clippy, offline builds, doctests, dependency review, canonical
 specification and workflow contracts passed locally. Independent coverage and
 security reviews found no remaining findings in the storage scope. Hosted CI on
@@ -55,9 +56,44 @@ in `.codearbiter/overrides.log`. Existing engine records are preserved locally;
 they are not rewritten as accepted. Application security, qualification and CI
 requirements remain in force.
 
-The next bounded implementation is an explicit registered-package metadata
-reader. It must keep default strict inspection unchanged, retain registered-root
-and descendant handles, read only bounded manifests and declared images, and
-report unchecked outer ancestry and unresolved executable roles truthfully.
-It must never read configuration, credentials or history in that mode, launch a
-candidate, or convert inventory into qualification authority.
+The explicit registered-package metadata reader now retains registered-root and
+descendant handles, reads bounded manifests and declared images, and reports
+unchecked outer ancestry and unresolved executable roles truthfully. Default
+strict inspection remains unchanged. Real discovery library and diagnostic tests
+pass in both profiles; independent security review found zero actionable findings.
+Three temporary safeguard removals each failed the intended native assertion in
+both profiles before restoration. The reader never reads configuration,
+credentials or history in that mode, launches a candidate, or converts inventory
+into qualification authority. See [the Q0 procedure](q0-qualification.md).
+
+CI now requires 51 named native cases per profile: all 27 inherited cases, 18
+storage cases and six metadata cases. The workspace complement is checked against
+its actual compiled inventory. A hosted source-job failure exposed the real Rust
+adversary's missing toolchain prerequisite; the reviewed 1.90.0 installation and
+its successful outcome are now mandatory, with the actual adversary unchanged.
+The local expanded storage run passed all 18 new cases in both profiles, but the
+inherited restoration restart test exceeded its unchanged 180-second limit in
+both profiles. Those failures remain recorded; the PR remains a draft while
+combined validation and final-head hosted checks complete.
+
+The unchanged restoration test subsequently passed alone in 159 seconds under
+the same 180-second deadline. Restart suites already run four fixture workers
+internally; the outer runner now awaits each restart suite before submitting the
+ordinary two-worker pool. No test, assertion, deadline or failure is removed, and
+failed cases are not retried by the runner.
+
+## Read-only host observation, 2026-10-15
+
+The selected registered Windows x64 package reports version `26.1007.9446.0`.
+Initial metadata inspection exposed a valid UTF-8 BOM rejected by the XML string
+parser. A synthetic regression failed in both profiles before the shared parser
+was changed to remove exactly one leading BOM after strict UTF-8 validation.
+Double, nonleading and malformed prefixes still refuse.
+
+After rebuilding, the real registered-metadata command completed successfully:
+one package, two declared x64 images, matching manifest identity and registration
+stable during inspection. Cached signatures were observations only. Publisher
+binding, runtime role, effective home/backend/policy and outer ancestry remain
+unestablished. Default strict inspection still refuses with `E_ACCESS_DENIED`.
+No configuration, credential, account or history material was read, and no
+candidate executable was launched. These facts do not qualify a Desktop build.
