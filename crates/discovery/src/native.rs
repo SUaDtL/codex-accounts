@@ -191,6 +191,63 @@ pub struct ReadHandle {
     initial: Stamp,
     directory: bool,
 }
+
+/// A distinct partial metadata capability, never a protected-write capability.
+/// The caller must obtain this root from current-user package registration.
+pub struct RegisteredRoot(ReadHandle);
+impl RegisteredRoot {
+    pub fn open(path: &Path) -> Result<Self, ReadError> {
+        validate_absolute(path)?;
+        let mut drive = PathBuf::new();
+        for component in path.components().take(2) {
+            drive.push(component.as_os_str());
+        }
+        let drive = wide(&drive)?;
+        // SAFETY: Validated local drive root; no network path is admitted.
+        if unsafe { GetDriveTypeW(drive.as_ptr()) } != DRIVE_FIXED {
+            return Err(ReadError::UnsafePath);
+        }
+        let file = open_one(path, true)?;
+        let initial = stamp(&file)?;
+        Ok(Self(ReadHandle {
+            file,
+            ancestors: Vec::new(),
+            path: path.to_owned(),
+            initial,
+            directory: true,
+        }))
+    }
+    pub fn open_relative(&self, relative: &str) -> Result<ReadHandle, ReadError> {
+        if relative != "AppxManifest.xml" {
+            crate::validate_relative_executable(relative)?;
+        }
+        self.revalidate()?;
+        let components: Vec<_> = relative.split(['/', '\\']).collect();
+        let mut path = self.0.path.clone();
+        let mut ancestors = Vec::new();
+        for part in &components[..components.len() - 1] {
+            path.push(part);
+            ancestors.push(open_one(&path, true)?);
+        }
+        path.push(components[components.len() - 1]);
+        let file = open_one(&path, false)?;
+        let initial = stamp(&file)?;
+        if initial.size > MAX_EXECUTABLE_BYTES {
+            return Err(ReadError::InputLimit);
+        }
+        self.revalidate()?;
+        Ok(ReadHandle {
+            file,
+            ancestors,
+            path,
+            initial,
+            directory: false,
+        })
+    }
+    pub fn revalidate(&self) -> Result<(), ReadError> {
+        self.0.revalidate().map_err(|_| ReadError::Changed)
+    }
+}
 impl std::fmt::Debug for ReadHandle {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str("ReadHandle([REDACTED])")
@@ -440,6 +497,133 @@ mod tests {
     }
 
     #[test]
+    fn native_registered_root_retains_internal_handles_without_outer_observation() {
+        use std::os::windows::fs::OpenOptionsExt;
+        let fixture = Fixture::new();
+        let root = fixture.0.join("registered");
+        std::fs::create_dir(&root).unwrap();
+        std::fs::create_dir(root.join("images")).unwrap();
+        std::fs::write(root.join("images/synthetic.exe"), b"SYNTHETIC").unwrap();
+        let root_control = std::fs::OpenOptions::new()
+            .access_mode(READ_CONTROL | WRITE_DAC)
+            .share_mode(FILE_SHARE_READ | FILE_SHARE_WRITE)
+            .custom_flags(FILE_FLAG_BACKUP_SEMANTICS)
+            .open(&root)
+            .unwrap();
+        let mut root_descriptor = null_mut();
+        let mut root_dacl = null_mut();
+        // SAFETY: Protect this newly created synthetic root from the outer fixture's temporary ACL.
+        assert_eq!(
+            unsafe {
+                GetSecurityInfo(
+                    root_control.as_raw_handle(),
+                    SE_FILE_OBJECT,
+                    DACL_SECURITY_INFORMATION,
+                    null_mut(),
+                    null_mut(),
+                    &mut root_dacl,
+                    null_mut(),
+                    &mut root_descriptor,
+                )
+            },
+            ERROR_SUCCESS
+        );
+        let root_descriptor = Descriptor(root_descriptor);
+        assert_eq!(
+            unsafe {
+                SetSecurityInfo(
+                    root_control.as_raw_handle(),
+                    SE_FILE_OBJECT,
+                    DACL_SECURITY_INFORMATION | PROTECTED_DACL_SECURITY_INFORMATION,
+                    null_mut(),
+                    null_mut(),
+                    root_dacl,
+                    null_mut(),
+                )
+            },
+            ERROR_SUCCESS
+        );
+        drop(root_descriptor);
+        drop(root_control);
+        let outer_guard = std::fs::OpenOptions::new()
+            .access_mode(READ_CONTROL | WRITE_DAC)
+            .share_mode(FILE_SHARE_READ | FILE_SHARE_WRITE)
+            .custom_flags(FILE_FLAG_BACKUP_SEMANTICS)
+            .open(&fixture.0)
+            .unwrap();
+        let mut original = null_mut();
+        let mut dacl = null_mut();
+        // SAFETY: Synthetic directory only; the held control handle restores its ACL before assertions.
+        assert_eq!(
+            unsafe {
+                GetSecurityInfo(
+                    outer_guard.as_raw_handle(),
+                    SE_FILE_OBJECT,
+                    DACL_SECURITY_INFORMATION,
+                    null_mut(),
+                    null_mut(),
+                    &mut dacl,
+                    null_mut(),
+                    &mut original,
+                )
+            },
+            ERROR_SUCCESS
+        );
+        let original = Descriptor(original);
+        let mut empty: ACL = unsafe { std::mem::zeroed() };
+        assert_ne!(
+            unsafe { InitializeAcl(&mut empty, std::mem::size_of::<ACL>() as u32, ACL_REVISION) },
+            0
+        );
+        assert_eq!(
+            unsafe {
+                SetSecurityInfo(
+                    outer_guard.as_raw_handle(),
+                    SE_FILE_OBJECT,
+                    DACL_SECURITY_INFORMATION | PROTECTED_DACL_SECURITY_INFORMATION,
+                    null_mut(),
+                    null_mut(),
+                    &empty,
+                    null_mut(),
+                )
+            },
+            ERROR_SUCCESS
+        );
+        let strict = ReadHandle::open(&root, true);
+        let registered = RegisteredRoot::open(&root);
+        let leaf = registered
+            .as_ref()
+            .map_err(|_| ReadError::AccessDenied)
+            .and_then(|r| r.open_relative("images/synthetic.exe"));
+        let restored = unsafe {
+            SetSecurityInfo(
+                outer_guard.as_raw_handle(),
+                SE_FILE_OBJECT,
+                DACL_SECURITY_INFORMATION | UNPROTECTED_DACL_SECURITY_INFORMATION,
+                null_mut(),
+                null_mut(),
+                dacl,
+                null_mut(),
+            )
+        };
+        drop(original);
+        assert_eq!(restored, ERROR_SUCCESS);
+        assert!(matches!(strict, Err(ReadError::AccessDenied)));
+        let registered = registered.unwrap();
+        let mut leaf = leaf.unwrap();
+        assert_eq!(leaf.bytes(32).unwrap(), b"SYNTHETIC");
+        assert!(std::fs::rename(root.join("images"), root.join("moved")).is_err());
+        assert!(std::fs::OpenOptions::new()
+            .write(true)
+            .open(root.join("images/synthetic.exe"))
+            .is_err());
+        registered.revalidate().unwrap();
+        drop(leaf);
+        drop(registered);
+        drop(outer_guard);
+    }
+
+    #[test]
     fn native_read_preserves_bytes_and_reports_user_writability() {
         let fixture = Fixture::new();
         let path = fixture.0.join("合成.exe");
@@ -641,9 +825,15 @@ mod tests {
         assert_ne!(installed, 0);
         let leaf = ReadHandle::open(&junction, true);
         let child = ReadHandle::open(&junction.join("synthetic.exe"), false);
+        let registered_leaf = RegisteredRoot::open(&junction);
+        let registered = RegisteredRoot::open(&fixture.0).unwrap();
+        let registered_child = registered.open_relative("junction/synthetic.exe");
+        drop(registered);
         std::fs::remove_dir(&junction).unwrap();
         assert!(matches!(leaf, Err(ReadError::UnsafePath)));
         assert!(matches!(child, Err(ReadError::UnsafePath)));
+        assert!(matches!(registered_leaf, Err(ReadError::UnsafePath)));
+        assert!(matches!(registered_child, Err(ReadError::UnsafePath)));
         assert_eq!(
             std::fs::read(target.join("synthetic.exe")).unwrap(),
             b"SYNTHETIC_DATA"

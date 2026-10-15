@@ -2,6 +2,36 @@ use serde_json::Value;
 use std::process::Command;
 
 #[test]
+fn registered_metadata_help_and_invalid_combinations_are_redacted() {
+    let binary = env!("CARGO_BIN_EXE_codex-accounts-discovery");
+    let help = Command::new(binary).arg("--help").output().unwrap();
+    assert!(help.status.success());
+    assert!(String::from_utf8(help.stdout)
+        .unwrap()
+        .contains("--registered-metadata"));
+    for tail in [
+        vec![],
+        vec!["--candidate-home", "SYNTHETIC_SECRET_CANARY"],
+        vec!["--runtime-relative", "synthetic.exe"],
+    ] {
+        let mut args = vec!["--registered-metadata".to_owned()];
+        if !tail.is_empty() {
+            args.extend(["--candidate".into(), "a".repeat(64)]);
+        }
+        args.extend(tail.into_iter().map(str::to_owned));
+        let output = Command::new(binary).args(args).output().unwrap();
+        assert_eq!(output.status.code(), Some(2));
+        assert!(output.stderr.is_empty());
+        let text = String::from_utf8(output.stdout).unwrap();
+        assert!(!text.contains("SYNTHETIC"));
+        let report: Value = serde_json::from_str(&text).unwrap();
+        assert_eq!(report["error"], "E_USAGE");
+        assert_eq!(report["qualified"], false);
+        assert_eq!(report["credential_mutation_enabled"], false);
+    }
+}
+
+#[test]
 fn rejected_arguments_do_not_echo_paths_or_secret_canaries() {
     let output = Command::new(env!("CARGO_BIN_EXE_codex-accounts-discovery"))
         .args(["--qualified", "SYNTHETIC_SECRET_CANARY"])
