@@ -18,10 +18,20 @@ an unlocked root key in native memory for its vault lifetime; it never crosses U
 No environment variable, plaintext application database, renderer storage or credential
 export is an approved product credential source/sink.
 
-CI has a separate short-lived GitHub-issued token. Only the metadata-only retention
-workflow receives actions:write through GH_TOKEN for the duration of its process.
-It runs default-branch code, never downloaded artifacts or PR-selected code. This is
-CI API authorization, not a product credential. No long-lived PAT is required in CI.
+CI has a separate short-lived GitHub-issued token. The metadata-only retention job
+receives actions:write through GH_TOKEN. The Preview publisher receives contents:write
+and actions:read to publish verified successful owner/main artifacts. Both execute only
+default-branch code. Downloaded artifacts are bounded, parsed as data and never executed;
+the GitHub token is never forwarded to artifact storage. Publication precedes retention,
+and a failed replacement preserves the old release bytes. This is CI API authorization,
+not a product credential. No long-lived PAT or signing subscription is required.
+The Preview job alone has id-token:write. Pinned Cosign uses the ambient GitHub Actions
+OIDC provider directly; identity tokens are not passed through command arguments,
+saved by repository code, or logged. Its subprocess receives no GH_TOKEN/GITHUB_TOKEN.
+Public Sigstore/Fulcio/Rekor services receive the intended CI signing identity and
+artifact digest, never app account material. Signatures must verify against the exact
+artifact-retention.yml@refs/heads/main identity and GitHub OIDC issuer before promotion.
+This supplies consumer integrity verification, not Windows publisher trust.
 
 ## Cryptography
 
@@ -54,4 +64,5 @@ preserve interrupted state; no automated expiry of unresolved journals.
 
 Run blocking Trivy and OpenGrep checks plus review of changed secret/TLS paths. Passing
 scanners do not establish whole-product security. No account material is uploaded in CI.
-The artifact is unsigned and pre-1.0; source-controlled checks are not branch protection.
+The artifact has no Windows Authenticode signature and remains pre-1.0;
+Cosign adds explicit verification. Source-controlled checks are not branch protection.

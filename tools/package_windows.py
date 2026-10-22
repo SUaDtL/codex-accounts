@@ -49,6 +49,11 @@ def package(executable: Path, destination: Path) -> None:
     payload = destination / "codex-accounts-desktop.exe"
     shutil.copy2(executable, payload)
     shutil.copy2(ROOT / "Cargo.lock", destination / "Cargo.lock")
+    shutil.copy2(ROOT / "LICENSE", destination / "LICENSE")
+    # Bundle the corresponding committed source alongside every distributed binary.
+    with (destination / "source.tar.gz").open("wb") as stream:
+        subprocess.run(["git", "archive", "--format=tar.gz", "HEAD"], cwd=ROOT,
+                       stdout=stream, check=True, timeout=30)
     (destination / "SBOM.cdx.json").write_text(json.dumps(sbom(ROOT, version), indent=2) + "\n", encoding="utf-8")
     metadata = {"application": "Codex Accounts", "version": version, "platform": "windows-x86_64",
                 "kind": "unsigned-ci-artifact", "source_commit": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip(),
@@ -61,7 +66,10 @@ def package(executable: Path, destination: Path) -> None:
         "Windows x64, official Codex Desktop and WebView2 required.\n"
         "Close the older Accounts window before launching this executable.\n"
         "Existing saved accounts carry over. Keep Codex closed for account changes.\n"
-        "This is an unsigned CI build, not a signed release or installer.\n"
+        "This is an unsigned preview candidate, not a signed installer.\n"
+        "Windows may show an unknown-publisher or SmartScreen warning.\n"
+        "Licensed under AGPL-3.0-only; see LICENSE. Dependencies retain their licenses.\n"
+        "The exact committed source is included in source.tar.gz.\n"
         "Verify SHA256SUMS and consult BUILD.json for the source revision.\n"
         "SBOM.cdx.json inventories Cargo.lock, including build and other-target dependencies.\n"
         "Documentation: https://github.com/SUaDtL/codex-accounts\n", encoding="utf-8")
