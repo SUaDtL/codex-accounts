@@ -55,14 +55,20 @@ class StorageBoundary(unittest.TestCase):
         for p in CRATE.rglob('*'):
             self.assertNotIn(p.suffix, ['.bin','.cakp','.stage'])
 
+    def test_saving_current_account_requires_native_consent(self):
+        source = (CRATE/'src/native/lifecycle/operations.rs').read_text(encoding="utf-8")
+        start = source.index('pub fn capture_current(')
+        end = source.index('\n    /// Cold handoff', start)
+        self.assertIn('super::consent::capture(', source[start:end])
+
     def test_prior_dependency_reviews_cannot_be_rewritten(self):
         with tempfile.TemporaryDirectory() as t:
             root=Path(t)
-            review=json.loads((ROOT/'docs/ca-02b-dependencies.json').read_text(encoding="utf-8"))
-            files=[*review['manifest_sha256'],*review['predecessor_sha256'],'docs/ca-02b-dependencies.json','Cargo.lock']
+            review=json.loads((ROOT/'docs/ca-08-dependencies.json').read_text(encoding="utf-8"))
+            files=[*review['manifest_sha256'],*review['predecessor_sha256'],'docs/ca-08-dependencies.json','Cargo.lock']
             for p in files:
                 (root/p).parent.mkdir(parents=True,exist_ok=True);shutil.copyfile(ROOT/p,root/p)
-            self.assertEqual(check_dependencies.check(root)['reviewed_packages'],407)
+            self.assertEqual(check_dependencies.check(root)['reviewed_packages'],421)
             p=root/'docs/ca-03b-dependencies.json';p.write_bytes(p.read_bytes()+b'\n')
             with self.assertRaisesRegex(ValueError,'Prior review bytes'):
                 check_dependencies.check(root)

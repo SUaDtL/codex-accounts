@@ -17,8 +17,11 @@ use std::thread::JoinHandle;
 pub enum Intent {
     List,
     Open,
+    Unlock(zeroize::Zeroizing<String>),
     Create,
     Close,
+    Harden(zeroize::Zeroizing<String>),
+    Unharden,
     OpenCodex,
     Capture(String),
     Add(String, LoginCancellation),
@@ -44,6 +47,7 @@ pub struct Worker {
     busy: Arc<AtomicBool>,
     active: Arc<Mutex<Option<ActiveControl>>>,
     close_requested: AtomicBool,
+    hardened: Arc<AtomicBool>,
 }
 
 enum ActiveControl {
@@ -76,6 +80,8 @@ impl Drop for RequestGuard {
 impl Worker {
     pub fn start() -> std::io::Result<Self> {
         let (sender, receiver) = mpsc::sync_channel::<Request>(1);
+        let hardened = Arc::new(AtomicBool::new(false));
+        let worker_hardened = hardened.clone();
         let thread = std::thread::Builder::new()
             .name("account-vault".to_owned())
             .spawn(move || {
@@ -83,6 +89,13 @@ impl Worker {
                 let mut health: Option<metadata::Health> = None;
                 while let Ok(request) = receiver.recv() {
                     let response = execute(&mut vault, &mut health, request.intent);
+                    worker_hardened.store(
+                        vault.as_ref().is_some_and(|vault| {
+                            vault.protection()
+                                == codex_accounts_vault_storage::VaultProtection::Passphrase
+                        }),
+                        Ordering::Release,
+                    );
                     let _ = request.reply.send(response);
                 }
                 // Vault and its native lock are dropped on this owning thread.
@@ -93,6 +106,7 @@ impl Worker {
             busy: Arc::default(),
             active: Arc::default(),
             close_requested: AtomicBool::new(false),
+            hardened,
         })
     }
 
@@ -192,6 +206,10 @@ impl Worker {
         })
     }
 
+    pub fn locks_on_hide(&self) -> bool {
+        self.hardened.load(Ordering::Acquire)
+    }
+
     /// Keep the UI alive while the owned operation is reaped and its files are
     /// reconciled. Drop alone may be delayed by an outstanding command future.
     pub fn cancel_for_close(&self) -> bool {
@@ -232,12 +250,19 @@ fn execute(
     let mut diagnostics_exported = None;
     if !matches!(
         intent,
-        Intent::List | Intent::Open | Intent::OpenCodex | Intent::ExportDiagnostics
+        Intent::List
+            | Intent::Open
+            | Intent::Unlock(_)
+            | Intent::OpenCodex
+            | Intent::ExportDiagnostics
     ) {
         *health = None;
     }
     match intent {
         Intent::Open if vault.is_none() => *vault = Some(Vault::open().map_err(error_code)?),
+        Intent::Unlock(passphrase) if vault.is_none() => {
+            *vault = Some(Vault::open_with_passphrase(passphrase.as_bytes()).map_err(error_code)?);
+        }
         Intent::Create => {
             if vault.is_some() {
                 return Err("vault_exists");
@@ -245,7 +270,19 @@ fn execute(
             *vault = Some(Vault::create().map_err(error_code)?);
         }
         Intent::Close => *vault = None,
-        Intent::Open | Intent::List => {}
+        Intent::Harden(passphrase) => {
+            vault
+                .as_mut()
+                .ok_or("vault_not_open")?
+                .enable_passphrase(passphrase.as_bytes())
+                .map_err(error_code)?;
+        }
+        Intent::Unharden => vault
+            .as_mut()
+            .ok_or("vault_not_open")?
+            .disable_passphrase()
+            .map_err(error_code)?,
+        Intent::Open | Intent::Unlock(_) | Intent::List => {}
         Intent::OpenCodex => {
             vault
                 .as_ref()
@@ -404,6 +441,10 @@ fn snapshot(vault: &Vault, health: Option<&metadata::Health>) -> Result<ProfileL
         return Ok(ProfileList {
             state: VaultState::RecoveryRequired,
             vault_exists: Some(true),
+            protection: Some(match vault.protection() {
+                codex_accounts_vault_storage::VaultProtection::WindowsUser => "windows_user",
+                codex_accounts_vault_storage::VaultProtection::Passphrase => "passphrase",
+            }),
             last_known_active_profile: None,
             profiles: Vec::new(),
             operations: Vec::new(),
@@ -419,6 +460,10 @@ fn snapshot(vault: &Vault, health: Option<&metadata::Health>) -> Result<ProfileL
     }
     Ok(ProfileList {
         vault_exists: Some(true),
+        protection: Some(match vault.protection() {
+            codex_accounts_vault_storage::VaultProtection::WindowsUser => "windows_user",
+            codex_accounts_vault_storage::VaultProtection::Passphrase => "passphrase",
+        }),
         last_known_active_profile: vault
             .last_known_active_profile()?
             .map(|id| hex(id.to_bytes())),
@@ -537,6 +582,10 @@ fn error_code(error: StorageError) -> &'static str {
         StorageError::AccessDenied => "vault_access_denied",
         StorageError::UnsafePath => "vault_unsafe_path",
         StorageError::KeyUnavailable => "vault_key_unavailable",
+        StorageError::PassphraseRequired => "vault_passphrase_required",
+        StorageError::InvalidPassphrase => "vault_invalid_passphrase",
+        StorageError::ProtectionChangeUncertain => "vault_protection_uncertain",
+        StorageError::Cancelled => "vault_cancelled",
         StorageError::Corrupt => "vault_corrupt",
         StorageError::RecoveryRequired => "vault_recovery_required",
         StorageError::TemporaryCleanupRequired => "login_cleanup_required",
@@ -576,6 +625,7 @@ mod tests {
                 busy: Arc::new(AtomicBool::new(true)),
                 active: Arc::new(Mutex::new(Some(control))),
                 close_requested: AtomicBool::new(false),
+                hardened: Arc::new(AtomicBool::new(false)),
             };
             assert!(worker.cancel_for_close());
             assert_eq!(worker.action_status(), Ok("closing"));

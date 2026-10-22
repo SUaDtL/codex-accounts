@@ -7,6 +7,8 @@ let refreshing = false;
 let vaultBusy = false;
 let vaultState = "unopened";
 let vaultExists = null;
+let vaultProtection = null;
+let traySwitchPending = false;
 let loginPending = false;
 let loginCancelling = false;
 let switchPending = false;
@@ -25,7 +27,8 @@ let usageTimer = null;
 let usageBackoffUntil = 0;
 let displayedProfiles = [];
 let activeProfileId = null;
-const vaultControls = ["open-vault", "create-vault", "refresh-profiles", "close-vault", "recover-vault", "add-account"];
+let passphraseMode = null;
+const vaultControls = ["open-vault", "create-vault", "refresh-profiles", "close-vault", "recover-vault", "add-account", "harden-vault", "unharden-vault"];
 
 function updateControls() {
   refresh.disabled = vaultBusy || refreshing;
@@ -108,9 +111,13 @@ function renderProfiles(result) {
   const focusedProfile = document.activeElement?.closest?.(".account-row")?.dataset.profileId;
   vaultState = result.state;
   vaultExists = typeof result.vault_exists === "boolean" ? result.vault_exists : null;
+  vaultProtection = result.protection || null;
   const open = result.state === "open";
   const recovery = result.state === "recovery_required";
   const profiles = result.profiles.slice(0, 50);
+  byId("protection-message").textContent = vaultProtection === "passphrase" ? "Passphrase and Windows user" : "Windows user";
+  byId("harden-vault").hidden = !open || vaultProtection === "passphrase";
+  byId("unharden-vault").hidden = !open || vaultProtection !== "passphrase";
   byId("account-count").textContent = String(profiles.length);
   const active = open ? profiles.find((profile) => profile.id === result.last_known_active_profile) : null;
   renderActiveAccount(result.state, active);
@@ -360,6 +367,10 @@ const vaultErrors = Object.freeze({
   vault_access_denied: "Windows denied access to the protected vault.",
   vault_unsafe_path: "The vault location could not be opened safely.",
   vault_key_unavailable: "The vault encryption key is unavailable. Existing data has not been replaced.",
+  vault_passphrase_required: "Enter the passphrase to open this vault.",
+  vault_invalid_passphrase: "That passphrase could not open the vault.",
+  vault_protection_uncertain: "The protection change may have completed. Keep the passphrase, close the vault, and open it again to confirm.",
+  vault_cancelled: "The protection change was cancelled.",
   vault_corrupt: "The vault could not be authenticated. Existing data has not been replaced.",
   vault_recovery_required: "The vault needs recovery. Use the recovery controls below.",
   login_cleanup_required: "An interrupted sign-in still needs temporary-file cleanup. Quit Codex clients normally, then open this vault again. Keep the protected vault intact.",
@@ -409,7 +420,8 @@ const vaultErrors = Object.freeze({
   E_UNSUPPORTED_PLATFORM: "Account operations are supported on Windows x64 only.",
   E_DIAGNOSTICS_EXISTS: "A file already exists at the selected location. Export again and choose a new filename.",
   E_DIAGNOSTICS_WRITE: "Diagnostics could not be saved. Export again and choose a writable location.",
-  E_DIAGNOSTICS_DIALOG: "The native Save dialog is unavailable. Try exporting again after closing other dialogs."
+  E_DIAGNOSTICS_DIALOG: "The native Save dialog is unavailable. Try exporting again after closing other dialogs.",
+  E_USAGE_UNAVAILABLE: "Usage is unavailable for this account. Sign in again if the value stays unavailable."
 });
 
 function operationError(error) {
@@ -438,10 +450,10 @@ async function vaultCommand(command, args = {}, refreshUsageAfter = false) {
     ? "Keep Codex Accounts open. The fresh sign-in must match the selected account. If that account is currently installed, its sign-in will be repaired; otherwise the fresh session is saved in the vault."
     : "Keep Codex Accounts open. Your current Desktop account stays installed. The new sign-in is saved separately in your protected vault.";
   byId("switch-panel").hidden = !switchPending;
-  const mutating = ["capture_current", "add_account", "reauthenticate_profile", "switch_profile", "recover_switch", "recover_vault", "remove_profile", "rename_profile"].includes(command);
+  const mutating = ["capture_current", "add_account", "reauthenticate_profile", "switch_profile", "recover_switch", "recover_vault", "remove_profile", "rename_profile", "set_vault_passphrase", "remove_vault_passphrase"].includes(command);
   const message = loginPending ? "Preparing official sign-in. Complete sign-in in your browser when it opens, then wait here while the account is saved."
     : mutating ? "Applying account changes..." : ({
-      open_vault: "Opening vault...", create_vault: "Creating vault...",
+      open_vault: "Opening vault...", unlock_vault: "Opening vault...", create_vault: "Creating vault...",
       close_vault: "Closing vault...", list_profiles: "Refreshing accounts...",
       open_codex: "Opening Codex...", export_sanitized_diagnostics: "Exporting report..."
     }[command] || "Working...");
@@ -453,6 +465,7 @@ async function vaultCommand(command, args = {}, refreshUsageAfter = false) {
   activity.textContent = message;
   const invoke = window.__TAURI__?.core?.invoke;
   let succeeded = false;
+  let passphraseFollowup = null;
   try {
     if (!invoke) throw "vault_connection_unavailable";
     // The epoch already stopped the cycle. Join only its in-flight request so
@@ -468,6 +481,8 @@ async function vaultCommand(command, args = {}, refreshUsageAfter = false) {
     if (command === "create_vault" && result.state === "open") {
       byId("vault-message").textContent = "Vault created.";
     }
+    if (command === "set_vault_passphrase") byId("vault-message").textContent = "Passphrase protection added.";
+    if (command === "remove_vault_passphrase") byId("vault-message").textContent = "Passphrase protection removed.";
     if (command === "open_codex") byId("vault-message").textContent = "Codex opened.";
     if (command === "capture_current") byId("vault-message").textContent = "Current account saved.";
     if (command === "add_account") byId("vault-message").textContent = "Account added. Choose Switch to use it.";
@@ -494,6 +509,9 @@ async function vaultCommand(command, args = {}, refreshUsageAfter = false) {
     activity.textContent = ["list_profiles", "open_vault", "close_vault"].includes(command) ? "" : byId("vault-message").textContent;
     succeeded = true;
   } catch (error) {
+    if (error === "vault_passphrase_required" || error === "vault_invalid_passphrase") {
+      passphraseFollowup = {mode: "unlock", retry: error === "vault_invalid_passphrase"};
+    }
     // Read status once after a failed action, never retry a mutation.
     let refreshed = false;
     if (invoke && command !== "list_profiles") {
@@ -569,6 +587,7 @@ async function vaultCommand(command, args = {}, refreshUsageAfter = false) {
       const message = activity.textContent;
       setTimeout(() => { if (!vaultBusy && activity.textContent === message) activity.textContent = ""; }, 5000);
     }
+    if (passphraseFollowup) openPassphraseDialog(passphraseFollowup.mode, passphraseFollowup.retry);
   }
 }
 
@@ -650,6 +669,57 @@ function closeDialog() {
   byId("action-dialog").close();
   if (dialogTrigger?.isConnected) dialogTrigger.focus();
 }
+
+function openPassphraseDialog(mode, retry = false) {
+  if (vaultBusy) return;
+  passphraseMode = mode;
+  const harden = mode === "harden";
+  byId("passphrase-heading").textContent = harden ? "Add passphrase" : "Open vault";
+  byId("passphrase-detail").textContent = harden
+    ? "Use at least 12 characters. You will need it whenever you open the vault."
+    : "Enter your vault passphrase.";
+  byId("passphrase-confirm-field").hidden = !harden;
+  byId("vault-passphrase-confirm").required = harden;
+  byId("vault-passphrase").autocomplete = harden ? "new-password" : "current-password";
+  byId("vault-passphrase").value = "";
+  byId("vault-passphrase-confirm").value = "";
+  byId("passphrase-error").textContent = retry ? "That passphrase did not open the vault." : "";
+  byId("passphrase-dialog").showModal();
+  byId("vault-passphrase").focus();
+}
+
+function closePassphraseDialog() {
+  passphraseMode = null;
+  byId("vault-passphrase").value = "";
+  byId("vault-passphrase-confirm").value = "";
+  if (byId("passphrase-dialog").open) byId("passphrase-dialog").close();
+}
+
+byId("passphrase-cancel").addEventListener("click", closePassphraseDialog);
+byId("passphrase-dialog").addEventListener("cancel", () => {
+  passphraseMode = null;
+  byId("vault-passphrase").value = "";
+  byId("vault-passphrase-confirm").value = "";
+});
+byId("passphrase-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  if (!passphraseMode || vaultBusy) return;
+  let passphrase = byId("vault-passphrase").value;
+  const bytes = new TextEncoder().encode(passphrase).length;
+  if (bytes < 12 || bytes > 1024) {
+    byId("passphrase-error").textContent = "Use 12 to 256 characters.";
+    return;
+  }
+  if (passphraseMode === "harden" && passphrase !== byId("vault-passphrase-confirm").value) {
+    byId("passphrase-error").textContent = "The passphrases do not match.";
+    return;
+  }
+  const command = passphraseMode === "harden" ? "set_vault_passphrase" : "unlock_vault";
+  const args = {passphrase};
+  closePassphraseDialog();
+  try { await vaultCommand(command, args); }
+  finally { args.passphrase = ""; passphrase = ""; }
+});
 
 byId("dialog-cancel").addEventListener("click", closeDialog);
 byId("action-dialog").addEventListener("cancel", () => { pendingAction = null; });
@@ -770,6 +840,8 @@ refresh.addEventListener("click", refreshInventory);
 byId("open-vault").addEventListener("click", () => void vaultCommand("open_vault"));
 byId("create-vault").addEventListener("click", () => void vaultCommand("create_vault"));
 byId("close-vault").addEventListener("click", () => void vaultCommand("close_vault"));
+byId("harden-vault").addEventListener("click", () => openPassphraseDialog("harden"));
+byId("unharden-vault").addEventListener("click", () => confirmAction("Remove passphrase?", "The vault will stay protected for your Windows user.", "Remove passphrase", "remove_vault_passphrase"));
 byId("refresh-profiles").addEventListener("click", () => void vaultCommand("list_profiles", {}, true));
 // Native details menus remain keyboard accessible and dismiss like utility menus.
 document.addEventListener("pointerdown", (event) => {
@@ -780,10 +852,59 @@ document.addEventListener("keydown", (event) => {
   const menu = document.querySelector(".account-menu[open]");
   if (menu) { menu.open = false; menu.querySelector("summary").focus(); event.preventDefault(); }
 });
+function clearAccountViewForHide() {
+  closePassphraseDialog();
+  if (["open", "recovery_required"].includes(vaultState)) {
+    renderProfiles({
+      state: "unopened",
+      vault_exists: vaultExists,
+      protection: null,
+      last_known_active_profile: null,
+      profiles: [],
+      operations: [],
+      recovery: "none",
+      health: null
+    });
+  }
+}
 document.addEventListener("visibilitychange", () => {
   pauseUsagePolling();
-  if (!document.hidden) { refreshQuotaDisplays(); updateControls(); scheduleUsagePolling(); }
+  if (document.hidden) clearAccountViewForHide();
+  else if (!traySwitchPending) void vaultCommand("list_profiles", {}, true);
 });
+window.addEventListener("blur", closePassphraseDialog);
+const eventApi = window.__TAURI__?.event;
+if (eventApi?.listen) {
+  void eventApi.listen("window-hiding", clearAccountViewForHide);
+  void eventApi.listen("vault-state-changed", ({payload}) => renderProfiles(payload));
+  void eventApi.listen("vault-lock-failed", () => {
+    const message = "Finish the current account action, then close the window again.";
+    byId("vault-message").textContent = message;
+    activity.textContent = message;
+  });
+  void eventApi.listen("tray-switch-profile", async ({payload}) => {
+    traySwitchPending = true;
+    try {
+      const invoke = window.__TAURI__?.core?.invoke;
+      if (!invoke) return;
+      const profiles = await invoke("list_profiles");
+      renderProfiles(profiles);
+      const profile = displayedProfiles.find((candidate) => candidate.id === payload);
+      if (!profile || profile.id === activeProfileId || vaultState !== "open") return;
+      confirmAction(
+        `Switch to ${profile.label}?`,
+        "Close Codex before switching accounts.",
+        "Switch",
+        "switch_profile",
+        {profileId: profile.id}
+      );
+    } catch {
+      byId("vault-message").textContent = "Refresh accounts, then try again.";
+    } finally {
+      traySwitchPending = false;
+    }
+  });
+}
 setInterval(() => {
   if (!document.hidden) { refreshQuotaDisplays(); updateControls(); checkUsageResets(); }
 }, 30000);

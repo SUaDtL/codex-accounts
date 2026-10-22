@@ -7,7 +7,7 @@
   "interfaces": {
     "crates/core/src/lib.rs": "47e99644151a0cd407151fbc46a1f518efe08e717b65d16ecb535a97262b0b39",
     "crates/platform/src/lib.rs": "71a741688484a953a6be5d0e759631b64081981681983fe7045b31bae467cfd4",
-    "crates/vault-crypto/src/keys.rs": "f3f0746562f24b6d3c797554558541bc57575289d251cf83cc3fb51fca53f11c",
+    "crates/vault-crypto/src/keys.rs": "ab78e19e5ad40775cc547cc55cc7a7d665777faf6cf7d38f598b076460df7e80",
     "crates/vault-storage/src/engine.rs": "4b80c26c652339a165322ee477c977e20ee901f8ede7c78c658a5c4226b0c35a",
     "crates/vault-storage/src/coordinator.rs": "0393b87f73a337b64e20fa9974aa504e5be785a14a1ea3049d3aaecc61ad47b2",
     "crates/vault-storage/src/journal.rs": "d22ec4d8034aa9ead9763b2610b4d940fbfa7f11f5ff6491cddd0b5bd2cfd98d",
@@ -15,6 +15,6 @@
     "crates/vault-storage/src/stage_repair.rs": "51afbed9afa0d943a98246adb29df6b57f88ae6d8e71986277ccc494a5b45ae8"
   },
   "predecessor_sha256": "04302afd28debed0a7f845ec1b634458dac6b4f5d522f5c8c2d205f586c65b5b",
-  "review_sha256": "b6e75f61fddba07a77dc79ff04f42c95232a91436a0474b036b35c6bedbe81c7",
+  "review_sha256": "6247a5c4fc4d141db989324f8bd7616df61c2ba3e669c4bb89da23bb86950f65",
   "source_state": "reviewed-working-tree"
 }

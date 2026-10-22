@@ -1,28 +1,19 @@
 # Documentation
 
-## Using and building the app
+## Start here
 
-| Document | Purpose |
+| Document | What it covers |
 | --- | --- |
-| [User guide](user-guide.md) | First use, account controls, monitoring and recovery. |
-| [Contributing](../CONTRIBUTING.md) | Build prerequisites and focused development checks. |
-| [Architecture](architecture.md) | Native components and credential boundaries. |
-| [CI and build delivery](ci.md) | Jobs, security checks, downloads and retention. |
-| [Security](../SECURITY.md) | Protection limits and safe reporting. |
-| [Security tooling](../security/README.md) | Scanner pins, rules and update policy. |
-| [Dependency policy](dependency-policy.md) | Current acquisition policy and dated reviews. |
+| [User guide](user-guide.md) | Saving, switching, monitoring, tray behavior, and recovery |
+| [Verify a download](verify-download.md) | Checksums and Cosign verification |
+| [Security](../SECURITY.md) | Security boundaries and reporting a vulnerability |
+| [Contributing](../CONTRIBUTING.md) | Local setup, checks, and pull requests |
+| [Architecture](architecture.md) | Native components and credential boundaries |
+| [CI and releases](ci.md) | Build jobs, security scans, artifacts, and retention |
+| [Dependency policy](dependency-policy.md) | Dependency and acquisition rules |
 
-## Maintainer references
+## Engineering archive
 
-The [normative specification](local-codex-switcher-spec.html) and
-[implementation plan](implementation-plan.html) are the maintained requirements and roadmap.
-Use `python tools/spec_index.py list`, `show SYMBOL` and `check` to inspect stable symbols.
+The [product specification](local-codex-switcher-spec.html) and [implementation plan](implementation-plan.html) record the design that led to the current application. Validation packets, CA-numbered records, static previews, and platform preparation notes preserve dated engineering evidence.
 
-[Validation](validation.md) records dated evidence and its limits.
-[Session handoff](maintainers/session-handoff.md), [next packet](next-pr.md) and
-[open asks](maintainers/open-asks.md) preserve continuation state. Refresh live GitHub
-refs and checks before relying on historical revision or CI claims.
-
-The CA-numbered packets, source preparation records, static preview and macOS preparation
-notes are historical or scoped engineering evidence. They do not supersede current user
-instructions or mean the working Windows application is still a disabled preview.
+These files are useful when changing sensitive behavior, but they are not required reading for normal use or a first contribution. Current instructions in the README, user guide, contributing guide, and security policy take priority over old snapshots and handoff notes.

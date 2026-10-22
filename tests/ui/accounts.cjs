@@ -43,6 +43,7 @@ const root=process.cwd(),out=path.join(root,'reports/ui/accounts');fs.mkdirSync(
  assert(await page.locator('#dialog-submit').evaluate(e=>{const r=e.getBoundingClientRect();return r.top>=0 && r.bottom<=innerHeight;}));
  await page.screenshot({path:path.join(out,'add-narrow.png')});
  await page.getByRole('button',{name:'Cancel',exact:true}).click();await page.setViewportSize({width:940,height:360});
+ await page.evaluate(()=>openPassphraseDialog('harden'));await page.locator('#vault-passphrase').fill('synthetic passphrase');await page.evaluate(()=>window.dispatchEvent(new Event('blur')));assert.equal(await page.locator('#vault-passphrase').inputValue(),'');assert(!(await page.locator('#passphrase-dialog').evaluate(dialog=>dialog.open)));
  await page.evaluate(()=>{const cell=document.querySelector('[data-quota-profile="b"]');renderQuotaPair(cell,{checked_at:1,available_resets:0},null);});
  assert(!(await page.locator('[data-quota-profile="b"]').textContent()).includes('reset available'));
  await page.evaluate(()=>{const cell=document.querySelector('[data-quota-profile="b"]');renderQuotaPair(cell,{checked_at:1,available_resets:2},'Sign in again');});

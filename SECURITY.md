@@ -1,7 +1,8 @@
 # Security
 
 Codex Accounts manages authentication material locally. Inactive accounts are encrypted
-in a per-user vault, with key protection provided by Windows DPAPI. The installed Codex
+in a per-user vault, with key protection provided by Windows DPAPI. Users can optionally
+add an Argon2id passphrase wrapper around the DPAPI-protected root. The installed Codex
 file credential remains in Codex's expected format, including plaintext where required.
 Vault encryption is not protection against same-user malware, administrators or a
 compromised operating system.
@@ -45,3 +46,6 @@ repository-owned rules against Rust, JavaScript and Python. Scanners are version
 SHA-256-pinned; actions are commit-pinned. A scheduled scan checks new advisories daily.
 These controls reduce risk but do not prove an executable is vulnerability-free.
 See [security tooling](security/README.md) and [CI](docs/ci.md) for scope and limitations.
+
+The design rationale and accepted limits are described in
+[Why the security model works this way](docs/security-model.md).

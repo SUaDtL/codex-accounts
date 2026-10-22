@@ -1,0 +1,63 @@
+{
+  "schema": "codex-accounts/dependency-review/v1",
+  "packet": "CA-08",
+  "status": "source_reviewed",
+  "predecessor_sha256": {
+    "docs/ca-02-dependencies.json": "ceaffa36b058d90fef01df21634610938aa47755edd8b6a15f7adc7257f6cc5f",
+    "docs/ca-03b-dependencies.json": "0071f27fcdd6dd9aba04aee06e9cb75b2177be7fae7999980f05a19c31563c7d",
+    "docs/ca-03c-dependencies.json": "81d4e34248cfc53265d0e087d287c5a5a00f3b793202bedf967b4796146bdf15",
+    "docs/ca-04a-dependencies.json": "3c613e03a967aff766c1bd2e34d1a00d31cfcb02210bb360289d30ffe7efdd56",
+    "docs/ca-04b-dependencies.json": "ffdec4f5fbaecb40d4992964702e212fd5c5c112cfa3791566168f16463dfae9",
+    "docs/ca-05b-dependencies.json": "af5b9762e7d36ce15bd824edb8354defb95d21570e5818ddf7ea86813fa88f0d",
+    "docs/ca-05f-dependencies.json": "118e242fe79f17eaf98ec7ad86e02c2818aaebf2bf7881653e1756074b4c478c",
+    "docs/ca-06b-dependencies.json": "2fb9f49d7b9e9ddb2d27f562ce6f45f506c5313fc3f8b6836f76b33201a456b1",
+    "docs/ca-02b-dependencies.json": "c87f0dec8db21a6a736a406b0b0b91f7df00cc94263689440521f949cff41299",
+    "docs/ca-07-dependencies.json": "8fe0269c4afc09c552968734fc5abcdc42c80c3f983d71867bba58d0322d0448"
+  },
+  "lock_sha256": "559b8f1b1b053989674f51e264a916995f46b1c512d0f1614024b869893a4078",
+  "manifest_sha256": {
+    "Cargo.toml": "b46b5d4972aa0170f0eba4ed9dea4ed210fbab54f98e58fec5c50c6e80739612",
+    "crates/desktop-app/Cargo.toml": "d0617f18228341194c00bcf4f92112035dbd5bef2402327305bb93693aa5b164",
+    "crates/shell-preparation/Cargo.toml": "43e88f57060bde60c69cdfe26dde808aa0a703839e8108dc786829a4b12aeef8",
+    "crates/core/Cargo.toml": "209eb46bb52c2f4fb11dcd931e4274927be939318b5e3f5fdbe881de96b8788e",
+    "crates/platform/Cargo.toml": "1e17352db76845b523486cf2cd6c844e7fb06582e25a2df8f437f7b5675f3846",
+    "crates/runtime/Cargo.toml": "86142472d83f926a551ca95b6830305652ddb16d71230dbcd1d264dd452b8df1",
+    "crates/discovery/Cargo.toml": "6368321869390d7c823bce6890eaf6152702b99f73913464c06c75b67d136a55",
+    "crates/vault/Cargo.toml": "dc5ac46edfd6dbea78ad8588cf124cbd602958d49537624cccbf207ef4cd1229",
+    "crates/vault-crypto/Cargo.toml": "3cd017e63008c492c5fd37c9834daa50d330be927ba0f0142ffb84a59dabe440",
+    "crates/vault-storage/Cargo.toml": "c3bc1873bc6a697567cdcbe6d52a7556dbdb4e375e2ed223b410c7270689a0b5"
+  },
+  "packages": [
+    {"name":"argon2","version":"0.6.0","source":"registry+https://github.com/rust-lang/crates.io-index","checksum":"134c52ddac6d63c576bef8168db10c83c49c26444ecbc68060fef078925a901c","license":"MIT OR Apache-2.0","repository":"https://github.com/RustCrypto/password-hashes","rust_version":"1.85"},
+    {"name":"base64ct","version":"1.8.3","source":"registry+https://github.com/rust-lang/crates.io-index","checksum":"2af50177e190e07a26ab74f8b1efbfe2ef87da2116221318cb1c2e82baf7de06","license":"Apache-2.0 OR MIT","repository":"https://github.com/RustCrypto/formats","rust_version":"1.85"},
+    {"name":"blake2","version":"0.11.0","source":"registry+https://github.com/rust-lang/crates.io-index","checksum":"5b5d4d889834ee8ecfc0f8426ad30faf7cdcb10f741a8e6d7224d95325479f6f","license":"MIT OR Apache-2.0","repository":"https://github.com/RustCrypto/hashes","rust_version":"1.85"},
+    {"name":"block-buffer","version":"0.12.1","source":"registry+https://github.com/rust-lang/crates.io-index","checksum":"d2f6c7dbe95a6ed67ad9f18e57daf93a2f034c524b99fd2b76d18fdfeb6660aa","license":"MIT OR Apache-2.0","repository":"https://github.com/RustCrypto/utils","rust_version":"1.85"},
+    {"name":"cmov","version":"0.5.4","source":"registry+https://github.com/rust-lang/crates.io-index","checksum":"0c9ea0ac24bc397ab3c98583a3c9ba74fa56b09a4449bbe172b9b1ddb016027a","license":"Apache-2.0 OR MIT","repository":"https://github.com/RustCrypto/utils","rust_version":"1.85"},
+    {"name":"cpufeatures","version":"0.3.1","source":"registry+https://github.com/rust-lang/crates.io-index","checksum":"5ca28b0ae3115b884660db4118d803791fd6756b6e88f39c0f3f7859060d7566","license":"MIT OR Apache-2.0","repository":"https://github.com/RustCrypto/utils","rust_version":"1.85"},
+    {"name":"crypto-common","version":"0.2.2","source":"registry+https://github.com/rust-lang/crates.io-index","checksum":"ce6e4c961d6cd6c9a86db418387425e8bdeaf05b3c8bc1411e6dca4c252f1453","license":"MIT OR Apache-2.0","repository":"https://github.com/RustCrypto/traits","rust_version":"1.85"},
+    {"name":"ctutils","version":"0.4.2","source":"registry+https://github.com/rust-lang/crates.io-index","checksum":"7d5515a3834141de9eafb9717ad39eea8247b5674e6066c404e8c4b365d2a29e","license":"Apache-2.0 OR MIT","repository":"https://github.com/RustCrypto/utils","rust_version":"1.85"},
+    {"name":"digest","version":"0.11.3","source":"registry+https://github.com/rust-lang/crates.io-index","checksum":"f1dd6dbb5841937940781866fa1281a1ff7bd3bf827091440879f9994983d5c2","license":"MIT OR Apache-2.0","repository":"https://github.com/RustCrypto/traits","rust_version":"1.85"},
+    {"name":"hybrid-array","version":"0.4.15","source":"registry+https://github.com/rust-lang/crates.io-index","checksum":"27f864f10dfb56725ce5ce5472bc52252c8f93a4ab86327122cebf62c5f59a17","license":"MIT OR Apache-2.0","repository":"https://github.com/RustCrypto/hybrid-array","rust_version":"1.85"}
+  ],
+  "external_counts": {"retained":411,"added":10,"total":421,"removed":0},
+  "feature_scope": {
+    "manifest":"crates/vault-crypto/Cargo.toml",
+    "dependency":"argon2",
+    "version":"0.6.0",
+    "features":["zeroize"],
+    "purpose":"Derive a key from an optional strong passphrase for the DPAPI-protected vault root."
+  },
+  "source_review": {
+    "date":"2026-10-22",
+    "archives_match_registry_checksums":true,
+    "licenses_compatible_with_agpl_3_only":true,
+    "critical_or_high_advisories":[],
+    "build_scripts":"None in the ten added packages.",
+    "memory_handling":"Argon2 uses a caller-owned 64 MiB block matrix which is explicitly zeroized on return and error.",
+    "result":"PASS"
+  },
+  "remaining_validation":[
+    "Run the repository Trivy scan against the resolved lockfile.",
+    "Exercise add, close, wrong-passphrase refusal, reopen and remove-passphrase on Windows."
+  ]
+}

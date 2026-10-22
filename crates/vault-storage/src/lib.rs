@@ -95,6 +95,9 @@ impl From<StorageError> for OperationError {
             StorageError::ExternalChange | StorageError::StaleParent => "E_EXTERNAL_CHANGE",
             StorageError::UnsafePath | StorageError::AccessDenied => "E_STORAGE_UNSAFE",
             StorageError::KeyUnavailable => "E_KEY_UNAVAILABLE",
+            StorageError::PassphraseRequired => "E_PASSPHRASE_REQUIRED",
+            StorageError::InvalidPassphrase => "E_INVALID_PASSPHRASE",
+            StorageError::Cancelled => "E_CANCELLED",
             StorageError::InputLimit => "E_STORAGE_LIMIT",
             StorageError::IdentityMismatch => "E_IDENTITY_MISMATCH",
             StorageError::UnsupportedPlatform => "E_UNSUPPORTED_PLATFORM",
@@ -127,6 +130,10 @@ pub enum StorageError {
     Io,
     Corrupt,
     KeyUnavailable,
+    PassphraseRequired,
+    InvalidPassphrase,
+    ProtectionChangeUncertain,
+    Cancelled,
     RecoveryRequired,
     TemporaryCleanupRequired,
     ExternalChange,
@@ -220,6 +227,14 @@ pub struct Vault {
     root: codex_accounts_vault_crypto::RootKey,
     #[cfg(all(windows, target_arch = "x86_64"))]
     storage: engine::Storage<native::Disk>,
+    #[cfg(all(windows, target_arch = "x86_64"))]
+    protection: VaultProtection,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum VaultProtection {
+    WindowsUser,
+    Passphrase,
 }
 impl std::fmt::Debug for Vault {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -243,7 +258,7 @@ impl Vault {
     pub fn open() -> Result<Self, StorageError> {
         #[cfg(all(windows, target_arch = "x86_64"))]
         {
-            native::open_vault(false)
+            native::open_vault(false, None)
         }
         #[cfg(not(all(windows, target_arch = "x86_64")))]
         {
@@ -254,16 +269,40 @@ impl Vault {
     pub fn create() -> Result<Self, StorageError> {
         #[cfg(all(windows, target_arch = "x86_64"))]
         {
-            native::open_vault(true)
+            native::open_vault(true, None)
         }
         #[cfg(not(all(windows, target_arch = "x86_64")))]
         {
             Err(StorageError::UnsupportedPlatform)
         }
     }
+
+    pub fn open_with_passphrase(passphrase: &[u8]) -> Result<Self, StorageError> {
+        #[cfg(all(windows, target_arch = "x86_64"))]
+        {
+            native::open_vault(false, Some(passphrase))
+        }
+        #[cfg(not(all(windows, target_arch = "x86_64")))]
+        {
+            let _ = passphrase;
+            Err(StorageError::UnsupportedPlatform)
+        }
+    }
 }
 #[cfg(all(windows, target_arch = "x86_64"))]
 impl Vault {
+    pub fn protection(&self) -> VaultProtection {
+        self.protection
+    }
+
+    pub fn enable_passphrase(&mut self, passphrase: &[u8]) -> Result<(), StorageError> {
+        native::set_vault_passphrase(self, Some(passphrase))
+    }
+
+    pub fn disable_passphrase(&mut self) -> Result<(), StorageError> {
+        native::set_vault_passphrase(self, None)
+    }
+
     /// Metadata only. This does not start, resume, or authorize a switch.
     pub fn profiles(&self) -> Result<Vec<ProfileSummary>, StorageError> {
         self.storage.profiles()

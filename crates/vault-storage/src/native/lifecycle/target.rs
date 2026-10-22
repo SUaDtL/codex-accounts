@@ -252,7 +252,7 @@ impl Target {
             };
         }
         self.point()?;
-        let mut file = open_file(
+        let mut file = open_temporary_file(
             &path,
             GENERIC_READ | GENERIC_WRITE | DELETE | READ_CONTROL,
             0,

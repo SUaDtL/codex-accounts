@@ -10,7 +10,7 @@ import unittest
 from tools import check_dependencies as checker
 
 ROOT = Path(__file__).resolve().parents[2]
-REVIEW = 'docs/ca-02b-dependencies.json'
+REVIEW = 'docs/ca-08-dependencies.json'
 
 
 class Ca06Dependencies(unittest.TestCase):
@@ -33,8 +33,8 @@ class Ca06Dependencies(unittest.TestCase):
     def write_review(self, review):
         (self.root / REVIEW).write_text(json.dumps(review), encoding='utf8')
 
-    def test_exact_407_packages_and_application_manifests_pass(self):
-        self.assertEqual(checker.check(self.root)['reviewed_packages'], 407)
+    def test_exact_421_packages_and_application_manifests_pass(self):
+        self.assertEqual(checker.check(self.root)['reviewed_packages'], 421)
         self.assertEqual(len(self.review['manifest_sha256']), 10)
 
     def test_each_historical_review_cannot_be_laundered_with_a_new_claimed_hash(self):
@@ -48,7 +48,7 @@ class Ca06Dependencies(unittest.TestCase):
                 self.write_review(changed)
                 self.refuse('Prior review bytes')
                 path.write_bytes(original)
-        self.assertEqual(len(self.review['predecessor_sha256']), 8)
+        self.assertEqual(len(self.review['predecessor_sha256']), 10)
 
     def test_ca06_review_status_packages_features_and_manifest_claims_remain_immutable(self):
         for mutate in [
@@ -67,8 +67,8 @@ class Ca06Dependencies(unittest.TestCase):
     def test_duplicate_json_keys_never_collapse(self):
         path = self.root / REVIEW
         text = path.read_text(encoding='utf8')
-        path.write_text(text.replace('"packet": "CA-02B",',
-                        '"packet": "CA-02B", "packet": "CA-02B",'), encoding='utf8')
+        path.write_text(text.replace('"packet": "CA-08",',
+                        '"packet": "CA-08", "packet": "CA-08",'), encoding='utf8')
         self.refuse('Duplicate review key')
 
     def test_lock_checksum_source_version_and_duplicate_entries_refuse(self):

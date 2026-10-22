@@ -7,8 +7,8 @@ import tomllib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-REVIEW = 'docs/ca-02b-dependencies.json'
-REVIEW_SHA256 = 'c87f0dec8db21a6a736a406b0b0b91f7df00cc94263689440521f949cff41299'
+REVIEW = 'docs/ca-08-dependencies.json'
+REVIEW_SHA256 = '52c5f461748e79d40b650c8aa7429433eefcfcb335f6335a567afcae32b266b4'
 HISTORICAL_REVIEW_SHA256 = {
     'docs/ca-02-dependencies.json': 'ceaffa36b058d90fef01df21634610938aa47755edd8b6a15f7adc7257f6cc5f',
     'docs/ca-03b-dependencies.json': '0071f27fcdd6dd9aba04aee06e9cb75b2177be7fae7999980f05a19c31563c7d',
@@ -18,6 +18,8 @@ HISTORICAL_REVIEW_SHA256 = {
     'docs/ca-05b-dependencies.json': 'af5b9762e7d36ce15bd824edb8354defb95d21570e5818ddf7ea86813fa88f0d',
     'docs/ca-05f-dependencies.json': '118e242fe79f17eaf98ec7ad86e02c2818aaebf2bf7881653e1756074b4c478c',
     'docs/ca-06b-dependencies.json': '2fb9f49d7b9e9ddb2d27f562ce6f45f506c5313fc3f8b6836f76b33201a456b1',
+    'docs/ca-02b-dependencies.json': 'c87f0dec8db21a6a736a406b0b0b91f7df00cc94263689440521f949cff41299',
+    'docs/ca-07-dependencies.json': '8fe0269c4afc09c552968734fc5abcdc42c80c3f983d71867bba58d0322d0448',
 }
 
 
@@ -102,16 +104,16 @@ def check(root: Path = ROOT) -> dict[str, int | str]:
     if review['predecessor_sha256'] != HISTORICAL_REVIEW_SHA256:
         raise ValueError('Prior review set changed')
     if (review['schema'] != 'codex-accounts/dependency-review/v1'
-            or review['packet'] != 'CA-02B' or review['status'] != 'source_reviewed'):
+            or review['packet'] != 'CA-08' or review['status'] != 'source_reviewed'):
         raise ValueError('Unknown or incomplete dependency review')
     actual_packages = [p for p in lock['package'] if 'source' in p]
     expected_packages = prior_packages + review['packages']
     actual, expected = package_map(actual_packages), package_map(expected_packages)
-    # Historical packages are additive contributions; retained identities are
-    # equality assertions only and must never be concatenated a second time.
-    if (len(original_packages) != 58 or len(prior_packages) != 407 or review['packages'] != []
-            or len(expected) != 407 or actual != expected
-            or package_map(review['retained_package_identity']) != package_map(prior_packages)):
+    # Historical packages are additive contributions. This review records only
+    # the ten packages introduced by optional Argon2id vault hardening.
+    if (len(original_packages) != 58 or len(prior_packages) != 411
+            or len(review['packages']) != 10 or len(expected) != 421
+            or actual != expected):
         raise ValueError('Dependency graph changed; update the scoped review')
     if hashlib.sha256(lock_bytes).hexdigest() != review['lock_sha256']:
         raise ValueError('Reviewed lock bytes changed')

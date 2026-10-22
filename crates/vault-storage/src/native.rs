@@ -6,7 +6,7 @@ use crate::{
     records::*,
     StorageError, Vault,
 };
-use codex_accounts_vault_crypto::{ProtectedRootKey, RootKey};
+use codex_accounts_vault_crypto::{ProtectedRootKey, RootKey, RootProtection};
 use std::{
     ffi::{c_void, OsString},
     fs::File,
@@ -838,12 +838,39 @@ fn open_file(
     let name = wide(path)?;
     open_file_encoded(&name, access, share, creation, security)
 }
+fn open_temporary_file(
+    path: &Path,
+    access: u32,
+    share: u32,
+    creation: u32,
+    security: Option<&Security>,
+) -> Result<File, StorageError> {
+    let name = wide(path)?;
+    open_file_encoded_flags(
+        &name,
+        access,
+        share,
+        creation,
+        security,
+        FILE_ATTRIBUTE_TEMPORARY,
+    )
+}
 fn open_file_encoded(
     name: &[u16],
     access: u32,
     share: u32,
     creation: u32,
     security: Option<&Security>,
+) -> Result<File, StorageError> {
+    open_file_encoded_flags(name, access, share, creation, security, 0)
+}
+fn open_file_encoded_flags(
+    name: &[u16],
+    access: u32,
+    share: u32,
+    creation: u32,
+    security: Option<&Security>,
+    extra_flags: u32,
 ) -> Result<File, StorageError> {
     let attrs = security.map(Security::attrs);
     // SAFETY: arguments and descriptor stay live for the synchronous call. No
@@ -858,7 +885,8 @@ fn open_file_encoded(
             FILE_FLAG_OPEN_REPARSE_POINT
                 | FILE_FLAG_BACKUP_SEMANTICS
                 | FILE_FLAG_OPEN_NO_RECALL
-                | FILE_FLAG_WRITE_THROUGH,
+                | FILE_FLAG_WRITE_THROUGH
+                | extra_flags,
             null_mut(),
         )
     };
@@ -896,6 +924,38 @@ pub(crate) struct Disk {
     layout: Option<LayoutState>,
     bound_security: Option<Vec<Vec<u8>>>,
     recognized: Option<Vec<RecognizedLeaf>>,
+    admitted_root: Option<AdmittedRoot>,
+}
+
+struct AdmittedRoot {
+    root: RootKey,
+    protection: crate::VaultProtection,
+    current: Vec<u8>,
+    staged: Option<Vec<u8>>,
+}
+
+/// Store recognition does not own the separately authenticated root-wrapper
+/// transaction. Admission verifies that staged wrapper first, then this view
+/// hides only that known artifact from the store inventory check.
+struct AdmittedFiles<'a>(&'a Disk);
+impl Files for AdmittedFiles<'_> {
+    fn read(&self, name: &str) -> Result<Option<Vec<u8>>, StorageError> {
+        self.0.read(name)
+    }
+    fn stage(&mut self, _: &str, _: &[u8]) -> Result<(), StorageError> {
+        Err(StorageError::InvalidData)
+    }
+    fn publish(&mut self, _: &str, _: Option<&[u8]>, _: &[u8]) -> Result<(), StorageError> {
+        Err(StorageError::InvalidData)
+    }
+    fn erase(&mut self, _: &str, _: &[u8]) -> Result<(), StorageError> {
+        Err(StorageError::InvalidData)
+    }
+    fn list(&self) -> Result<Vec<String>, StorageError> {
+        let mut names = self.0.list()?;
+        names.retain(|name| name != "key.cakp.stage");
+        Ok(names)
+    }
 }
 
 struct BoundAncestor {
@@ -1302,11 +1362,12 @@ impl Disk {
         let security = Security::new()?;
         let namespace = known_location_namespace(paths);
         let lock = LocationLock::acquire(&security, &namespace)?;
-        Self::at_known_location_locked(paths, create, security, lock)
+        Self::at_known_location_locked(paths, create, None, security, lock)
     }
     fn at_known_location_locked(
         paths: &[PathBuf; 2],
         create: bool,
+        passphrase: Option<&[u8]>,
         security: Security,
         lock: LocationLock,
     ) -> Result<Self, StorageError> {
@@ -1435,12 +1496,7 @@ impl Disk {
         if !create {
             // Lock admission happened before even key eligibility classification.
             let wrapped = match disk.read("key.cakp")? {
-                Some(bytes) => {
-                    if disk.read("key.cakp.stage")?.is_some() {
-                        return Err(StorageError::ExternalChange);
-                    }
-                    bytes
-                }
+                Some(bytes) => bytes,
                 None => {
                     disk.validate()?;
                     let names = directory_names(&disk.root)?;
@@ -1451,15 +1507,31 @@ impl Disk {
                     return Err(StorageError::RecoveryRequired);
                 }
             };
-            let root = RootKey::unprotect(
-                &ProtectedRootKey::from_bytes(&wrapped)
-                    .map_err(|_| StorageError::KeyUnavailable)?,
-            )
-            .map_err(|_| StorageError::KeyUnavailable)?;
+            let current =
+                ProtectedRootKey::from_bytes(&wrapped).map_err(|_| StorageError::KeyUnavailable)?;
+            let (current_root, current_protection) = unlock_root(&current, passphrase)?;
+            let staged = disk.read("key.cakp.stage")?;
+            let (root, protection) = if let Some(bytes) = staged.as_deref() {
+                let staged_key = ProtectedRootKey::from_bytes(bytes)
+                    .map_err(|_| StorageError::KeyUnavailable)?;
+                let (staged_root, staged_protection) = unlock_root(&staged_key, passphrase)?;
+                if current_root.identifier() != staged_root.identifier() {
+                    return Err(StorageError::ExternalChange);
+                }
+                (staged_root, staged_protection)
+            } else {
+                (current_root, current_protection)
+            };
             let snapshot = disk.recognition_snapshot()?;
-            crate::engine::recognize_existing(&disk, &root)?;
+            crate::engine::recognize_existing(&AdmittedFiles(&disk), &root)?;
             disk.recognized = Some(snapshot);
             disk.check_recognized()?;
+            disk.admitted_root = Some(AdmittedRoot {
+                root,
+                protection,
+                current: wrapped,
+                staged,
+            });
         }
         Ok(disk)
     }
@@ -1619,6 +1691,7 @@ impl Disk {
             layout: None,
             bound_security: None,
             recognized: None,
+            admitted_root: None,
         })
     }
     fn validate(&self) -> Result<(), StorageError> {
@@ -1830,6 +1903,10 @@ impl Files for Disk {
         if self.read(name)?.as_deref() != expected {
             return Err(StorageError::ExternalChange);
         }
+        #[cfg(test)]
+        if name == "key.cakp" {
+            tests::creation_checkpoint(7)?;
+        }
         if unsafe {
             SetFileInformationByHandle(
                 source.as_raw_handle(),
@@ -1840,6 +1917,10 @@ impl Files for Disk {
         } == 0
         {
             return Err(last());
+        }
+        #[cfg(test)]
+        if name == "key.cakp" {
+            tests::creation_checkpoint(6)?;
         }
         self.validate()?;
         source.sync_all().map_err(|_| StorageError::Io)?;
@@ -1911,23 +1992,91 @@ impl Files for Disk {
     }
 }
 
-fn bootstrap(disk: &mut impl Files, create: bool) -> Result<RootKey, StorageError> {
+fn unlock_root(
+    wrapped: &ProtectedRootKey,
+    passphrase: Option<&[u8]>,
+) -> Result<(RootKey, crate::VaultProtection), StorageError> {
+    match wrapped.protection() {
+        RootProtection::WindowsUser => Ok((
+            RootKey::unprotect(wrapped).map_err(|_| StorageError::KeyUnavailable)?,
+            crate::VaultProtection::WindowsUser,
+        )),
+        RootProtection::Passphrase => {
+            let passphrase = passphrase.ok_or(StorageError::PassphraseRequired)?;
+            Ok((
+                RootKey::unprotect_with_passphrase(wrapped, passphrase)
+                    .map_err(|_| StorageError::InvalidPassphrase)?,
+                crate::VaultProtection::Passphrase,
+            ))
+        }
+    }
+}
+
+#[cfg(test)]
+fn bootstrap_protected(
+    disk: &mut impl Files,
+    create: bool,
+    passphrase: Option<&[u8]>,
+) -> Result<(RootKey, crate::VaultProtection), StorageError> {
+    bootstrap_protected_with_admission(disk, create, passphrase, None)
+}
+
+fn bootstrap_protected_with_admission(
+    disk: &mut impl Files,
+    create: bool,
+    passphrase: Option<&[u8]>,
+    admitted: Option<AdmittedRoot>,
+) -> Result<(RootKey, crate::VaultProtection), StorageError> {
     if create {
         if disk.list()?.iter().any(|n| n != "lock") {
             return Err(StorageError::AlreadyExists);
         }
         let root = RootKey::generate().map_err(|_| StorageError::KeyUnavailable)?;
-        let wrapped = root.protect().map_err(|_| StorageError::KeyUnavailable)?;
+        let (wrapped, protection) = if let Some(passphrase) = passphrase {
+            (
+                root.protect_with_passphrase(passphrase)
+                    .map_err(|_| StorageError::KeyUnavailable)?,
+                crate::VaultProtection::Passphrase,
+            )
+        } else {
+            (
+                root.protect().map_err(|_| StorageError::KeyUnavailable)?,
+                crate::VaultProtection::WindowsUser,
+            )
+        };
         disk.stage("key.cakp", wrapped.as_bytes())?;
         disk.publish("key.cakp", None, wrapped.as_bytes())?;
         #[cfg(test)]
         tests::creation_checkpoint(4)?;
-        return Ok(root);
+        return Ok((root, protection));
+    }
+    if let Some(admitted) = admitted {
+        let current_check = disk.read("key.cakp")?;
+        let stage_check = disk.read("key.cakp.stage")?;
+        if current_check.as_deref() != Some(admitted.current.as_slice())
+            || stage_check != admitted.staged
+        {
+            return Err(StorageError::ExternalChange);
+        }
+        if let Some(stage) = admitted.staged.as_deref() {
+            disk.publish("key.cakp", Some(&admitted.current), stage)?;
+        }
+        return Ok((admitted.root, admitted.protection));
     }
     let wrapped = match disk.read("key.cakp")? {
         Some(b) => {
-            if disk.read("key.cakp.stage")?.is_some() {
-                return Err(StorageError::ExternalChange);
+            if let Some(stage) = disk.read("key.cakp.stage")? {
+                let current =
+                    ProtectedRootKey::from_bytes(&b).map_err(|_| StorageError::KeyUnavailable)?;
+                let staged = ProtectedRootKey::from_bytes(&stage)
+                    .map_err(|_| StorageError::KeyUnavailable)?;
+                let (current_root, _) = unlock_root(&current, passphrase)?;
+                let (staged_root, staged_protection) = unlock_root(&staged, passphrase)?;
+                if current_root.identifier() != staged_root.identifier() {
+                    return Err(StorageError::ExternalChange);
+                }
+                disk.publish("key.cakp", Some(&b), &stage)?;
+                return Ok((staged_root, staged_protection));
             }
             b
         }
@@ -1946,15 +2095,20 @@ fn bootstrap(disk: &mut impl Files, create: bool) -> Result<RootKey, StorageErro
                 .ok_or(StorageError::KeyUnavailable)?;
             let parsed =
                 ProtectedRootKey::from_bytes(&stage).map_err(|_| StorageError::KeyUnavailable)?;
-            RootKey::unprotect(&parsed).map_err(|_| StorageError::KeyUnavailable)?;
+            unlock_root(&parsed, passphrase)?;
             disk.publish("key.cakp", None, &stage)?;
             stage
         }
     };
-    RootKey::unprotect(
+    unlock_root(
         &ProtectedRootKey::from_bytes(&wrapped).map_err(|_| StorageError::KeyUnavailable)?,
+        passphrase,
     )
-    .map_err(|_| StorageError::KeyUnavailable)
+}
+
+#[cfg(test)]
+fn bootstrap(disk: &mut impl Files, create: bool) -> Result<RootKey, StorageError> {
+    Ok(bootstrap_protected(disk, create, None)?.0)
 }
 pub(crate) fn vault_exists() -> Result<bool, StorageError> {
     let paths = fixed_locations()?;
@@ -1972,8 +2126,9 @@ pub(crate) fn vault_exists() -> Result<bool, StorageError> {
     Ok(false)
 }
 
-pub(crate) fn open_vault(create: bool) -> Result<Vault, StorageError> {
-    let mut vault = open_vault_dispatch(create, b"application", fixed_locations)?;
+pub(crate) fn open_vault(create: bool, passphrase: Option<&[u8]>) -> Result<Vault, StorageError> {
+    let mut vault =
+        open_vault_dispatch_with_passphrase(create, passphrase, b"application", fixed_locations)?;
     // Only the production entry point touches the fixed login scratch namespace.
     // Fixture opening must never clean real application state.
     lifecycle::login::cleanup_abandoned(&vault.root)?;
@@ -1984,28 +2139,128 @@ pub(crate) fn open_vault(create: bool) -> Result<Vault, StorageError> {
     }
     Ok(vault)
 }
-fn open_vault_dispatch(
+fn open_vault_dispatch_with_passphrase(
     create: bool,
+    passphrase: Option<&[u8]>,
     namespace: &[u8],
     resolve: impl FnOnce() -> Result<[PathBuf; 2], StorageError>,
 ) -> Result<Vault, StorageError> {
     let security = Security::new()?;
     let lock = LocationLock::acquire(&security, namespace)?;
     let paths = resolve()?;
-    finish_vault(
-        Disk::at_known_location_locked(&paths, create, security, lock)?,
+    finish_vault_with_passphrase(
+        Disk::at_known_location_locked(&paths, create, passphrase, security, lock)?,
         create,
+        passphrase,
     )
 }
-fn finish_vault(mut disk: Disk, create: bool) -> Result<Vault, StorageError> {
-    let root = bootstrap(&mut disk, create)?;
+
+#[cfg(test)]
+fn open_vault_dispatch(
+    create: bool,
+    namespace: &[u8],
+    resolve: impl FnOnce() -> Result<[PathBuf; 2], StorageError>,
+) -> Result<Vault, StorageError> {
+    open_vault_dispatch_with_passphrase(create, None, namespace, resolve)
+}
+
+fn finish_vault_with_passphrase(
+    mut disk: Disk,
+    create: bool,
+    passphrase: Option<&[u8]>,
+) -> Result<Vault, StorageError> {
+    let admitted = disk.admitted_root.take();
+    let (root, protection) =
+        bootstrap_protected_with_admission(&mut disk, create, passphrase, admitted)?;
     disk.check_recognized()?;
     let storage = if create {
         Storage::create(disk, &root)?
     } else {
         Storage::open(disk, &root)?
     };
-    Ok(Vault { root, storage })
+    Ok(Vault {
+        root,
+        storage,
+        protection,
+    })
+}
+
+#[cfg(test)]
+fn finish_vault(disk: Disk, create: bool) -> Result<Vault, StorageError> {
+    finish_vault_with_passphrase(disk, create, None)
+}
+
+pub(crate) fn set_vault_passphrase(
+    vault: &mut Vault,
+    passphrase: Option<&[u8]>,
+) -> Result<(), StorageError> {
+    vault.storage.ensure_operation_idle()?;
+    if vault.recovery() != crate::Recovery::Clean {
+        return Err(StorageError::RecoveryRequired);
+    }
+    let next_protection = if passphrase.is_some() {
+        crate::VaultProtection::Passphrase
+    } else {
+        crate::VaultProtection::WindowsUser
+    };
+    if vault.protection == next_protection {
+        return Ok(());
+    }
+    lifecycle::confirm_vault_hardening(passphrase.is_some())?;
+    replace_vault_protection(vault, passphrase, next_protection)
+}
+
+fn replace_vault_protection(
+    vault: &mut Vault,
+    passphrase: Option<&[u8]>,
+    next_protection: crate::VaultProtection,
+) -> Result<(), StorageError> {
+    let current = vault
+        .storage
+        .disk
+        .read("key.cakp")?
+        .ok_or(StorageError::KeyUnavailable)?;
+    let next = if let Some(passphrase) = passphrase {
+        vault
+            .root
+            .protect_with_passphrase(passphrase)
+            .map_err(|_| StorageError::KeyUnavailable)?
+    } else {
+        vault
+            .root
+            .protect()
+            .map_err(|_| StorageError::KeyUnavailable)?
+    };
+    vault.storage.disk.stage("key.cakp", next.as_bytes())?;
+    let published = vault
+        .storage
+        .disk
+        .publish("key.cakp", Some(&current), next.as_bytes());
+    match published {
+        Ok(()) => {
+            vault.protection = next_protection;
+            Ok(())
+        }
+        Err(error) => match vault.storage.disk.read("key.cakp") {
+            Ok(Some(observed)) if observed == next.as_bytes() => {
+                vault.protection = next_protection;
+                Err(StorageError::ProtectionChangeUncertain)
+            }
+            Ok(Some(observed)) if observed == current => {
+                match vault.storage.disk.read("key.cakp.stage") {
+                    Ok(Some(staged)) if staged == next.as_bytes() => {
+                        match vault.storage.disk.erase("key.cakp.stage", &staged) {
+                            Ok(()) => Err(error),
+                            Err(_) => Err(StorageError::ProtectionChangeUncertain),
+                        }
+                    }
+                    Ok(None) => Err(error),
+                    _ => Err(StorageError::ProtectionChangeUncertain),
+                }
+            }
+            _ => Err(StorageError::ProtectionChangeUncertain),
+        },
+    }
 }
 
 #[cfg(test)]

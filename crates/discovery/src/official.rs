@@ -71,10 +71,20 @@ fn desktop_relative(executables: &[String]) -> Result<&'static str, ReadError> {
     selected.ok_or(ReadError::InvalidMetadata)
 }
 
+fn official_signature(observation: crate::native::CachedSignature) -> bool {
+    matches!(
+        observation,
+        crate::native::CachedSignature::AcceptedLeaf(bytes) if !bytes.is_empty()
+    )
+}
+
 fn image(root: &RegisteredRoot, package: &Path, relative: &str) -> Result<Image, ReadError> {
     let mut handle = root.open_relative(relative)?;
     if handle.current_user_can_replace_or_modify()? {
         return Err(ReadError::UnsafePath);
+    }
+    if !official_signature(handle.cached_signature()) {
+        return Err(ReadError::InvalidMetadata);
     }
     let path = package.join(relative);
     let identity = binary_identity(&mut handle)?;
@@ -273,6 +283,17 @@ fn package_contained_core(archive: &mut ReadHandle) -> Result<bool, ReadError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn lifecycle_images_require_cached_authenticode_with_a_signer() {
+        use crate::native::CachedSignature;
+        assert!(official_signature(CachedSignature::AcceptedLeaf(vec![1])));
+        assert!(!official_signature(CachedSignature::NotEstablished));
+        assert!(!official_signature(
+            CachedSignature::AcceptedSignerUnavailable
+        ));
+        assert!(!official_signature(CachedSignature::CleanupFailed));
+    }
+
     #[test]
     fn provisioning_matches_desktop_optional_object_semantics() {
         assert!(provisioning_object(b"{}"));

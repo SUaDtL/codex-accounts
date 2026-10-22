@@ -9,19 +9,23 @@
   "unchanged_interfaces": {
     "crates/core/src/lib.rs": "47e99644151a0cd407151fbc46a1f518efe08e717b65d16ecb535a97262b0b39",
     "crates/platform/src/lib.rs": "71a741688484a953a6be5d0e759631b64081981681983fe7045b31bae467cfd4",
-    "crates/vault-crypto/src/keys.rs": "f3f0746562f24b6d3c797554558541bc57575289d251cf83cc3fb51fca53f11c",
     "crates/vault-storage/src/lifecycle_model.rs": "50fca4ea0099793a36322ca9ad689778e692df56331850959b3982b9c4525060",
     "crates/vault-storage/src/stage_repair.rs": "51afbed9afa0d943a98246adb29df6b57f88ae6d8e71986277ccc494a5b45ae8"
   },
   "assessment": {
-    "reason": "The Windows integration adds private native capture, login, switch and recovery operations. Current-account reauthentication atomically publishes fresh credentials, a non-promoting source generation and an authenticated same-profile journal. This is a source assessment of the working tree, not macOS execution or owner release acceptance. Private engine modules now provide read-only sanitized diagnostics. They add no macOS native behavior or credential writes. Source refresh 2026-10-22: engine current-account metadata is in current.rs; pruning returns early only when no terminal journal, old generation or garbage is eligible. This avoids an empty transaction without retiring pending recovery. Hosted portable Clippy found an unused Windows-only re-export; StagingRepair now exports only for Windows or tests. This changes no coordinator behavior or native authority.",
+    "reason": "The Windows integration adds private native capture, login, switch and recovery operations. This source refresh also adds an optional Argon2id wrapper around the Windows DPAPI-protected vault root. The portable root-key format can parse the hardened envelope, but opening it still requires the Windows-only DPAPI step. This is source assessment, not macOS execution or release acceptance.",
     "recognition": "RecognitionFiles borrows Files, forwards read/list and returns InvalidData for stage/publish/erase. recognize_existing performs no bootstrap, publication or Storage::open. A torn stage requires an authenticated current anchor; a valid staged first control may anchor recognition.",
     "authentication": "Existing root-bound open_state authenticates controls. Staged predecessor digest and checked sequence are validated; authenticated references select registry contexts and verify registry data. Existing interrupted_control checks complete permitted inventory before later opening; undeclared new references remain refusals.",
     "opening_recovery": "Ordinary switches retain strict distinct-profile/latest-reference rules. The private reauthentication entry point requires matching account/workspace and exact current bytes. Same-profile journals never restore old credentials: cancellation after atomic publication retains pending forward recovery; authenticated rejected fresh credentials become terminal NeedsLogin only after helper exit and staging cleanup. Source captures do not replace the fresh profile generation. Native runtime policy is checked again after browser login before installation; native helper ownership and exit remain mandatory. Native same-profile Finish authenticates exact source/target before a configuration helper, always reaps and preserves the matching journal branch before writes. Persisted MayRun intent permits prior owned-helper target refresh capture before comparison; other changed bytes refuse. Policy failure leaves recovery pending.",
-    "formats": "Existing encrypted envelope and root-key encodings remain. Journal phase NeedsLogin is appended, and authenticated same-profile journals require distinct generation references with no restoration intent. Older readers refuse these states. The bounded encrypted control metadata list grows from two to three entries for source manifest, target manifest and registry in one atomic publication; resource plaintext never enters inline metadata. Five other fixed shared interfaces and historical review records retain their bindings.",
-    "limits": "macOS native behavior NOT RUN; independent source/security/auth-crypto acceptance remains pending. Source hashes and this assessment grant no owner acceptance, official runtime schema or Desktop/Q0-Q5 qualification. Windows exclusive sharing cannot be inferred from macOS advisory locking. Exact SDK/bindings, authorized host, two-user, durability, process/helper behavior and platform adapters remain unestablished; no Keychain, credentials or native macOS operation is introduced."
+    "formats": "The root-key container retains version 1 and adds algorithm 2 for an Argon2id-derived XChaCha20-Poly1305 wrapper around the existing algorithm 1 DPAPI blob. Salt, nonce and fixed bounded KDF parameters are authenticated. Algorithm 1 remains readable without migration. Journal formats are unchanged by this refresh.",
+    "limits": "macOS native behavior NOT RUN. Source hashes and this assessment grant no owner acceptance or native qualification. The hardened wrapper does not introduce Keychain support, credentials, account operations or a macOS fallback."
   },
   "changed_sources": [
+    {
+      "path": "crates/vault-crypto/src/keys.rs",
+      "before_sha256": "f3f0746562f24b6d3c797554558541bc57575289d251cf83cc3fb51fca53f11c",
+      "after_sha256": "ab78e19e5ad40775cc547cc55cc7a7d665777faf6cf7d38f598b076460df7e80"
+    },
     {
       "path": "crates/vault-storage/src/engine.rs",
       "before_sha256": "7398a315ccaebc1642e156a0a9195a08c0978463087f3252ddafa0d9e5ab3258",

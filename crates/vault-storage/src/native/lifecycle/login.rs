@@ -349,12 +349,80 @@ fn protocol(
 fn approved_url(url: &str) -> bool {
     // Official codex-rs/login/src/server.rs DEFAULT_ISSUER and authorize path.
     // No shell command line or caller-supplied authority is constructed.
-    url.len() <= 16384
-        && url.starts_with("https://auth.openai.com/oauth/authorize?")
-        && url.len() > "https://auth.openai.com/oauth/authorize?".len()
-        && url
+    const PREFIX: &str = "https://auth.openai.com/oauth/authorize?";
+    if url.len() > 16384
+        || !url.starts_with(PREFIX)
+        || url.len() == PREFIX.len()
+        || !url
             .bytes()
             .all(|byte| byte.is_ascii_graphic() && !matches!(byte, b'\\' | b'"' | b'\'' | b'#'))
+    {
+        return false;
+    }
+    let mut names = std::collections::BTreeSet::new();
+    let mut redirect = false;
+    for pair in url[PREFIX.len()..].split('&') {
+        let Some((raw_name, raw_value)) = pair.split_once('=') else {
+            return false;
+        };
+        let Some(name) = decode_query(raw_name) else {
+            return false;
+        };
+        if name.is_empty() || !names.insert(name.clone()) {
+            return false;
+        }
+        if name == "redirect_uri" {
+            redirect = approved_redirect(raw_value);
+            if !redirect {
+                return false;
+            }
+        }
+    }
+    redirect
+}
+
+fn decode_query(value: &str) -> Option<String> {
+    let bytes = value.as_bytes();
+    let mut decoded = Vec::with_capacity(bytes.len());
+    let mut index = 0;
+    while index < bytes.len() {
+        if bytes[index] == b'%' {
+            let high = char::from(bytes.get(index + 1).copied()?).to_digit(16)?;
+            let low = char::from(bytes.get(index + 2).copied()?).to_digit(16)?;
+            decoded.push((high << 4 | low) as u8);
+            index += 3;
+        } else {
+            decoded.push(if bytes[index] == b'+' {
+                b' '
+            } else {
+                bytes[index]
+            });
+            index += 1;
+        }
+    }
+    String::from_utf8(decoded).ok()
+}
+
+fn approved_redirect(value: &str) -> bool {
+    let Some(value) = decode_query(value) else {
+        return false;
+    };
+    let Some(rest) = value.strip_prefix("http://") else {
+        return false;
+    };
+    let Some((authority, path)) = rest.split_once('/') else {
+        return false;
+    };
+    if path != "auth/callback" {
+        return false;
+    }
+    let Some((host, port)) = authority.rsplit_once(':') else {
+        return false;
+    };
+    matches!(host, "127.0.0.1" | "localhost")
+        && !port.is_empty()
+        && port.bytes().all(|byte| byte.is_ascii_digit())
+        && port.parse::<u16>().is_ok_and(|port| port != 0)
 }
 fn open_browser(url: &str) -> Result<(), OperationError> {
     if !approved_url(url) {
@@ -785,7 +853,11 @@ mod tests {
         let mut disk = Disk::at(&sandbox.0, true).unwrap();
         let root = bootstrap(&mut disk, true).unwrap();
         let storage = Storage::create(disk, &root).unwrap();
-        let mut vault = Vault { root, storage };
+        let mut vault = Vault {
+            root,
+            storage,
+            protection: crate::VaultProtection::WindowsUser,
+        };
         let capture = |subject: &str, value: &[u8]| {
             let slot = codex_accounts_vault::ResourceId::new(0).unwrap();
             crate::Capture::new(
@@ -844,7 +916,7 @@ mod tests {
     }
     #[test]
     fn browser_authority_is_fixed_and_never_accepts_shell_or_redirect_schemes() {
-        assert!(approved_url("https://auth.openai.com/oauth/authorize?state=SYNTHETIC&redirect_uri=http%3A%2F%2Flocalhost%3A1455"));
+        assert!(approved_url("https://auth.openai.com/oauth/authorize?state=SYNTHETIC&redirect_uri=http%3A%2F%2F127.0.0.1%3A1455%2Fauth%2Fcallback"));
         for url in [
             "http://auth.openai.com/oauth/authorize?x=1",
             "https://auth.openai.com.evil.invalid/oauth/authorize?x=1",
@@ -852,6 +924,9 @@ mod tests {
             "file:///C:/example",
             "https://auth.openai.com/oauth/authorize?x=1\n",
             "https://auth.openai.com/oauth/authorize?x=1#fragment",
+            "https://auth.openai.com/oauth/authorize?redirect_uri=https%3A%2F%2Fattacker.invalid%2Fcb",
+            "https://auth.openai.com/oauth/authorize?redirect_uri=http%3A%2F%2F127.0.0.1%3A1455%2Fother",
+            "https://auth.openai.com/oauth/authorize?redirect_uri=http%3A%2F%2F127.0.0.1%3A1455%2Fauth%2Fcallback&redirect_uri=https%3A%2F%2Fattacker.invalid%2Fcb",
         ] {
             assert!(!approved_url(url));
         }

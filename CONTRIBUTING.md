@@ -1,66 +1,88 @@
 # Contributing
 
-Use Rust **1.90.0**, Python **3.11+** and Git. Building the desktop app also requires
-Windows x64, Visual Studio C++ Build Tools, the Windows SDK and WebView2.
-Node/npm are needed only for browser checks, not for running or building the embedded UI.
+Codex Accounts is a Windows Rust application with an embedded HTML, CSS, and JavaScript interface. Small, focused pull requests are easiest to review.
 
-Read [AGENTS.md](AGENTS.md) and the relevant specification symbols before changing
-credential or recovery behavior. Keep unrelated work intact. Do not use real account
-material in tests, logs, screenshots, commits or CI.
+Never use real credentials, account identifiers, authentication URLs, or personal screenshots in tests, logs, commits, or CI.
 
-## Setup and focused checks
+## Development setup
 
-```console
+Install:
+
+- Rust 1.90.0
+- Python 3.11 or newer
+- Visual Studio C++ Build Tools and the Windows SDK
+- Microsoft Edge WebView2
+- Git
+
+Node is only needed for browser-based interface checks.
+
+Start by checking the pinned dependencies:
+
+\`\`\`console
 python tools/check_dependencies.py
 cargo fetch --locked
+\`\`\`
+
+Build or run the desktop app:
+
+\`\`\`console
+cargo build -p codex-accounts-desktop --locked --offline
+cargo run -p codex-accounts-desktop --locked --offline
+\`\`\`
+
+Close an older Codex Accounts process before starting a new build.
+
+## Checks
+
+Run the smallest useful check while working. Before opening a pull request, run the checks that cover the files you changed.
+
+Rust changes:
+
+\`\`\`console
 cargo fmt --all -- --check
 cargo test -p codex-accounts-desktop --locked --offline
 cargo clippy --workspace --all-targets --locked --offline -- -D warnings
-python tools/spec_index.py check
-python -m unittest discover -s tests/python
-```
+\`\`\`
 
-Run the affected crate or Python module while iterating. Full platform/profile coverage
-belongs in CI. Native storage changes additionally need the named Windows fixture tests:
+Native storage or process changes:
 
-```console
+\`\`\`console
 python tools/check_windows_process.py
 python tools/ci_workspace_tests.py debug
 python tools/run_native_tests.py debug
-```
+\`\`\`
 
-`run_native_tests.py` accepts `debug` or `release`; omitting the argument runs both.
-It uses owned synthetic fixtures and verifies actual named executions. Do not replace
-these with an aggregate zero-test success.
+Interface changes:
 
-## UI and security checks
-
-```console
+\`\`\`console
 npm ci --ignore-scripts --no-audit --no-fund
 node node_modules/playwright/cli.js install chromium
 npm run test:ui
-python tools/security_scan.py trivy
-python tools/security_scan.py opengrep
-```
+\`\`\`
 
-UI tests serve the real bundled assets with synthetic IPC. They cover compact layouts,
-account controls, usage visibility and recovery presentation, not real authentication.
-Screenshots go into ignored `reports/ui/`. Security tools download exact checksum-verified
-upstream binaries into ignored `.ci-tools/`; see [tooling policy](security/README.md).
+Repository checks:
 
-## Changes and review
+\`\`\`console
+python tools/spec_index.py check
+python -m unittest discover -s tests/python
+\`\`\`
 
-Keep external versions exact and update their lockfiles and dependency review records.
-Do not relax certificate checks, log credentials, introduce remote renderer content,
-or bypass compatibility checks to make a test pass. A failing check needs a diagnosis.
+CI runs the full set of platform, dependency, UI, and security checks. See [CI and releases](docs/ci.md) for the job layout.
 
-PRs should explain the resulting behavior, focused local evidence and remaining limits.
-CI builds a downloadable Windows candidate and must pass before merge. Opening a PR
-does not authorize merging or signing. Successful main builds update the unsigned
-Preview automatically. Product versions remain in the 0.x series until the owner
-explicitly chooses otherwise.
+## Dependency changes
 
-Documentation lives in [docs](docs/README.md). Keep current guidance separate from dated
-historical evidence. Do not copy locally generated `.review-evidence`, account files or
-build outputs into a commit. The owner selected AGPL-3.0-only; see [LICENSE](LICENSE).
-Preserve third-party notices and licenses when modifying or redistributing their code.
+Keep external versions exact. Update the relevant lockfile and dependency review record in the same pull request. Do not relax certificate checks or replace a checksum-verified download with an unverified installer.
+
+The project uses Trivy and OpenGrep in CI. Scanner versions and rules are documented in [security tooling](security/README.md).
+
+## Pull requests
+
+Describe the behavior that changed, the checks you ran, and any limit a reviewer should know about. Keep generated account data, build outputs, local review evidence, and unrelated work out of the commit.
+
+All changes go through a pull request. Required CI must pass on the current head before merge. Successful builds from \`main\` update the unsigned rolling Preview release.
+
+The project stays in the 0.x version range until the owner explicitly chooses a 1.0 release.
+
+## License
+
+Contributions are accepted under [GNU AGPL version 3 only](LICENSE). Preserve third-party notices and licenses when changing or redistributing dependencies.

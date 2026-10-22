@@ -74,8 +74,8 @@ class DependencyReviewTests(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.root = Path(self.tmp.name)
-        manifest = json.loads((ROOT / 'docs/ca-02b-dependencies.json').read_text())
-        paths = list(manifest['manifest_sha256']) + list(manifest['predecessor_sha256']) + ['Cargo.lock', 'docs/ca-02b-dependencies.json']
+        manifest = json.loads((ROOT / 'docs/ca-08-dependencies.json').read_text())
+        paths = list(manifest['manifest_sha256']) + list(manifest['predecessor_sha256']) + ['Cargo.lock', 'docs/ca-08-dependencies.json']
         for relative in paths:
             target = self.root / relative
             target.parent.mkdir(parents=True, exist_ok=True)
@@ -83,12 +83,12 @@ class DependencyReviewTests(unittest.TestCase):
         self.review = manifest
 
     def fail_with(self, review):
-        (self.root / 'docs/ca-02b-dependencies.json').write_text(json.dumps(review))
+        (self.root / 'docs/ca-08-dependencies.json').write_text(json.dumps(review))
         with self.assertRaises(ValueError):
             check_dependencies.check(self.root)
 
     def test_current_exact_review_passes(self):
-        self.assertEqual(check_dependencies.check(self.root)['reviewed_packages'], 407)
+        self.assertEqual(check_dependencies.check(self.root)['reviewed_packages'], 421)
 
     def test_unreviewed_or_wrong_lock_refuses(self):
         review = copy.deepcopy(self.review)
@@ -148,7 +148,7 @@ class DependencyReviewTests(unittest.TestCase):
                     f'{package} = {{ version = "={version}", features = ["{feature}"] }}'))
                 review = copy.deepcopy(self.review)
                 review['manifest_sha256'][relative] = hashlib.sha256(path.read_bytes()).hexdigest()
-                (self.root / 'docs/ca-02b-dependencies.json').write_text(json.dumps(review))
+                (self.root / 'docs/ca-08-dependencies.json').write_text(json.dumps(review))
                 with self.assertRaisesRegex(ValueError, 'Runtime dependency boundary'):
                     check_dependencies.check(self.root)
 

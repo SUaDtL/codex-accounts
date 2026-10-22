@@ -1,0 +1,103 @@
+{
+  "schema": "codex-accounts/dependency-review/v1",
+  "packet": "CA-07",
+  "status": "source_reviewed",
+  "predecessor_sha256": {
+    "docs/ca-02-dependencies.json": "ceaffa36b058d90fef01df21634610938aa47755edd8b6a15f7adc7257f6cc5f",
+    "docs/ca-03b-dependencies.json": "0071f27fcdd6dd9aba04aee06e9cb75b2177be7fae7999980f05a19c31563c7d",
+    "docs/ca-03c-dependencies.json": "81d4e34248cfc53265d0e087d287c5a5a00f3b793202bedf967b4796146bdf15",
+    "docs/ca-04a-dependencies.json": "3c613e03a967aff766c1bd2e34d1a00d31cfcb02210bb360289d30ffe7efdd56",
+    "docs/ca-04b-dependencies.json": "ffdec4f5fbaecb40d4992964702e212fd5c5c112cfa3791566168f16463dfae9",
+    "docs/ca-05b-dependencies.json": "af5b9762e7d36ce15bd824edb8354defb95d21570e5818ddf7ea86813fa88f0d",
+    "docs/ca-05f-dependencies.json": "118e242fe79f17eaf98ec7ad86e02c2818aaebf2bf7881653e1756074b4c478c",
+    "docs/ca-06b-dependencies.json": "2fb9f49d7b9e9ddb2d27f562ce6f45f506c5313fc3f8b6836f76b33201a456b1",
+    "docs/ca-02b-dependencies.json": "c87f0dec8db21a6a736a406b0b0b91f7df00cc94263689440521f949cff41299"
+  },
+  "lock_sha256": "357dc5cf12506c554a48738eb274740810c60b840076e1e1f0e522548e9560b8",
+  "manifest_sha256": {
+    "Cargo.toml": "b46b5d4972aa0170f0eba4ed9dea4ed210fbab54f98e58fec5c50c6e80739612",
+    "crates/core/Cargo.toml": "209eb46bb52c2f4fb11dcd931e4274927be939318b5e3f5fdbe881de96b8788e",
+    "crates/desktop-app/Cargo.toml": "158821befd208dcda9127faede6798f87e429de4cea9f8b9ec199bcac803c670",
+    "crates/discovery/Cargo.toml": "6368321869390d7c823bce6890eaf6152702b99f73913464c06c75b67d136a55",
+    "crates/platform/Cargo.toml": "1e17352db76845b523486cf2cd6c844e7fb06582e25a2df8f437f7b5675f3846",
+    "crates/runtime/Cargo.toml": "86142472d83f926a551ca95b6830305652ddb16d71230dbcd1d264dd452b8df1",
+    "crates/shell-preparation/Cargo.toml": "43e88f57060bde60c69cdfe26dde808aa0a703839e8108dc786829a4b12aeef8",
+    "crates/vault-crypto/Cargo.toml": "d48fbb2861c50086613bbde5caa9d6971385a3a8c1664d45e9b2a4426ccc4e8f",
+    "crates/vault-storage/Cargo.toml": "c3bc1873bc6a697567cdcbe6d52a7556dbdb4e375e2ed223b410c7270689a0b5",
+    "crates/vault/Cargo.toml": "dc5ac46edfd6dbea78ad8588cf124cbd602958d49537624cccbf207ef4cd1229"
+  },
+  "packages": [
+    {
+      "name": "libappindicator",
+      "version": "0.9.0",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "checksum": "03589b9607c868cc7ae54c0b2a22c8dc03dd41692d48f2d7df73615c6a95dc0a",
+      "license": "Apache-2.0 OR MIT",
+      "repository": "https://github.com/tauri-apps/libappindicator-rs",
+      "rust_version": null
+    },
+    {
+      "name": "libappindicator-sys",
+      "version": "0.9.0",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "checksum": "6e9ec52138abedcc58dc17a7c6c0c00a2bdb4f3427c7f63fa97fd0d859155caf",
+      "license": "Apache-2.0 OR MIT",
+      "repository": "https://github.com/tauri-apps/libappindicator-rs",
+      "rust_version": null
+    },
+    {
+      "name": "libloading",
+      "version": "0.7.4",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "checksum": "b67380fd3b2fbe7527a606e18729d21c6f3951633d0500574c4dc22d2d638b9f",
+      "license": "ISC",
+      "repository": "https://github.com/nagisa/rust_libloading/",
+      "rust_version": "1.40.0"
+    },
+    {
+      "name": "tray-icon",
+      "version": "0.25.1",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "checksum": "b2b9c52859a94554803ccd4a24b98f74148ebc73b90676d783f3490b1bff9d72",
+      "license": "MIT OR Apache-2.0",
+      "repository": "https://github.com/tauri-apps/tray-icon",
+      "rust_version": "1.90"
+    }
+  ],
+  "external_counts": {
+    "retained": 407,
+    "added": 4,
+    "total": 411,
+    "removed": 0
+  },
+  "feature_scope": {
+    "manifest": "crates/desktop-app/Cargo.toml",
+    "dependency": "tauri",
+    "version": "2.12.4",
+    "feature": "tray-icon",
+    "purpose": "Keep the account monitor available in the Windows notification area after the main window closes."
+  },
+  "source_review": {
+    "date": "2026-10-22",
+    "archives_match_registry_checksums": true,
+    "licenses_compatible_with_agpl_3_only": true,
+    "critical_or_high_advisories": [],
+    "build_scripts": {
+      "tray-icon": "Reads Cargo target and feature environment values and emits configuration metadata. No subprocess or network activity.",
+      "other_added_packages": "None"
+    },
+    "windows_runtime_packages": [
+      "tray-icon"
+    ],
+    "lock_only_non_windows_packages": [
+      "libappindicator",
+      "libappindicator-sys",
+      "libloading"
+    ],
+    "result": "PASS"
+  },
+  "remaining_validation": [
+    "Run the repository Trivy scan against the resolved lockfile.",
+    "Smoke-test launch, hide, restore, and quit from the normal executable and Windows Start menu."
+  ]
+}
