@@ -12,11 +12,13 @@ REQUIRED = {
     "source": ("checkout", "revision", "spec", "dependency_review", "workflow_contract", "proof_toolchain", "python",
                "source_evidence", "source_upload"),
     "rust": ("checkout", "revision", "dependency_review", "toolchain", "dependencies",
-             "compiler", "host", "format", "tests", "doctests", "release_build", "release_tests", "clippy"),
-    "jobs": ("source-and-python", "rust-models", "isolated-build"),
+             "compiler", "host", "format", "tests", "doctests", "clippy"),
+    "jobs": ("source-and-python", "rust-models", "isolated-build", "security", "desktop-ui"),
     "isolated": ("checkout", "revision", "dependency_review", "toolchain", "dependencies", "isolated"),
 }
 REQUIRED["rust-windows"] = REQUIRED["rust"] + ("supervisor_tests", "native_tests")
+REQUIRED["rust-release"] = tuple(name for name in REQUIRED["rust"] if name not in {"format", "doctests", "clippy"}) + ("release_build",)
+REQUIRED["rust-windows-release"] = REQUIRED["rust-release"] + ("supervisor_tests", "native_tests", "package", "package_scan", "package_upload")
 
 
 def _unique_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
@@ -69,7 +71,10 @@ def main() -> int:
     elif scope == "rust":
         lane = os.environ.get("CI_MATRIX_OS", "")
         selected = "rust-windows" if lane == "windows-latest" else "rust"
-        passed = host_matches(lane, platform.system(), platform.machine()) and assess(
+        profile = os.environ.get("CI_PROFILE", "")
+        if profile == "release":
+            selected += "-release"
+        passed = profile in {"debug", "release"} and host_matches(lane, platform.system(), platform.machine()) and assess(
             selected, os.environ.get("CI_RESULTS", ""))
     else:
         passed = assess(scope, os.environ.get("CI_RESULTS", ""))

@@ -1,0 +1,22 @@
+[package]
+name = "codex-accounts-desktop"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+license.workspace = true
+
+[lints]
+workspace = true
+
+[target.'cfg(windows)'.dependencies]
+codex-accounts-discovery = { path = "../discovery" }
+codex-accounts-core = { path = "../core" }
+codex-accounts-runtime = { path = "../runtime" }
+codex-accounts-vault-storage = { path = "../vault-storage" }
+serde = { version = "=1.0.229", features = ["derive"] }
+serde_json = "=1.0.145"
+tauri = { version = "=2.12.4", default-features = false, features = ["wry", "custom-protocol"] }
+
+[target.'cfg(windows)'.build-dependencies]
+tauri-build = { version = "=2.7.3", default-features = false, features = ["config-json"] }

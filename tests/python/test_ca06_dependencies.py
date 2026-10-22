@@ -33,9 +33,9 @@ class Ca06Dependencies(unittest.TestCase):
     def write_review(self, review):
         (self.root / REVIEW).write_text(json.dumps(review), encoding='utf8')
 
-    def test_exact_407_packages_and_nine_manifests_pass(self):
+    def test_exact_407_packages_and_application_manifests_pass(self):
         self.assertEqual(checker.check(self.root)['reviewed_packages'], 407)
-        self.assertEqual(len(self.review['manifest_sha256']), 9)
+        self.assertEqual(len(self.review['manifest_sha256']), 10)
 
     def test_each_historical_review_cannot_be_laundered_with_a_new_claimed_hash(self):
         for relative in self.review['predecessor_sha256']:

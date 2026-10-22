@@ -1,5 +1,7 @@
-//! Private, bounded in-memory endpoints. Not operating-system pipes or process handles.
+//! Bounded endpoints over test channels or backend-owned nonblocking pipe adapters.
 #![forbid(unsafe_code)]
+use std::io::{Read, Write};
+use std::sync::Mutex;
 use std::sync::{
     atomic::{AtomicBool, Ordering},
     mpsc::{Receiver, SyncSender, TryRecvError, TrySendError},
@@ -41,12 +43,14 @@ pub(super) struct ReadEnd {
     owner: Arc<()>,
     stream: Stream,
     receiver: Option<Receiver<Chunk>>,
+    file: Option<Mutex<Box<dyn Read + Send>>>,
     wake: SyncSender<()>,
 }
 pub(super) struct WriteEnd {
     owner: Arc<()>,
     stream: Stream,
     sender: Option<SyncSender<Chunk>>,
+    file: Option<Mutex<Box<dyn Write + Send>>>,
     wake: SyncSender<()>,
 }
 impl ReadEnd {
@@ -54,6 +58,26 @@ impl ReadEnd {
         Arc::ptr_eq(&self.owner, owner) && self.stream == stream
     }
     pub(super) fn try_read(&self) -> Result<ReadStep, IoError> {
+        if let Some(file) = self.file.as_ref() {
+            let mut bytes = Zeroizing::new(vec![0; CHUNK_BYTES]);
+            return match file
+                .try_lock()
+                .map_err(|_| IoError::Closed)?
+                .read(&mut bytes)
+            {
+                Ok(0) => Ok(ReadStep::Eof),
+                Ok(count) => {
+                    bytes.truncate(count);
+                    Ok(ReadStep::Data(Chunk {
+                        owner: self.owner.clone(),
+                        stream: self.stream,
+                        bytes,
+                    }))
+                }
+                Err(error) if pending(&error) => Ok(ReadStep::Pending),
+                Err(_) => Err(IoError::Closed),
+            };
+        }
         let Some(receiver) = &self.receiver else {
             return Err(IoError::Closed);
         };
@@ -73,6 +97,7 @@ impl ReadEnd {
     pub(super) fn close(&mut self) {
         // Dropping the receiver also drops/zeroizes every queued chunk.
         self.receiver.take();
+        self.file.take();
         let _ = self.wake.try_send(());
     }
 }
@@ -109,9 +134,25 @@ impl WriteEnd {
         }
         // Rejected chunks are zeroized on drop, not included in errors.
     }
+    /// Returns only the number of bytes acknowledged by the OS. Zero is pending.
+    pub(super) fn write_some(&self, bytes: &[u8]) -> Result<usize, IoError> {
+        if bytes.is_empty() || bytes.len() > CHUNK_BYTES {
+            return Err(IoError::ChunkLimit);
+        }
+        if let Some(file) = self.file.as_ref() {
+            return match file.try_lock().map_err(|_| IoError::Closed)?.write(bytes) {
+                Ok(count) => Ok(count),
+                Err(error) if pending(&error) => Ok(0),
+                Err(_) => Err(IoError::Closed),
+            };
+        }
+        self.try_write(bytes)
+            .map(|written| if written { bytes.len() } else { 0 })
+    }
     pub(super) fn close(&mut self) {
         // There are no cloned data senders. Disconnection follows queued data.
         self.sender.take();
+        self.file.take();
         let _ = self.wake.try_send(());
     }
 }
@@ -121,6 +162,7 @@ impl Drop for WriteEnd {
     }
 }
 
+#[derive(Clone)]
 pub(super) struct CancelHandle {
     pub(super) requested: Arc<AtomicBool>,
     wake: SyncSender<()>,
@@ -148,20 +190,83 @@ pub(super) fn pair(owner: &Arc<()>, stream: Stream, wake: &SyncSender<()>) -> (R
             owner: owner.clone(),
             stream,
             receiver: Some(receiver),
+            file: None,
             wake: wake.clone(),
         },
         WriteEnd {
             owner: owner.clone(),
             stream,
             sender: Some(sender),
+            file: None,
             wake: wake.clone(),
         },
     )
 }
-#[cfg(test)]
 pub(super) fn cancellation(wake: &SyncSender<()>) -> CancelHandle {
     CancelHandle {
         requested: Arc::new(AtomicBool::new(false)),
         wake: wake.clone(),
+    }
+}
+
+fn pending(error: &std::io::Error) -> bool {
+    matches!(
+        error.kind(),
+        std::io::ErrorKind::WouldBlock | std::io::ErrorKind::Interrupted
+    )
+}
+
+pub(super) fn file_reader(
+    file: Box<dyn Read + Send>,
+    owner: &Arc<()>,
+    stream: Stream,
+    wake: &SyncSender<()>,
+) -> ReadEnd {
+    ReadEnd {
+        owner: owner.clone(),
+        stream,
+        receiver: None,
+        file: Some(Mutex::new(file)),
+        wake: wake.clone(),
+    }
+}
+
+pub(super) fn file_writer(
+    file: Box<dyn Write + Send>,
+    owner: &Arc<()>,
+    wake: &SyncSender<()>,
+) -> WriteEnd {
+    WriteEnd {
+        owner: owner.clone(),
+        stream: Stream::Input,
+        sender: None,
+        file: Some(Mutex::new(file)),
+        wake: wake.clone(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn nonblocking_adapter_distinguishes_empty_open_pipe_from_eof() {
+        struct Pending;
+        impl Read for Pending {
+            fn read(&mut self, _: &mut [u8]) -> std::io::Result<usize> {
+                Err(std::io::ErrorKind::WouldBlock.into())
+            }
+        }
+        let owner = Arc::new(());
+        let (wake, _receiver) = std::sync::mpsc::sync_channel(1);
+        let pending = file_reader(Box::new(Pending), &owner, Stream::Output, &wake);
+        assert!(matches!(pending.try_read().unwrap(), ReadStep::Pending));
+        let eof = file_reader(
+            Box::new(std::io::Cursor::new(Vec::<u8>::new())),
+            &owner,
+            Stream::Output,
+            &wake,
+        );
+        assert!(matches!(eof.try_read().unwrap(), ReadStep::Eof));
     }
 }

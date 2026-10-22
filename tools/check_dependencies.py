@@ -8,7 +8,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 REVIEW = 'docs/ca-02b-dependencies.json'
-REVIEW_SHA256 = 'bccbfe779b29b99d5dfe0f4df3a6d45585c1580e656d35c08ecfbee8b31edc60'
+REVIEW_SHA256 = 'c87f0dec8db21a6a736a406b0b0b91f7df00cc94263689440521f949cff41299'
 HISTORICAL_REVIEW_SHA256 = {
     'docs/ca-02-dependencies.json': 'ceaffa36b058d90fef01df21634610938aa47755edd8b6a15f7adc7257f6cc5f',
     'docs/ca-03b-dependencies.json': '0071f27fcdd6dd9aba04aee06e9cb75b2177be7fae7999980f05a19c31563c7d',
@@ -120,7 +120,21 @@ def check(root: Path = ROOT) -> dict[str, int | str]:
     if set(review['manifest_sha256']) != manifests:
         raise ValueError('Workspace manifest review set changed')
     for path, digest in review['manifest_sha256'].items():
-        if hashlib.sha256((root / path).read_bytes()).hexdigest() != digest:
+        raw_manifest = (root / path).read_bytes()
+        manifest = tomllib.loads(raw_manifest.decode('utf-8'))
+        # Owner-selected 2026-10-22 metadata amendment. Removing exactly this one
+        # license declaration must reproduce the reviewed manifest byte-for-byte.
+        # Dependency pins, features, workspace membership and all other bytes stay bound.
+        if path == 'Cargo.toml':
+            license_line = b'license = "AGPL-3.0-only"\n'
+            declared_license = manifest['workspace']['package'].get('license')
+            expected_license = 'AGPL-3.0-only'
+        else:
+            license_line = b'license.workspace = true\n'
+            declared_license = manifest['package'].get('license')
+            expected_license = {'workspace': True}
+        if (declared_license != expected_license or raw_manifest.count(license_line) != 1
+                or hashlib.sha256(raw_manifest.replace(license_line, b'', 1)).hexdigest() != digest):
             raise ValueError('Reviewed dependency manifest changed')
     return {'reviewed_packages': len(expected), 'lock_review': 'passed'}
 

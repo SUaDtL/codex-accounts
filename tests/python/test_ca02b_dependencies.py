@@ -30,6 +30,16 @@ class Ca02bDependencies(unittest.TestCase):
         self.assertEqual(len(self.review['retained_package_identity']), 407)
         self.assertEqual(len(self.review['predecessor_sha256']), 8)
 
+    def test_license_amendment_does_not_allow_other_manifest_changes(self):
+        path = self.root / 'Cargo.toml'
+        original = path.read_bytes()
+        for altered in [original.replace(b'AGPL-3.0-only', b'MIT'),
+                        original.replace(b'license = "AGPL-3.0-only"\n', b''),
+                        original.replace(b'edition = "2021"', b'edition = "2024"')]:
+            path.write_bytes(altered)
+            with self.assertRaisesRegex(ValueError, 'Reviewed dependency manifest changed'):
+                checker.check(self.root)
+
     def test_either_missing_sdk_flag_extra_flag_and_sdk_version_refuse(self):
         path = self.root / 'crates/discovery/Cargo.toml'
         original = path.read_text()

@@ -12,13 +12,14 @@ Do not maintain an independently editable JSON or Markdown copy of the spec.
 
 ## Current boundary
 
-Discovery, vault/storage, the private coordinator and CA-04B lifecycle primitives
-are implemented; this is not complete Q0/Q1/Q2 qualification or a working account
-switcher. See the dated handoff for evidence and refresh live source before editing.
-The product's authority remains disabled. No test fixture, caller-supplied boolean,
-mock helper output, hand-edited receipt or passing CI may qualify an installation.
-Native evidence must be owner-run on exact builds and reviewed before an adapter
-can be introduced. Preserve the empty catalog until that process is implemented.
+The Windows application connects current official installation discovery, encrypted
+vault storage, managed login and journaled switching/recovery. See the dated
+handoff for the active build and real-account trial status. No test fixture,
+caller-supplied boolean, mock helper output or passing CI substitutes for actual
+runtime, backend, policy and process checks. Complete release acceptance is open.
+The owner removed per-build approval on 2026-10-21. Implement and check the current
+runtime, file-storage, policy and recovery contract; normal official updates do
+not need catalog entries. Preserve actual safety checks and truthful observations.
 
 Follow Q0 -> Q1 -> Q2 -> Q3 -> Q4 -> Q5 dependencies in the spec. Do not introduce
 plaintext vaults, direct OAuth refresh, proxying, broad home copies, force-close,

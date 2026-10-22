@@ -14,9 +14,10 @@ from pathlib import Path
 import re
 
 if __package__:
-    from . import spec_projection
+    from . import spec_projection, spec_update_tolerant
 else:
     import spec_projection
+    import spec_update_tolerant
 
 ORIGINAL_SHA256 = 'a5041d63e0b517f68019a4b527c050014616e7bd46c5742768a65199120ad3e6'
 OLD = ('file, keyring, auto-with-file, auto-with-keyring, encrypted/secrets, ephemeral '
@@ -30,7 +31,8 @@ NEW = ('Explicit file, positively established exact-build official file default,
 REVISION = 'ca-02-t07-proposal-1'
 MODEL = re.compile(r'(<script type="application/json" id="artifact-model">)(.*?)(</script>)', re.S)
 ROW = re.compile(r'(<tr id="T-07" class="test-row"><td>T-07</td><td>)(.*?)(</td></tr>)', re.S)
-CANDIDATE_SHA256 = 'af8171ed2e69cdca214afc5a569f060e70582033c72829594c1c81f02fd82d43'
+T07_SHA256 = 'af8171ed2e69cdca214afc5a569f060e70582033c72829594c1c81f02fd82d43'
+CANDIDATE_SHA256 = '5aedc4719b8b34f137a645e9e7f89739d63af50c24390ae4b4a6736e6c376077'
 SPEC_PATH = 'docs/local-codex-switcher-spec.html'
 UNCHANGED = {
     'docs/codex-switchers-comparison.html': '3928997418de0c6871f7af4edbf8760ca1d7c049fd1f99850e5580c08aeebb57',
@@ -44,6 +46,8 @@ def render(html: str) -> str:
         raise ValueError('Expected exactly one canonical model and T-07 projection')
     data = json.loads(match.group(2))
     spec_projection.check(html, data)
+    if data.get('document_revision') == spec_update_tolerant.REVISION:
+        return html
     rows = next(b['rows'] for s in data['sections'] if s['id'] == 'SPEC-TESTS'
                 for b in s['blocks'] if b['type'] == 'table')
     selected = [r for r in rows if r[0] == 'T-07']
@@ -57,13 +61,16 @@ def render(html: str) -> str:
                                                separators=(',', ':')) + m[3], html)
     result = ROW.sub(lambda m: m[1] + escape(NEW) + m[3], result)
     spec_projection.check(result, data)
-    return result
+    return spec_update_tolerant.transform(result)
 
 
 def reconstruct_original(candidate: str) -> str:
     """Invert only this amendment and verify the complete original input bytes."""
-    if hashlib.sha256(candidate.encode('utf-8')).hexdigest() != CANDIDATE_SHA256:
-        raise ValueError('Candidate changed outside the scoped T-07 amendment')
+    supplied = candidate
+    if hashlib.sha256(candidate.encode('utf-8')).hexdigest() == CANDIDATE_SHA256:
+        candidate = spec_update_tolerant.transform(candidate, reverse=True)
+    if hashlib.sha256(candidate.encode('utf-8')).hexdigest() != T07_SHA256:
+        raise ValueError('Candidate changed outside the owner-directed amendments')
     data = json.loads(MODEL.search(candidate).group(2))
     spec_projection.check(candidate, data)
     if data.pop('document_revision') != REVISION:
@@ -78,7 +85,7 @@ def reconstruct_original(candidate: str) -> str:
     original = ROW.sub(lambda m: m[1] + escape(OLD) + m[3], original)
     if hashlib.sha256(original.encode('utf-8')).hexdigest() != ORIGINAL_SHA256:
         raise ValueError('Original source provenance cannot be reconstructed')
-    if render(original) != candidate:
+    if render(original) != supplied:
         raise ValueError('Amendment is not the deterministic scoped transformation')
     return original
 
@@ -96,10 +103,12 @@ def original_manifest() -> dict:
 def proposed_manifest(root: Path, candidate: str) -> dict:
     reconstruct_original(candidate)
     manifest = original_manifest()
-    manifest['schema'] = 'codex-accounts/source-inputs/v2'
+    manifest['schema'] = 'codex-accounts/source-inputs/v3'
+    manifest['date'] = '2026-10-21'
     manifest['files'][0].update(
-        original_sha256=ORIGINAL_SHA256, revision=REVISION,
-        amendment='docs/spec-amendments/ca-02-t07.md', sha256=CANDIDATE_SHA256)
+        original_sha256=ORIGINAL_SHA256, revision=spec_update_tolerant.REVISION,
+        predecessor_sha256=T07_SHA256,
+        amendment='docs/spec-amendments/update-tolerant-2026-10-21.md', sha256=CANDIDATE_SHA256)
     current = json.loads((root / 'docs/source-inputs.json').read_text(encoding='utf-8'))
     if current not in (original_manifest(), manifest):
         raise ValueError('Source manifest differs from the reviewed provenance migration')
@@ -110,12 +119,12 @@ def check_candidate(root: Path) -> None:
     """Require the in-place candidate; a v1 manifest alone no longer suffices."""
     raw = (root / SPEC_PATH).read_bytes()
     if hashlib.sha256(raw).hexdigest() != CANDIDATE_SHA256:
-        raise ValueError('Checked-in specification is not the reviewed T-07 candidate')
+        raise ValueError('Checked-in specification is not the owner-directed specification')
     candidate = raw.decode('utf-8')
     expected = proposed_manifest(root, candidate)
     current = json.loads((root / 'docs/source-inputs.json').read_text(encoding='utf-8'))
     if current != expected:
-        raise ValueError('The in-place amendment requires its v2 provenance manifest')
+        raise ValueError('The in-place amendment requires its v3 provenance manifest')
     for path, digest in UNCHANGED.items():
         if hashlib.sha256((root / path).read_bytes()).hexdigest() != digest:
             raise ValueError('An unchanged supplied source has drifted')
@@ -137,7 +146,7 @@ def main() -> int:
         elif args.manifest_preview:
             print(json.dumps(proposed_manifest(root, candidate), indent=2))
         else:
-            print('In-place T-07 candidate, projection and original-source provenance verified')
+            print('Current specification, projection and original-source provenance verified')
         return 0
     except (ValueError, OSError, KeyError) as exc:
         parser.exit(1, f'Specification amendment check failed: {exc}\n')

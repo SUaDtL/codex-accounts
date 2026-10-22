@@ -310,6 +310,175 @@ fn request<D: Files>(s: &Storage<D>, a: ProfileId, b: ProfileId, online: bool) -
         online,
     }
 }
+#[test]
+fn reauthentication_installs_fresh_current_without_promoting_source_or_replaying_rejected_tokens() {
+    for acceptance in [
+        CredentialAcceptance::Accepted,
+        CredentialAcceptance::Rejected,
+    ] {
+        let mut f = Setup::new(0, 0);
+        f.effects.0.borrow_mut().live = values(A0, 0);
+        f.effects.0.borrow_mut().acceptance = Ok(acceptance);
+        let fresh = capture_for("SYNTHETIC_A", &values(A1, 0));
+        let id = f
+            .store
+            .begin_reauthentication(&f.root, &mut f.effects, f.a, fresh, BINDING)
+            .unwrap();
+        let initial = f.store.journal(id).unwrap();
+        assert_eq!(
+            f.store.latest(f.a).unwrap().to_bytes(),
+            initial.target.generation
+        );
+        assert_ne!(initial.source.generation, initial.target.generation);
+        // A process restart before any live replacement must still finish the
+        // fresh installation from the atomic generation+journal publication.
+        f.store = load(f.disk.clone(), &f.root);
+        f.store
+            .recover_switch(&f.root, &mut f.effects, id, Choice::Finish)
+            .unwrap();
+        run(&mut f.store, &f.root, &mut f.effects, id);
+        let final_record = f.store.journal(id).unwrap();
+        assert_eq!(f.effects.0.borrow().live, values(A1, 0));
+        assert_eq!(
+            f.store.latest(f.a).unwrap().to_bytes(),
+            final_record.target.generation
+        );
+        assert!(!final_record.status().can_restore);
+        assert!(f.effects.0.borrow().staged.is_empty());
+        if acceptance == CredentialAcceptance::Rejected {
+            assert_eq!(final_record.phase, SwitchPhase::NeedsLogin);
+            assert!(!final_record.committed);
+            f.store.ensure_operation_idle().unwrap();
+        } else {
+            assert!(final_record.committed);
+        }
+        load(f.disk.clone(), &f.root);
+    }
+}
+
+#[test]
+fn reauthentication_cancel_after_partial_install_only_recovers_forward() {
+    for phase in [SwitchPhase::Requested, SwitchPhase::Applying] {
+        let mut f = Setup::new(0, 0);
+        f.effects.0.borrow_mut().live = values(A0, 0);
+        let id = f
+            .store
+            .begin_reauthentication(
+                &f.root,
+                &mut f.effects,
+                f.a,
+                capture_for("SYNTHETIC_A", &values(A1, 0)),
+                BINDING,
+            )
+            .unwrap();
+        f.until(id, phase);
+        f.store.cancel_switch(&f.root, &mut f.effects, id).unwrap();
+        assert_eq!(f.store.journal(id).unwrap().phase, SwitchPhase::Recovery);
+        assert_eq!(
+            f.store.ensure_operation_idle(),
+            Err(StorageError::SwitchPending)
+        );
+        assert!(!f.store.journal(id).unwrap().status().can_restore);
+        assert_eq!(
+            f.store
+                .recover_switch(&f.root, &mut f.effects, id, Choice::Restore),
+            Err(SwitchError::InvalidTransition)
+        );
+        f.store = load(f.disk.clone(), &f.root);
+        f.store
+            .recover_switch(&f.root, &mut f.effects, id, Choice::Finish)
+            .unwrap();
+        run(&mut f.store, &f.root, &mut f.effects, id);
+        assert_eq!(f.effects.0.borrow().live, values(A1, 0));
+        assert!(f.store.journal(id).unwrap().committed);
+    }
+}
+
+#[test]
+fn reauthentication_recovery_policy_admission_reaps_and_preserves_without_promoting_source() {
+    let mut f = Setup::new(0, 0);
+    f.effects.0.borrow_mut().live = values(B0, 0);
+    let id = f
+        .store
+        .begin_reauthentication(
+            &f.root,
+            &mut f.effects,
+            f.b,
+            capture_for("SYNTHETIC_B", &values(B1, 0)),
+            BINDING,
+        )
+        .unwrap();
+    let fresh = f.store.latest(f.b).unwrap();
+    let original_source = f.store.journal(id).unwrap().source.generation;
+    {
+        let mut world = f.effects.0.borrow_mut();
+        world.refresh = true;
+        // Configuration fails after ownership was established. Reaping still
+        // refreshes the live source in this synthetic helper.
+        world.fail = Some(world.events.len() + 2);
+    }
+    assert_eq!(
+        f.store
+            .check_reauthentication_recovery(&f.root, &mut f.effects, id),
+        Err(SwitchError::Refused(Failure::Write))
+    );
+    let checked = f.store.journal(id).unwrap();
+    assert_eq!(checked.phase, SwitchPhase::Recovery);
+    assert_eq!(checked.write_intent, 0);
+    assert_ne!(checked.source.generation, original_source);
+    assert_eq!(f.store.latest(f.b).unwrap(), fresh);
+    assert!(f.effects.0.borrow().helper.is_none());
+    assert!(!f.effects.0.borrow().events.contains(&"before-replace"));
+    f.effects.0.borrow_mut().fail = None;
+    f.store = load(f.disk.clone(), &f.root);
+    f.store
+        .check_reauthentication_recovery(&f.root, &mut f.effects, id)
+        .unwrap();
+    f.store
+        .recover_switch(&f.root, &mut f.effects, id, Choice::Finish)
+        .unwrap();
+    run(&mut f.store, &f.root, &mut f.effects, id);
+    assert!(f.store.journal(id).unwrap().committed);
+
+    // A prior owned helper's persisted intent must recover its refresh before
+    // the next policy admission compares exact source/target expectations.
+    let mut f = Setup::new(0, 0);
+    f.effects.0.borrow_mut().live = values(B0, 0);
+    let id = f
+        .store
+        .begin_reauthentication(
+            &f.root,
+            &mut f.effects,
+            f.b,
+            capture_for("SYNTHETIC_B", &values(B1, 0)),
+            BINDING,
+        )
+        .unwrap();
+    f.until(id, SwitchPhase::HelperRunning);
+    let before_refresh = f.store.latest(f.b).unwrap();
+    f.effects.0.borrow_mut().live[1] = Some(b"SYNTHETIC_REFRESH_METADATA".to_vec());
+    f.store = load(f.disk.clone(), &f.root);
+    f.store
+        .check_reauthentication_recovery(&f.root, &mut f.effects, id)
+        .unwrap();
+    let captured = f.store.journal(id).unwrap();
+    assert!(captured.helper == Helper::Reaped);
+    assert_ne!(f.store.latest(f.b).unwrap(), before_refresh);
+    assert_eq!(
+        f.store.latest(f.b).unwrap().to_bytes(),
+        captured.target.generation
+    );
+    assert_eq!(
+        f.store
+            .read_latest(&f.root, f.b)
+            .unwrap()
+            .resource(ResourceId::new(1).unwrap())
+            .unwrap()
+            .as_bytes(),
+        Some(b"SYNTHETIC_REFRESH_METADATA".as_slice())
+    );
+    assert!(f.effects.0.borrow().helper.is_none());
+}
 fn run<D: Files>(s: &mut Storage<D>, root: &RootKey, e: &mut Synthetic, id: Id) {
     for _ in 0..100 {
         if s.journal(id).unwrap().terminal() {
@@ -378,6 +547,7 @@ fn refreshed_roundtrip_and_all_optional_presence_combinations() {
         }
     }
 }
+
 #[test]
 fn helper_refresh_is_preserved_before_rejected_target_restoration() {
     let mut f = Setup::new(1, 2);
@@ -451,6 +621,33 @@ fn helper_policy_failure_is_not_laundered_into_an_offline_success() {
             .as_bytes(),
         Some(B1)
     );
+}
+#[test]
+fn recovery_finish_rechecks_online_policy_and_keeps_prior_failure() {
+    let mut f = Setup::new(0, 1);
+    let id = f.begin(true);
+    f.effects.0.borrow_mut().acceptance = Err(Failure::Policy);
+    f.until(id, SwitchPhase::Recovery);
+    for acceptance in [Err(Failure::Policy), Ok(CredentialAcceptance::Accepted)] {
+        f.effects.0.borrow_mut().acceptance = acceptance;
+        f.store
+            .recover_switch(&f.root, &mut f.effects, id, Choice::Finish)
+            .unwrap();
+        assert_eq!(f.phase(id), SwitchPhase::TargetInstalled);
+        assert!(f.effects.0.borrow().helper.is_none());
+        f.until(
+            id,
+            if acceptance.is_ok() {
+                SwitchPhase::AwaitingConfirmation
+            } else {
+                SwitchPhase::Recovery
+            },
+        );
+        let journal = f.store.journal(id).unwrap();
+        assert_eq!(journal.committed, acceptance.is_ok());
+        assert_eq!(journal.failure, Some(Failure::Policy));
+        assert!(f.effects.0.borrow().helper.is_none());
+    }
 }
 #[test]
 fn preconditions_refuse_and_duplicate_requests_cannot_mutate() {

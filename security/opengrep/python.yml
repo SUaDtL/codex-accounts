@@ -1,0 +1,24 @@
+rules:
+  - id: python-shell-interpolation
+    languages: [python]
+    severity: ERROR
+    message: Pass a validated argument list to subprocess without shell=True.
+    pattern-either:
+      - pattern: subprocess.run(..., shell=True, ...)
+      - pattern: subprocess.Popen(..., shell=True, ...)
+      - pattern: subprocess.check_output(..., shell=True, ...)
+      - pattern: os.system(...)
+    metadata:
+      cwe: CWE-78
+      category: security
+  - id: python-untrusted-deserialization
+    languages: [python]
+    severity: ERROR
+    message: Use bounded JSON or a safe data parser for untrusted inputs.
+    pattern-either:
+      - pattern: pickle.loads(...)
+      - pattern: pickle.load(...)
+      - pattern: eval(...)
+    metadata:
+      cwe: CWE-502
+      category: security

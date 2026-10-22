@@ -221,6 +221,8 @@ fn lookalikes_and_unqualified_extensions_are_not_allowlisted() {
         Method::LoginStart,
         Method::LoginCancel,
         Method::RateLimitsRead,
+        Method::ConfigRead,
+        Method::ConfigRequirementsRead,
     ] {
         for candidate in [
             format!(" {}", method.wire_name()),
@@ -239,8 +241,8 @@ fn lookalikes_and_unqualified_extensions_are_not_allowlisted() {
         "аccount/read",
         "account//read",
         "account\\read",
-        "config/read",
-        "configRequirements/read",
+        "config/value/write",
+        "config/batchWrite",
         "account/token/refresh",
         "account/logout",
         "thread/start",
@@ -262,6 +264,19 @@ fn lookalikes_and_unqualified_extensions_are_not_allowlisted() {
         );
     }
     assert_eq!(Method::from_allowlist(&"x".repeat(MAX_FRAME_BYTES)), None);
+    for (name, method) in [
+        ("config/read", Method::ConfigRead),
+        ("configRequirements/read", Method::ConfigRequirementsRead),
+    ] {
+        assert_eq!(
+            Method::classify_client(name, ClientMessageKind::Request),
+            Some(method)
+        );
+        assert_eq!(
+            Method::classify_client(name, ClientMessageKind::Notification),
+            None
+        );
+    }
 }
 
 #[test]

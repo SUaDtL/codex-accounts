@@ -1,0 +1,15 @@
+{
+  "productName": "Codex Accounts",
+  "version": "0.1.0",
+  "identifier": "com.codexaccounts.desktop",
+  "build": { "frontendDist": "assets" },
+  "app": {
+    "windows": [],
+    "withGlobalTauri": true,
+    "security": {
+      "capabilities": [{ "identifier": "main-window", "windows": ["main"], "platforms": ["windows"], "permissions": [] }],
+      "csp": "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; font-src 'none'; connect-src ipc: http://ipc.localhost; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'"
+    }
+  },
+  "bundle": { "active": false, "icon": ["icons/app.ico"] }
+}

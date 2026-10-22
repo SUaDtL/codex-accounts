@@ -25,16 +25,7 @@ class ProjectionTests(unittest.TestCase):
         self.assertEqual(spec_proposal.render(self.html), self.html)
 
     def test_original_reconstructs_byte_for_byte_and_reapplies(self):
-        data = copy.deepcopy(self.model)
-        data.pop('document_revision')
-        data.pop('amendment_status')
-        rows = next(b['rows'] for s in data['sections'] if s['id'] == 'SPEC-TESTS'
-                    for b in s['blocks'] if b['type'] == 'table')
-        next(r for r in rows if r[0] == 'T-07')[1] = spec_proposal.OLD
-        original = spec_proposal.MODEL.sub(
-            lambda m: m[1] + json.dumps(data, ensure_ascii=False, separators=(',', ':')) + m[3], self.html)
-        original = spec_proposal.ROW.sub(
-            lambda m: m[1] + escape(spec_proposal.OLD) + m[3], original)
+        original = spec_proposal.reconstruct_original(self.html)
         self.assertEqual(hashlib.sha256(original.encode()).hexdigest(), spec_proposal.ORIGINAL_SHA256)
         self.assertEqual(spec_proposal.render(original), self.html)
 
@@ -69,7 +60,7 @@ class ProjectionTests(unittest.TestCase):
     def test_proposed_provenance_keeps_the_original_digest(self):
         manifest = spec_proposal.proposed_manifest(ROOT, self.html)
         entry = manifest['files'][0]
-        self.assertEqual(manifest['schema'], 'codex-accounts/source-inputs/v2')
+        self.assertEqual(manifest['schema'], 'codex-accounts/source-inputs/v3')
         self.assertEqual(entry['original_sha256'], spec_proposal.ORIGINAL_SHA256)
         self.assertEqual(entry['sha256'], spec_proposal.CANDIDATE_SHA256)
         self.assertEqual(hashlib.sha256(spec_index.SPEC.read_bytes()).hexdigest(),
@@ -114,7 +105,7 @@ class ProjectionTests(unittest.TestCase):
         self.assertEqual(sum(k.startswith(('F-', 'S-')) for k in entries), 43)
         self.assertTrue(all(f'T-{i:02}' in entries for i in range(1, 35)))
         self.assertEqual(self.model['version'], '0.1.0')
-        self.assertEqual(self.model['amendment_status'], 'proposed_for_owner_review')
+        self.assertEqual(self.model['amendment_status'], 'owner_directed')
 
 
 if __name__ == '__main__':

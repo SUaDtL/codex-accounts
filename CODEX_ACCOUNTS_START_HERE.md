@@ -1,40 +1,32 @@
 # Codex Accounts: start here
 
-Bootstrap revision **2.8.1** · Checkpoint **2026-10-15** · Repository **SUaDtL/codex-accounts**.
-This is session routing, not an application release or a second roadmap.
+Checkpoint **2026-10-22** · UI accepted; Windows application and CI delivery in PR #25.
 
-## Resume from live work, not the original bootstrap
+Current build: `dist/windows-x64-refined/codex-accounts-desktop.exe`.
+Includes the unified vault/settings design, compact controls and read-only usage
+polling while Codex stays open, with expiry and reset handling.
+See validation for measured scope; the confirmed account trial used the prior build.
 
-PRs **#14** through **#22** are merged. Main is
-`6ffc3d4568364caae1dc5dc3a2d6402ef5cfee3b`, including the private synthetic
-transport driver, guarded Windows storage, explicit registered-image observation
-native-test process supervision and the pinned CA-05F handshake/account-read
-codec, CA-05G managed-login/cancellation and CA-05H rate-limit decoding. Continue
-CA-02B on `codex/cached-primary-signer`;
-do not reopen the historical review stack. Refresh actual refs and checks.
-The owner authorized the same standing engine workflow override for this next
-increment; application security, qualification and CI remain required.
+The owner requests a functioning app with focused checks. The integrated checkout
+is `.worktrees/native-signer182`, branch `codex/fix-discovery-factory-lifetime`.
+The parent project directory is not Git. Preserve all dirty work and other worktrees.
 
-CA-04D, CA-05A/B, CA-06A static views and macOS documentary preparation are retained.
-CA-05E uses owned in-memory endpoints, not native pipes or an official helper.
-Production constructors, native helper/login/credential IO and qualification
-remain unavailable. Contained original-image version and schema experiments now
-pin `codex-cli 0.162.0-alpha.17.2`; the private CA-05F decoder uses its actual
-handshake/account-read shapes. Managed-login/cancel/notification decoding is merged;
-rate-limit observations are merged without polling, cache merging or credit
-operations. The Windows-only disabled static Tauri preview is merged. The current
-packet adds bounded cached primary signer observation; one selected-image
-collection succeeded without granting installation or credential authority.
-This [partial evidence](docs/runtime-provenance-observation.md)
-does not qualify an adapter. `docs/next-pr.md` owns the bounded next step;
-old Project snapshots and an earlier head's green result do not override live work.
+Capture, isolated managed Add, rename/remove, health/quota, switch and recovery
+are connected to the Tauri application. The optimized Windows executable builds.
+The owner has confirmed real A -> B -> A switching and an additional return to B.
+Both accounts are saved; the UI displays the last known active account. The local
+Windows application is functioning. Release qualification and publication remain
+separate from this completed owner trial.
 
-PR #24's reviewed supervisor-fixture and diagnostic repair is joined into
-this branch. Its merge remains a prerequisite: require #24 green and merged,
-then verify this combined source/tree and completed hosted gates before
-merging #23. The original PR #22 post-merge failure remains recorded in
-[validation](docs/validation.md); no deadline, case or qualification gate
-is waived.
+The owner explicitly removed exact-build approval. Use current official
+registration/runtime/storage/policy checks, with no version allowlist or repeated
+approval. See the specification amendment dated 2026-10-21.
+
+Main was last verified at `587b18c64f82e13dbbf4e5386e427ef48c246855`; PRs #14–#24
+were merged. The integration is committed in [PR #25](https://github.com/SUaDtL/codex-accounts/pull/25).
+Read its current checks for exact-head hosted results. No merge or release has been
+authorized. Historical packet claims below describe earlier snapshots, including
+the now-repaired discovery crash.
 
 ## Minimum reading order
 
@@ -90,3 +82,7 @@ A new session can start with:
 > the next eligible packet. Use the parallel-work guide only for explicitly selected
 > independent work. Preserve qualification gates. Return the actual PR/head/checks;
 > do not merge, release, reset branches or touch live accounts.
+
+Current functioning build: dist/windows-x64-cleanup-fix/codex-accounts-desktop.exe.
+The owner confirmed the account round trip on 2026-10-21. Preserve this executable
+and vault; do not repeat login or switching merely to update documentation.

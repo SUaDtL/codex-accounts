@@ -1,5 +1,5 @@
-//! CA-05F exact-schema subset. Private synthetic construction only, never IO or
-//! qualification. Account metadata is not authenticated identity/workspace proof.
+//! Captured-schema subset used by the bounded pipe driver and synthetic tests.
+//! No version equality gate. Account metadata is not authenticated identity proof.
 #![forbid(unsafe_code)]
 use super::*;
 use serde::de::{self, Deserialize, DeserializeSeed, IgnoredAny, MapAccess, Visitor};
@@ -9,6 +9,9 @@ pub(super) use managed::{CancelStatus, Presence};
 #[path = "codec_rates.rs"]
 mod rates;
 pub(super) use rates::{ReadObservation, Snapshot};
+#[path = "codec_config.rs"]
+pub(super) mod config;
+use config::{ConfigObservation, RequirementsObservation};
 
 pub(super) const RUNTIME_VERSION: &str = "0.162.0-alpha.17.2";
 pub(super) const RUNTIME_IMAGE_SHA256: &str =
@@ -94,7 +97,9 @@ impl<'de> Deserialize<'de> for InitializeObservation {
                         "platformFamily" => unique(&mut family, map.next_value::<Secret>()?)?,
                         "platformOs" => unique(&mut os, map.next_value::<Secret>()?)?,
                         "userAgent" => unique(&mut agent, map.next_value::<Secret>()?)?,
-                        _ => return Err(invalid()),
+                        _ => {
+                            map.next_value::<IgnoredAny>()?;
+                        }
                     }
                 }
                 let home: Secret = required(home)?;
@@ -185,7 +190,9 @@ impl<'de> Deserialize<'de> for AccountMode {
                         "usesCodexManagedCredentials" => {
                             unique(&mut bedrock, map.next_value::<bool>()?)?
                         }
-                        _ => return Err(invalid()),
+                        _ => {
+                            map.next_value::<IgnoredAny>()?;
+                        }
                     }
                 }
                 let kind: Secret = required(kind)?;
@@ -221,7 +228,9 @@ impl<'de> Deserialize<'de> for AccountObservation {
                             unique(&mut account, map.next_value::<Option<AccountMode>>()?)?
                         }
                         "requiresOpenaiAuth" => unique(&mut auth, map.next_value::<bool>()?)?,
-                        _ => return Err(invalid()),
+                        _ => {
+                            map.next_value::<IgnoredAny>()?;
+                        }
                     }
                 }
                 let (account, unsupported_mode) = match account {
@@ -327,6 +336,9 @@ impl<'de> Deserialize<'de> for Envelope {
     }
 }
 pub(super) enum CodecEvent {
+    IgnoredNotification,
+    Config(ConfigObservation),
+    Requirements(RequirementsObservation),
     Initialized(InitializeObservation),
     Account(AccountObservation),
     RateLimits(ReadObservation),
@@ -363,6 +375,10 @@ impl<'de> DeserializeSeed<'de> for ResultSeed {
             }
             Method::AccountRead => AccountObservation::deserialize(d).map(CodecEvent::Account),
             Method::RateLimitsRead => ReadObservation::deserialize(d).map(CodecEvent::RateLimits),
+            Method::ConfigRead => ConfigObservation::deserialize(d).map(CodecEvent::Config),
+            Method::ConfigRequirementsRead => {
+                RequirementsObservation::deserialize(d).map(CodecEvent::Requirements)
+            }
             _ => Err(invalid()),
         }
     }
@@ -395,10 +411,11 @@ impl<'de> DeserializeSeed<'de> for ResponseSeed {
     }
 }
 
-/// Bound to the original reader and session; no production constructor exists.
+/// Bound to the original reader and session; construction stays inside the driver.
 pub(super) struct Codec {
     owner: Arc<()>,
     reader: Arc<()>,
+    ignored_notifications: std::sync::atomic::AtomicUsize,
 }
 impl fmt::Debug for Codec {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -406,13 +423,17 @@ impl fmt::Debug for Codec {
     }
 }
 impl Codec {
-    #[cfg(test)]
-    pub(super) fn for_test(driver: &TransportDriver, session: &ProtocolSession) -> Self {
+    pub(super) fn new(driver: &TransportDriver, session: &ProtocolSession) -> Self {
         assert!(Arc::ptr_eq(&driver.owner, &session.owner));
         Self {
             owner: session.owner.clone(),
             reader: driver.reader.clone(),
+            ignored_notifications: std::sync::atomic::AtomicUsize::new(0),
         }
+    }
+    #[cfg(test)]
+    pub(super) fn for_test(driver: &TransportDriver, session: &ProtocolSession) -> Self {
+        Self::new(driver, session)
     }
     fn fail(
         &self,
@@ -444,7 +465,11 @@ impl Codec {
         self.gate(session, driver)?;
         if !matches!(
             method,
-            Method::Initialize | Method::AccountRead | Method::RateLimitsRead
+            Method::Initialize
+                | Method::AccountRead
+                | Method::RateLimitsRead
+                | Method::ConfigRead
+                | Method::ConfigRequirementsRead
         ) {
             return Err(self.fail(session, driver, SessionError::MethodUnavailable));
         }
@@ -456,6 +481,8 @@ impl Codec {
             Method::Initialize => format!("{{\"id\":{id},\"method\":\"initialize\",\"params\":{{\"clientInfo\":{{\"name\":\"local_codex_switcher\",\"version\":\"0.1.0\"}}}}}}\n"),
             Method::AccountRead => format!("{{\"id\":{id},\"method\":\"account/read\",\"params\":{{\"refreshToken\":false}}}}\n"),
             Method::RateLimitsRead => format!("{{\"id\":{id},\"method\":\"account/rateLimits/read\",\"params\":{{\"excludeResetCreditDetails\":true}}}}\n"),
+            Method::ConfigRead => format!("{{\"id\":{id},\"method\":\"config/read\",\"params\":{{\"includeLayers\":false}}}}\n"),
+            Method::ConfigRequirementsRead => format!("{{\"id\":{id},\"method\":\"configRequirements/read\",\"params\":null}}\n"),
             _ => unreachable!(),
         };
         driver.queue_request(session, &request, Zeroizing::new(body.into_bytes()))?;
@@ -492,6 +519,26 @@ impl Codec {
             if method.as_str() == "account/rateLimits/updated" {
                 return self.rate_notification(session, driver, bytes);
             }
+            if !matches!(
+                method.as_str(),
+                "account/updated" | "account/login/completed"
+            ) {
+                // Unknown notifications are forward-compatible metadata only.
+                // Keep a separate lifetime bound: they cannot acknowledge a
+                // request, extend a deadline or leave an account signal queued.
+                if self
+                    .ignored_notifications
+                    .fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+                    >= 32
+                {
+                    return Err(self.fail(session, driver, SessionError::NotificationLimit));
+                }
+                session
+                    .account_notification(Instant::now())
+                    .map_err(|_| driver.fail(session, DriverFault::Session))?;
+                session.notifications -= 1;
+                return Ok(CodecEvent::IgnoredNotification);
+            }
             return self.notification(session, driver, bytes, method.as_str());
         }
         if envelope.result == envelope.error {
@@ -517,6 +564,8 @@ impl Codec {
             Method::Initialize
                 | Method::AccountRead
                 | Method::RateLimitsRead
+                | Method::ConfigRead
+                | Method::ConfigRequirementsRead
                 | Method::LoginStart
                 | Method::LoginCancel
         ) {

@@ -58,9 +58,8 @@ impl ProtocolSession {
     /// Conservative protocol-cleanup budget, not extra time to complete login.
     /// Driver must still stop/reap/capture regardless of cancellation outcome.
     pub const CANCELLATION_BUDGET: Duration = Duration::from_secs(5);
-    #[cfg(test)]
-    fn for_login_test(now: Instant) -> Result<Self, SessionError> {
-        let mut session = Self::for_test(now)?;
+    fn new_login(now: Instant) -> Result<Self, SessionError> {
+        let mut session = Self::new(now)?;
         session.login = Some(LoginFlow {
             deadline: None,
             id: None,
@@ -72,6 +71,10 @@ impl ProtocolSession {
             cancel_error: None,
         });
         Ok(session)
+    }
+    #[cfg(test)]
+    fn for_login_test(now: Instant) -> Result<Self, SessionError> {
+        Self::new_login(now)
     }
     #[cfg(test)]
     fn login_id_for_test(&self, bytes: &[u8]) -> Result<LoginId, SessionError> {
@@ -417,3 +420,9 @@ mod tests;
 
 #[path = "driver.rs"]
 mod driver;
+pub use driver::pipe_session::{
+    AccountPresence, AllowedLoginMethods, ChatGptEndpoint, ConfigObservation, ConfigSettings,
+    CredentialStore, LoginMethod, ObjectSummary, Observed, PipeCancellation, PipeEvent,
+    PipeSession, PipeSessionError, PolicySettings, Provider, RateLimitSummary, RateLimitWindow,
+    RequirementsObservation, RuntimeText, StringOverride, WorkspaceRestriction,
+};

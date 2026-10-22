@@ -6,6 +6,7 @@ import platform
 import re
 import subprocess
 import tempfile
+import sys
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
@@ -151,13 +152,18 @@ def case_command(profile: str, prefix: str, case: str) -> list[str]:
 def run_case(profile: str, prefix: str, case: str) -> dict:
     output_bytes = b''
     started = time.monotonic()
+    # Restoration runs a control plus 17 crash/recovery fixtures. Hosted debug
+    # execution exceeded the ordinary 180s aggregate budget; each owned child's
+    # 75s watchdog remains unchanged. No retry or extra wait on successful runs.
+    deadline = 300 if (prefix, case) == (
+        TARGET_PREFIX, 'ca04c_process_restart_restoration_boundaries') else 180
     try:
         # Each case still has its own process and synthetic roots. No retry loop.
         # The job limit and the existing child watchdogs bound native hangs.
         with tempfile.TemporaryFile() as output:
             try:
                 result = windows_process.run(case_command(profile, prefix, case), cwd=ROOT,
-                                             stdout=output, stderr=output, timeout=180, check=False)
+                                             stdout=output, stderr=output, timeout=deadline, check=False)
             finally:
                 # A timeout remains failure, but its fixed diagnostics are evidence.
                 output.seek(0)
@@ -192,7 +198,7 @@ def run_profile(profile: str) -> bool:
         return False
     failed = False
     # Restart suites already fan out to four owned fixture workers internally.
-    # Run them alone under the SAME per-case deadline, then use two workers for
+    # Run them alone under their bounded case deadline, then use two workers for
     # ordinary cases. Avoid multiplying disk-heavy restart fanout across suites.
     cases = sorted(inventory(), key=lambda item: ('restart' not in item[1], item[1]))
     with ThreadPoolExecutor(max_workers=WORKERS) as executor:
@@ -216,11 +222,13 @@ def run_profile(profile: str) -> bool:
     return not failed
 
 
-def run() -> None:
+def run(profiles: tuple[str, ...] = ("debug", "release")) -> None:
     if platform.system() != 'Windows' or platform.machine().lower() not in {'amd64', 'x86_64'}:
         raise ValueError('Windows x64 is required; a portable skip is not a pass')
     failed = False
-    for profile in ('debug', 'release'):
+    if not profiles or any(profile not in {'debug', 'release'} for profile in profiles):
+        raise ValueError('Invalid native test profile')
+    for profile in profiles:
         started = time.monotonic()
         passed = run_profile(profile)
         failed |= not passed
@@ -234,6 +242,8 @@ def run() -> None:
 
 if __name__ == '__main__':
     try:
-        run()
+        if len(sys.argv) > 2:
+            raise ValueError("Invalid invocation")
+        run(tuple(sys.argv[1:]) or ("debug", "release"))
     except (OSError, ValueError, subprocess.SubprocessError):
         raise SystemExit('Named native execution did not pass; inspect the workspace test step') from None

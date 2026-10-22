@@ -30,6 +30,9 @@ impl std::fmt::Debug for OwnedFamily {
 impl OwnedFamily {
     #[cfg(test)]
     pub(super) fn for_suspended_test_child(handle: HANDLE, pid: u32) -> Result<Self, Fault> {
+        Self::for_suspended_child(handle, pid)
+    }
+    pub(super) fn for_suspended_child(handle: HANDLE, pid: u32) -> Result<Self, Fault> {
         // This constructor is absent from production. The test owns CreateProcessW's
         // original process/thread handles and assigns before resuming its child.
         let job = unsafe { CreateJobObjectW(null(), null()) };

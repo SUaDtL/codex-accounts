@@ -643,11 +643,22 @@ fn managed_expiry_blocked_write_and_late_ack_never_reopen_the_driver() {
 
 #[test]
 fn managed_hostile_notifications_are_syntax_checked_bound_and_terminal() {
+    let (mut s, mut d, peer, c, _cancel) = setup();
+    assert!(peer
+        .output
+        .try_write(b"{\"method\":\"future/notification\",\"params\":{}}\n")
+        .unwrap());
+    let frame = take_frame(&mut d, &mut s);
+    assert!(matches!(
+        c.consume(&mut s, &mut d, frame).unwrap(),
+        CodecEvent::IgnoredNotification
+    ));
+    // Ignored metadata does not leave a pending account signal that blocks login.
+    start(&mut s, &mut d, &c);
     for raw in [
         r#"{"method":"account/login/completed","params":{"loginId":"SYNTHETIC_ID","success":true,"suc\u0063ess":false}}"#,
         r#"{"method":"account/login/completed","params":{"loginId":"SYNTHETIC_ID","success":true,"onboardingEntrypoint":"unknown"}}"#,
         r#"{"id":3,"method":"account/login/completed","params":{}}"#,
-        r#"{"method":"future/notification","params":{}}"#,
     ] {
         let (mut s, mut d, peer, c, _cancel) = setup();
         start(&mut s, &mut d, &c);

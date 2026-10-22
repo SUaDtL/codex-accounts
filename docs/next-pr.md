@@ -1,11 +1,74 @@
-# Current packet: CA-02B cached primary signer
+# Current packet: finish the Windows application
 
-PR #24's reviewed supervisor-fixture and diagnostic repair is joined into
-this branch. Its merge remains a prerequisite: require #24 green and merged,
-then verify this combined source/tree and completed hosted gates before
-merging #23. The original PR #22 post-merge failure remains recorded in
-[validation](validation.md); no deadline, case or qualification gate
-is waived.
+## Active delivery: PR #25
+
+[PR #25](https://github.com/SUaDtL/codex-accounts/pull/25) contains the integrated Windows
+application, documentation and CI delivery. Current hosted results belong to its current
+head, not the historical records below. The first run exposed duplicate Trivy SARIF
+categories and Windows-only helpers compiled into portable builds; both were corrected.
+Hosted Trivy/OpenGrep and UI jobs passed on the intervening run. The final combined run
+must pass before merge. No merge, signing or release is authorized by this record.
+
+2026-10-21: the owner requested a functioning application with focused checks and
+explicitly rejected exact-build approval. Normal Desktop updates must work after
+runtime, storage, policy and recovery checks. The canonical specification records
+that direction. The owner personally completed the A -> B -> A trial.
+
+Working checkout: `.worktrees/native-signer182`. The optimized desktop application
+builds with native capture, isolated login, health/quota, switch and recovery wired.
+Current helper startup/configuration/exit passed in an empty synthetic home.
+The owner confirmed successful Add B, A -> B -> A and an additional return to B.
+The current candidate is dist/windows-x64-refined, implementing the approved
+UI feedback plus read-only current/saved-account usage polling, expiry and resets.
+See spec-amendments/usage-observation-2026-10-21.md for the scoped polling change.
+The prior build's real account round trip remains confirmed. The refreshed candidate
+has passed build, focused native and synthetic browser checks; the owner accepted the UI.
+The active packet now adds documentation, parallel CI, security scans and binary delivery
+without a version bump. See ci.md for artifact retention and release boundaries.
+Release qualification, signing/publication and macOS remain separate. Preserve the
+vault and all dirty worker changes. No signing/publication has occurred.
+
+## Historical crash packet
+
+Main run 38815869659 at `9b3cc2dffc2be77f47d868918b9d9a2c5b42acee` failed its
+debug discovery test process with STATUS_ACCESS_VIOLATION. Release complement,
+supervisor proof and all 108 named native executions passed; the aggregate is red.
+Continue `codex/fix-discovery-factory-lifetime`. Five focused cases passed alone,
+but the controlled serial complement crashed on its second hashing case after
+apartment teardown. Preserve that failing evidence and test fresh-process
+teardown/reinitialization before and after the fix. The original hosted crash
+stack remains unobserved; a source lifetime hazard is not that missing stack.
+
+Use registered, uncached WinRT activation with interfaces scoped before apartment
+shutdown, preserving SHA-256, errors, bounds and all qualification refusals. Do
+not suppress teardown, leak an apartment, serialize away the full-suite failure,
+skip tests, retry CI until green or introduce a new cryptographic primitive.
+Require focused independent security review and final combined real gates. The
+local repair and current-call-site review now pass; this does not qualify Desktop.
+
+## Historical static runtime-selection investigation
+
+PRs #24 and #23 are merged. Main is
+`9b3cc2dffc2be77f47d868918b9d9a2c5b42acee`; their six-job PR runs passed,
+and #24's separate main run passed. #23's post-merge failure is the current
+repair above; refresh live refs. Preserve `codex/desktop-runtime-binding-evidence`
+for later continuation. Preserve the
+original unknown PR #22 failure cause in [validation](validation.md).
+
+The new exact-build ancestor READ_CONTROL-only observation also returned access
+denied. Do not retry through another security API, elevate, alter ACLs or infer
+all-principal protection from another observation. One public-package metadata
+attempt refused without retaining its specific cause; do not label it network
+failure or silently select a newer build.
+
+Inspect only separately reviewed, bounded static Desktop bootstrap resources to
+identify runtime selection/copy/cache rules and home/policy routing. Treat source
+as untrusted data and execute none of it. Retain exact source/hash/registration
+bindings and unknown ancestry/distribution correspondence; no configuration,
+auth, history or process-memory reads are authorized by this packet. Implement
+only rules established by actual evidence, keeping production authority disabled.
+
+## Historical CA-02B packet
 
 PRs #14 through #22 are merged. Main is
 `6ffc3d4568364caae1dc5dc3a2d6402ef5cfee3b`; PR #22 passed all six jobs in

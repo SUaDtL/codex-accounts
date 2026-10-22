@@ -8,6 +8,139 @@ mod codec_tests;
 
 const SAMPLE: &[u8] = b"{\"synthetic\":true}\n";
 
+#[test]
+fn pipe_facade_consumes_delivered_notification_credits_including_cancellation() {
+    use crate::{PipeEvent, PipeSession};
+    use std::collections::VecDeque;
+    use std::sync::Mutex;
+    struct Feed(Arc<Mutex<VecDeque<u8>>>);
+    impl std::io::Read for Feed {
+        fn read(&mut self, output: &mut [u8]) -> std::io::Result<usize> {
+            let mut bytes = self.0.lock().unwrap();
+            if bytes.is_empty() {
+                return Err(std::io::ErrorKind::WouldBlock.into());
+            }
+            let count = bytes.len().min(output.len());
+            for target in &mut output[..count] {
+                *target = bytes.pop_front().unwrap();
+            }
+            Ok(count)
+        }
+    }
+    let incoming = Arc::new(Mutex::new(VecDeque::new()));
+    let send = |bytes: &[u8]| incoming.lock().unwrap().extend(bytes.iter().copied());
+    let (mut pipe, cancel) = PipeSession::from_nonblocking_io(
+        Box::new(std::io::sink()),
+        Box::new(Feed(incoming.clone())),
+        Box::new(Feed(Arc::new(Mutex::new(VecDeque::new())))),
+        true,
+    )
+    .unwrap();
+    pipe.initialize().unwrap();
+    assert!(matches!(
+        pipe.next_event().unwrap(),
+        PipeEvent::Written(Method::Initialize)
+    ));
+    send(b"{\"id\":1,\"result\":{\"codexHome\":\"C:/SYNTHETIC_HOME\",\"platformFamily\":\"windows\",\"platformOs\":\"windows\",\"userAgent\":\"SYNTHETIC\"}}\n");
+    assert!(matches!(
+        pipe.next_event().unwrap(),
+        PipeEvent::Initialized { .. }
+    ));
+    pipe.initialized().unwrap();
+    assert!(matches!(
+        pipe.next_event().unwrap(),
+        PipeEvent::Written(Method::Initialized)
+    ));
+    let updates = [
+        b"{\"method\":\"account/updated\",\"params\":{}}\n".as_slice(),
+        b"{\"method\":\"account/rateLimits/updated\",\"params\":{\"rateLimits\":{}}}\n".as_slice(),
+    ];
+    for _ in 0..40 {
+        for update in updates {
+            send(update);
+            assert!(matches!(
+                pipe.next_event().unwrap(),
+                PipeEvent::AccountUpdated | PipeEvent::RateLimitsUpdated(_)
+            ));
+        }
+    }
+    // Drained updates neither exhaust the queued-signal bound nor block login.
+    pipe.start_login().unwrap();
+    assert!(matches!(
+        pipe.next_event().unwrap(),
+        PipeEvent::Written(Method::LoginStart)
+    ));
+    send(b"{\"id\":2,\"result\":{\"type\":\"chatgpt\",\"loginId\":\"SYNTHETIC\",\"authUrl\":\"https://synthetic.invalid/\"}}\n");
+    assert!(matches!(
+        pipe.next_event().unwrap(),
+        PipeEvent::LoginStarted { .. }
+    ));
+    cancel.request();
+    loop {
+        match pipe.next_event().unwrap() {
+            PipeEvent::Written(Method::LoginCancel) => break,
+            PipeEvent::CancellationProgress => {}
+            other => panic!("unexpected cancellation event: {other:?}"),
+        }
+    }
+    for _ in 0..40 {
+        for update in updates {
+            send(update);
+            assert!(matches!(
+                pipe.next_event().unwrap(),
+                PipeEvent::AccountUpdated | PipeEvent::RateLimitsUpdated(_)
+            ));
+        }
+    }
+    send(b"{\"id\":3,\"result\":{\"status\":\"canceled\"}}\n");
+    assert!(matches!(
+        pipe.next_event().unwrap(),
+        PipeEvent::CancellationAcknowledged
+    ));
+}
+
+#[test]
+fn native_adapter_partial_acknowledgment_does_not_mark_request_sent() {
+    struct ShortWriter;
+    impl std::io::Write for ShortWriter {
+        fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+            Ok(bytes.len().min(2))
+        }
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+    let mut session = ProtocolSession::for_test(Instant::now()).unwrap();
+    let (mut driver, _peer, _cancel) = harness(&session);
+    let (wake, _receiver) = sync_channel(1);
+    driver.stdin = io::file_writer(Box::new(ShortWriter), &driver.reader, &wake);
+    let request = initialize(&mut session, &mut driver);
+    let (progress, receipt) = driver.write_step(&mut session).unwrap();
+    assert!(progress);
+    assert!(receipt.is_none());
+    assert!(
+        !session
+            .pending
+            .iter()
+            .find(|pending| pending.request.id == *request.id())
+            .unwrap()
+            .sent
+    );
+    for _ in 0..SAMPLE.len() {
+        if driver.write_step(&mut session).unwrap().1.is_some() {
+            break;
+        }
+    }
+    assert!(
+        session
+            .pending
+            .iter()
+            .find(|pending| pending.request.id == *request.id())
+            .unwrap()
+            .sent
+    );
+}
+
 struct Peer {
     input: ReadEnd,
     output: WriteEnd,

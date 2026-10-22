@@ -20,6 +20,8 @@ HISTORICAL = {
 }
 BASE_COMMIT = '727eb6154db1d7c4ac5db10a7868b6271cd55293'
 ENGINE = 'crates/vault-storage/src/engine.rs'
+CHANGED = (ENGINE, 'crates/vault-storage/src/coordinator.rs',
+           'crates/vault-storage/src/journal.rs')
 SOURCES = (
     'crates/core/src/lib.rs',
     'crates/platform/src/lib.rs',
@@ -116,22 +118,25 @@ def historical_chain(read_source) -> dict:
 
 def semantic_review(review, record, previous) -> None:
     fields = {'packet_format', 'base_commit', 'source_state', 'platform', 'evidence',
-              'native_status', 'predecessor_sha256', 'changed_source',
+              'native_status', 'predecessor_sha256', 'changed_sources',
               'unchanged_interfaces', 'assessment'}
-    header(review, fields, 'codex-accounts/macos-source-review/v1', BASE_COMMIT, 'source-review-only')
-    changed = review['changed_source']
+    header(review, fields, 'codex-accounts/macos-source-review/v2', BASE_COMMIT, 'source-review-only')
+    changed = review['changed_sources']
     if (review['source_state'] != 'reviewed-working-tree' or
             review['predecessor_sha256'] != HISTORICAL[PREVIOUS] or
-            not isinstance(changed, dict) or
-            set(changed) != {'path', 'before_sha256', 'after_sha256'} or
-            changed['path'] != ENGINE or
-            changed['before_sha256'] != previous['interfaces'][ENGINE] or
-            changed['after_sha256'] != record['interfaces'][ENGINE]):
+            not isinstance(changed, list) or len(changed) != len(CHANGED)):
         raise PacketError('Shared interface semantic review changed')
-    interface_set(review['unchanged_interfaces'], set(SOURCES) - {ENGINE})
+    for item, name in zip(changed, CHANGED):
+        if (not isinstance(item, dict) or
+                set(item) != {'path', 'before_sha256', 'after_sha256'} or
+                item['path'] != name or
+                item['before_sha256'] != previous['interfaces'][name] or
+                item['after_sha256'] != record['interfaces'][name]):
+            raise PacketError('Shared interface semantic review changed')
+    interface_set(review['unchanged_interfaces'], set(SOURCES) - set(CHANGED))
     if any(review['unchanged_interfaces'][name] != previous['interfaces'][name] or
            record['interfaces'][name] != previous['interfaces'][name]
-           for name in SOURCES if name != ENGINE):
+           for name in SOURCES if name not in CHANGED):
         raise PacketError('Shared interface semantic review changed')
     assessment = review['assessment']
     if (not isinstance(assessment, dict) or

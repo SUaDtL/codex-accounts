@@ -1,5 +1,28 @@
 # Dependency and build boundary
 
+Current application: Rust 1.90.0, exact Cargo dependency pins and Cargo.lock, with
+Windows-only Tauri/WebView2 desktop integration and native WinHTTP usage observation.
+`python tools/check_dependencies.py` verifies reviewed Cargo inputs before acquisition.
+Use `cargo fetch --locked`, then `--locked --offline` for compilation and checks.
+
+On 2026-10-22 the owner selected AGPL-3.0-only for this project. Cargo manifests add
+only that workspace license and its inheritance declarations. The dependency checker
+requires those declarations, removes exactly their lines and verifies the remaining
+bytes against the unchanged prior review hashes. All 407 external packages, versions,
+features and Cargo.lock bytes remain unchanged. Dependency licenses remain their own.
+
+CI additionally uses Playwright 1.64.1 from package-lock.json for synthetic browser
+checks, Trivy 0.76.1 and OpenGrep 1.31.0. These are development tools and are not bundled
+into the executable. Their licenses, pins and verification are documented in
+[security tooling](../security/README.md). No floating installer or registry rule pack
+is executed. New versions require source/license/advisory review and lock/checksum updates.
+
+The sections below are dated reviews of earlier increments. Statements such as
+"no Tauri/npm dependency" describe that increment, not the current application.
+
+## Historical review record
+
+
 Rust remains pinned to 1.90.0. Core and platform classification remain
 dependency-free. Runtime framing reuses the reviewed vault JSON validator and
 zeroize; runtime code continues to forbid unsafe code. CA-02 adds one discovery-only crate:
@@ -126,3 +149,11 @@ constructor or external dispatcher. The sole effects driver is compiled into tes
 The fingerprint byte codec exists only to persist opaque marks inside authenticated
 encrypted metadata; it is not a diagnostic exporter. No new advisory scan or full
 independent audit is claimed for unchanged dependencies.
+
+## Desktop application reuse (2026-10-21)
+
+The desktop-app workspace member reuses the already reviewed Tauri, serde and
+serde_json versions and feature sets, plus local discovery/vault-storage. The
+lockfile adds only the local application package. The current review records its
+previous digest and this scoped amendment; the eight historical records remain
+unchanged. No dependency acquisition or new external package is needed.

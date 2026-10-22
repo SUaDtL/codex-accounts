@@ -49,6 +49,16 @@ fn activate_registered<T>(
     activate()
 }
 
+fn acquire_inventory<F, T>(
+    mut activate: impl FnMut() -> windows::core::Result<F>,
+    mut inventory: impl FnMut(&F) -> windows::core::Result<T>,
+    pause: impl FnMut(std::time::Duration),
+) -> windows::core::Result<T> {
+    // The factory can be acquired just before its server starts stopping. Retry
+    // the whole read-only acquisition, releasing that factory before the pause.
+    activate_registered(|| inventory(&activate()?), pause)
+}
+
 pub(super) fn registered_sync_check(ancestors: &[File]) -> Result<(), StorageError> {
     use windows::core::{Interface, HSTRING};
     use windows::Storage::{IStorageItem, Provider::IStorageProviderSyncRootManagerStatics};
@@ -61,7 +71,9 @@ pub(super) fn registered_sync_check(ancestors: &[File]) -> Result<(), StorageErr
     // an agile factory across apartment teardown. This scoped factory and every
     // derived interface are released before the stack-owned apartment. There is no
     // generated helper's DLL-search fallback for a missing registered class.
-    let factory: IStorageProviderSyncRootManagerStatics = activate_registered(
+    let roots: windows_collections::IVectorView<
+        windows::Storage::Provider::StorageProviderSyncRootInfo,
+    > = acquire_inventory(
         || {
             // SAFETY: documented fixed registered class, generated SDK interface;
             // every attempt stays inside the same initialized stack apartment.
@@ -71,18 +83,17 @@ pub(super) fn registered_sync_check(ancestors: &[File]) -> Result<(), StorageErr
                 ))
             }
         },
+        |factory: &IStorageProviderSyncRootManagerStatics| {
+            // SAFETY: generated SDK vtable and output type. The live factory owns
+            // the call; null-initialized output is converted only after success.
+            unsafe {
+                let mut output = null_mut();
+                (factory.vtable().GetCurrentSyncRoots)(factory.as_raw(), &mut output)
+                    .and_then(|| windows::core::Type::from_abi(output))
+            }
+        },
         std::thread::sleep,
     )
-    .map_err(|e| api_error("factory", e))?;
-    // SAFETY: use the generated SDK vtable and output type. The live factory
-    // owns the call; null-initialized output is converted only after success.
-    let roots: windows_collections::IVectorView<
-        windows::Storage::Provider::StorageProviderSyncRootInfo,
-    > = unsafe {
-        let mut output = null_mut();
-        (factory.vtable().GetCurrentSyncRoots)(factory.as_raw(), &mut output)
-            .and_then(|| windows::core::Type::from_abi(output))
-    }
     .map_err(|e| api_error("inventory", e))?;
     let count = roots.Size().map_err(|e| api_error("count", e))?;
     if count > 128 {
@@ -202,6 +213,43 @@ fn native_inventory_thread_exit_balances_com_before_tls_teardown() {
         completed &= child.join().is_ok();
     }
     assert!(completed, "all inventory threads must complete");
+}
+
+#[cfg(test)]
+#[test]
+fn native_inventory_stopping_reacquires_factory_and_preserves_other_failures() {
+    use windows::core::{Error, HRESULT};
+    for (code, failures, expected_calls) in [
+        (CO_E_SERVER_STOPPING, 2, 3),
+        (CO_E_SERVER_STOPPING, 10, 4),
+        (0x80070005u32 as i32, 10, 1),
+    ] {
+        let mut factories = 0;
+        let mut inventories = 0;
+        let result = acquire_inventory(
+            || {
+                factories += 1;
+                Ok(factories)
+            },
+            |factory| {
+                inventories += 1;
+                assert_eq!(*factory, inventories);
+                if inventories <= failures {
+                    Err(Error::from_hresult(HRESULT(code)))
+                } else {
+                    Ok(42)
+                }
+            },
+            |_| {},
+        );
+        assert_eq!(factories, expected_calls);
+        assert_eq!(inventories, expected_calls);
+        if failures < expected_calls {
+            assert_eq!(result.unwrap(), 42);
+        } else {
+            assert_eq!(result.unwrap_err().code().0, code);
+        }
+    }
 }
 
 #[cfg(test)]

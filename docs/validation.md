@@ -1,5 +1,434 @@
 # Validation and evidence boundary
 
+## Active delivery: PR #25
+
+[PR #25](https://github.com/SUaDtL/codex-accounts/pull/25) contains the integrated Windows
+application, documentation and CI delivery. Current hosted results belong to its current
+head, not the historical records below. The first run exposed duplicate Trivy SARIF
+categories and Windows-only helpers compiled into portable builds; both were corrected.
+Hosted Trivy/OpenGrep and UI jobs passed on the intervening run. The final combined run
+must pass before merge. No merge, signing or release is authorized by this record.
+
+## 2026-10-22: local CI verification and hook repair
+
+Local results: 266 Python tests passed (one platform-specific skip), including 44 CI
+checks and six packaging/retention checks. Both synthetic Chromium scripts, Rust fmt,
+workspace/all-target strict Clippy, Trivy secret/CVE/package-SBOM checks and eight
+OpenGrep rule fixtures plus source scan passed. Independent application auth/crypto,
+CI security and delivery coverage reviews reported no remaining critical/high findings
+within their inspected scopes. Coverage percentages are unmeasured.
+
+The first application commit was refused because the Git registry referenced removed
+codeArbiter 0.17.4. The owner authorized in-place repair. The installed 0.20.6 registration
+routine refreshed the managed entry; ca-doctor then reported zero failures and its actual
+Git pre-push probe passed. Commit 1aeb635 subsequently succeeded with enforcement enabled.
+No hook was disabled or session/approval receipt fabricated. Host MCP write-gate coverage
+is separate from this verified Git backstop. PR and hosted checks follow below when known.
+
+## 2026-10-22: documentation and CI delivery
+
+The owner accepted the refined UI and requested repository documentation, fast parallel
+CI, Trivy, OpenGrep and downloadable binaries. Version remains 0.1.0, pre-1.0.
+The real account round trip was owner-confirmed; no new authentication is needed for CI.
+Current commands and delivery policy are in docs/ci.md and CONTRIBUTING.md.
+Local scanner fixtures/source scans and synthetic UI checks pass. Hosted results remain
+pending until this source is committed and its PR runs. No release, signing or merge
+has been performed. Earlier evidence below is retained with its original scope.
+
+## 2026-10-22: layout, diagnostics, combined Add and banked resets
+
+Build: `dist/windows-x64-refined/codex-accounts-desktop.exe`.
+SHA-256: `0beab4dd9572e1606f0a48cb1dc335cd7b1754d8e73b643a53d96bbfce6997f6`.
+
+The owner reported clipping during Open vault. A delayed synthetic IPC response
+reproduced document height 387 in a 360px viewport, with the status ending at
+367px. Flex sizing now allocates room for status text instead of appending it
+below a fixed viewport-sized panel. The same regression passes at 940x360,
+940x328 and 420x320, including a wrapped failure. Long lists remain scrollable.
+
+Diagnostics shows installation version, conditional failure details, Refresh
+and Export report. Duplicate inventory prose/list and duplicate vault state are
+removed. Export leaves Settings open. Expanded diagnostics fits the default
+window. The + form offers Save current account and Sign in to another account,
+sharing the label input; save-current is removed from Settings. Form actions
+remain visible at minimum window size, and keyboard focus outlines are preserved.
+
+Available banked reset counts are parsed from the existing usage response's
+rate_limit_reset_credits.available_count, projected as optional u32 metadata,
+and shown only when positive with an available usage observation. Missing,
+invalid and expired data never invent a count. There are no extra requests or
+reset-consumption commands. See the usage amendment for the official source.
+
+Verification: two focused usage parser tests, six desktop tests, strict scoped
+all-target Clippy, formatting, specification integrity, optimized offline build,
+and synthetic Chromium checks passed. The browser check exercises both Add
+routes, diagnostics refresh/error/export, banked-reset visibility, recovery and
+compact/narrow screens; screenshots were visually inspected. Regression script:
+.review-evidence/layout-fix-check.cjs. Expanded UI script:
+.review-evidence/ui-polish-check.cjs. Packaged payload and all 145 source input
+hashes match. Actual reset-count availability on the owner's accounts and native
+UI acceptance of this build remain for owner use. No real account operations,
+publication or signing were performed during this slice.
+
+## 2026-10-22: compact visual cleanup candidate
+
+Build: `dist/windows-x64-ui-polish/codex-accounts-desktop.exe`.
+SHA-256: `edc5681089527dde9d5d729b4cf4f71694537a1871e44939669d4905c5136ccf`.
+
+The owner-provided screenshots establish that the preceding candidate displayed
+weekly usage for both saved accounts. They do not establish every refresh/expiry
+scenario. No real labels or usage values are copied here.
+
+This slice removes the duplicate brand mark, repetitive vault/security copy,
+Vault closed/unlocked footer status, redundant usage/account-list settings views,
+and switch-history UI. Header refresh reloads accounts and schedules usage;
+close and disclosure controls use SVG icons. Account name is empty with explicit
+Examples helper text. The default window is 940x360 with scrolling for longer
+lists. Only reported quota windows render, so an absent secondary window does
+not produce a placeholder bar. The closed panel fills the remaining window with
+balanced margins. Settings keeps vault/account actions and collapsed diagnostics.
+
+Removed unused prune-history/current-health IPC commands and duplicate display
+code. The existing verified-later-startup pruning path now runs on a clean existing
+vault opening; pending operations and conflict evidence remain. A no-op pruning
+pass does not create another registry generation. There is no unbounded audit log.
+
+Checks: six desktop tests, two existing pruning tests (including native reopen),
+existing durable-holds retention test, strict scoped all-target Clippy, optimized
+offline build, 13 projection tests and specification integrity passed. Synthetic
+Chromium checked compact two-account layout, a weekly-only response, missing-window
+omission, direct vault entry, SVG controls, empty name/examples, header refresh,
+completed-history absence, recovery actions and narrow layout. Screenshots are in
+.review-evidence/ui-polish; its check is .review-evidence/ui-polish-check.cjs.
+Payload and all 145 source input hashes match the package. This is a
+local candidate, not owner acceptance or a published release. No actual account
+operations were performed during development. Previous checks remain historical.
+
+## 2026-10-22: UI feedback and read-only usage candidate
+
+Build: `dist/windows-x64-ui-feedback/codex-accounts-desktop.exe`.
+SHA-256: `68fb530dee28f09e156add08eb3cb3d11bcc14817f6f3cfa032b5a01f3d0f85f`. Close the previous Accounts window before opening it.
+
+The approved feedback slice is implemented: unified vault entry/settings, direct
+Open/Create vault CTA, jade plus matching the cog, small accessible status LEDs,
+no em dashes in product copy, and no manual account-check acknowledgment UI/API.
+The old journal phase remains compatible and is presented as Account switched.
+An advisory metadata-only vault presence query never authorizes creation or
+replaces native open/create checks. Unknown presence never means absent.
+
+Read-only usage polling now runs sequentially once per minute with an unlocked,
+visible vault. It uses the official fixed usage GET with existing access tokens,
+no helper startup, token refresh, auth writes or active-association mutation.
+Current credentials are read with shared handles released before HTTP. A matching
+live identity supplies fresh tokens; otherwise the requested saved profile supplies
+its token. Identity mismatches never attribute another account's usage. HTTP401
+clears usage; other errors stay unavailable. Active-account polling retries after
+expiry so Codex's own renewal can recover. Expired inactive accounts require a
+manual retry or sign-in. Reset windows clear and trigger one fresh check, never
+an assumed full quota. Exact reset/freshness timestamps stay in tooltips.
+
+The user-authorized exception to earlier no-inactive-polling defaults is recorded
+in spec-amendments/usage-observation-2026-10-21.md. The only native feature addition
+is Win32_Networking_WinHttp on existing windows-sys 0.61.2; cached source/license
+review passed, package graph and lock remain unchanged. Redirects, cookies and
+automatic authentication are disabled; native waits, response headers and body
+are bounded. The official endpoint is implementation-dependent, not a public API
+guarantee. No live credential/network request was run during development.
+
+Checks passed: six desktop tests; three existing auth parser tests; three focused
+usage checks (identity/schema parsing, header injection/bounds, and a synthetic
+native reader while an existing writer stays open); scoped strict all-target
+Clippy; optimized offline build; 23 projection/dependency Python tests; spec and
+407-package dependency checks. Synthetic Chromium checks cover vault entry,
+settings/menus/recovery, narrow/zoom layouts, sequential polling, expiry masking,
+reset invalidation, backoff, visibility, late-result discard and action admission.
+The focused race check is .review-evidence/ui-feedback-preview/check-usage-race.cjs.
+Independent source review findings were repaired and re-reviewed with no remaining
+blocker in that scope. Package payload and 145 source inputs match the build.
+
+This is a local candidate for owner use, not a real-account usage observation or
+native visual acceptance. Prior account round-trip evidence belongs to its older
+recorded build. No commit, push, signing or publication was performed.
+
+## 2026-10-21: compact UI, generated icon and focused efficiency pass
+
+The owner rejected the prior UI and approved the imagegen compact dark account-list
+concept. This candidate implements active-first rows, observed quota bars, account
+menus, Settings, visible recovery actions and a fixed Open Codex command. Routine
+test instructions and completed switch history no longer dominate the main screen.
+A generated jade/silver account-exchange icon replaces the CA placeholder in the
+header and Windows icon resources. Source and prompt: crates/desktop-app/icons/README.md.
+
+Current build: `dist/windows-x64-ui-refresh/codex-accounts-desktop.exe`.
+SHA-256: `d3abf08335b323e6b6edd2d3249971a5a10a31d5d3527ff845b4761a908e4732`.
+Close the older Accounts window before opening this build; retain the existing vault.
+This candidate is ready for owner review. The real-account round trip below belongs
+to the previous build; agents did not operate real accounts or launch this native UI.
+
+Efficiency changes: resolve sandbox identities only for ACEs needing an exception;
+omit discarded certificate/report work in operational discovery while keeping full
+image hashes and retained-handle checks; query the exact official package family;
+remove an unused stored path; share identical path normalization. No dependencies
+or Windows permissions changed. Synthetic debug samples: 2,000 private ACL checks
+302ms -> 7ms; existing 8,192-file cleanup 7.58s -> 4.87s; retained-image discovery
+0.71s -> 0.45s. These are single samples with uncontrolled caches, not full-switch
+latency measurements. The narrower package query had no measured additional gain.
+
+Verification: optimized offline build; strict all-target Clippy for desktop,
+vault-storage and discovery; six desktop tests; focused existing permission,
+cleanup and discovery checks. Headless Chromium exercised the actual bundled assets
+with synthetic IPC: menus, dialogs, settings, recovery, typed Open Codex dispatch,
+420px layout and a 200%-equivalent viewport. No JavaScript errors or horizontal
+overflow. These checks are not native screen-reader or real-account UI acceptance.
+Checks and screenshots are retained in .review-evidence/ui-refresh. Package payload
+and all 144 source input hashes were checked after copying. No commit or publication.
+
+## 2026-10-21: owner confirms real account round trip
+
+The owner reports successful browser sign-in and saving B, switching back to A,
+logging in and confirming A in Desktop, then switching back to B to continue this
+conversation. The supplied screenshot shows both accounts accepted by the official
+runtime, Desktop opened, and user confirmations recorded. This completes the
+owner-run A -> B -> A trial and an additional return to B on the delivered Windows
+build. The preceding screenshot also shows both saved accounts and B highlighted
+as last known active. No real account labels or credentials are copied here.
+
+The functioning Windows application requested for this host is delivered. This
+is owner-reported real use with screenshot support, not an automated identity
+attestation or completion of every release scenario. Signing/publication, broader
+release qualification and the separately selected macOS work remain open.
+
+Build: `dist/windows-x64-cleanup-fix/codex-accounts-desktop.exe`.
+SHA-256: `a22b264a7c8391ba452991a86f51fb35bd3182623965450c81ac2e17e8d5a5f1`.
+No executable changes or additional account operations were needed to record this
+result. Earlier entries below retain the evidence available at their checkpoints.
+
+## 2026-10-21: completed-login cleanup and active-account display
+
+The owner completed browser login but B was not listed. Cleanup runs before the
+fresh capture is published, so that failed attempt did not save B. Three concrete
+barriers were repaired: the 4,096-entry cap was smaller than the runtime plugin
+inventory; the ordinary 240-character path limit rejected plugin assets; and the
+normal AppData parent has the official package capability's write grant.
+
+The owner explicitly approved verified Codex-managed parent permissions. Windows'
+package SID derivation matched that grant to the fixed official package family.
+Only that exact public capability is accepted on ancestors; owners, arbitrary
+capabilities and private vault/credential ACL rules remain unchanged. No existing
+Windows permissions were modified. See the dated permission amendment.
+
+Cleanup permits 65,536 entries and extended paths only in the registered scratch
+tree. It still pins and verifies every object before deleting anything and rejects
+reparse points, hardlinks, foreign readers/writers and live writers. Three focused
+regressions reproduced the prior refusals and pass after repair. Eight cleanup,
+one capability, two current-association and five desktop tests pass; affected
+all-target Clippy, JavaScript syntax and optimized offline build pass. Bounded
+independent source review found no actionable issue. The current official helper
+also passed isolated login start/cancel, exit and scratch cleanup without login.
+
+A temporary metadata-only diagnostic accepted all 7,874 objects in the actual
+interrupted scratch tree after the fixes. It read no credential content, performed
+no deletion, and was removed before building. Actual cleanup and another completed
+browser sign-in remain owner actions; do not claim the real A -> B -> A succeeded.
+
+The UI now shows the last known active account and marks its saved profile. It
+uses the encrypted registry association, clears ambiguous/recovery states, and
+explains checking again after external sign-in. Add preserves A; Switch selects B.
+It does not change the browser's general ChatGPT sign-in.
+
+Current candidate: `dist/windows-x64-cleanup-fix/codex-accounts-desktop.exe`.
+SHA-256: `a22b264a7c8391ba452991a86f51fb35bd3182623965450c81ac2e17e8d5a5f1`. Close older Accounts and Codex
+clients, open this build's existing vault to clean the interrupted login, then
+retry Add B and explicitly Switch. Earlier candidate entries below are historical.
+
+## 2026-10-21: Add account false policy refusal corrected
+
+The owner reports Add another account failed before opening a browser. Their
+screenshot shows the main account saved; they report returning to it afterward.
+This is not a completed second-account or A -> B -> A trial.
+
+The installed runtime supplies the official ChatGPT backend URL even in an empty
+home. The app incorrectly treated any present URL as a custom override. The
+codec now classifies only the exact official production endpoint (with or without
+its final slash), discards its text, and retains all other policy restrictions.
+Official source: https://github.com/openai/codex/blob/main/codex-rs/config/defaults.toml
+
+The existing native smoke reproduced Err(Policy) before repair and passes after
+repair. It now exercises compatibility, actual isolated login start/cancel, owned
+helper exit and absence of auth.json, without opening a browser or reading an
+existing account. Endpoint negative cases and both existing config codec checks
+pass. Affected all-target Clippy, optimized offline build and bounded independent
+source review pass. User authentication and the real A -> B -> A remain pending.
+
+Current candidate: `dist/windows-x64-login-fix/codex-accounts-desktop.exe`.
+Close the older Accounts window before launching it. SHA-256:
+`6230fab85869bb54769c00fd403bb39e2160a7f6d7f69154395784274367a068`. Prior entries below are historical.
+
+## 2026-10-21: existing Codex sandbox permission compatibility
+
+The owner explicitly approved supporting the normal local CodexSandboxUsers
+read-only active-auth grant. The adapter resolves the fixed group qualified by
+the OS computer name, verifies local alias/domain/SAM identity, and accepts only
+read/execute rights. Unknown groups and sandbox write/control grants refuse.
+This exception does not apply to vault/staging creation, owners or ancestors.
+No existing Windows permissions are changed.
+
+The native fixture reproduced UnsafePath before implementation, then passed with
+the local group read grant while rejecting write access and strict-vault access.
+The existing arbitrary-reader refusal and focused right-mask checks also pass.
+A temporary read-only metadata diagnostic passed the actual ancestor and auth
+file checks, without reading credential data or changing descriptors. Its source
+was removed. Affected Clippy and optimized offline build pass. Account capture
+and the real A -> B -> A trial remain unverified; the owner must retry.
+
+Current candidate: `dist/windows-x64-sandbox-fix/codex-accounts-desktop.exe`.
+Close the previous Accounts window before launching it. SHA-256:
+`76476ceaa6339baf96a7cc85e3bccb91ce7a1a8aab88fc25e1ca7ef1cdb6a5db`.
+
+
+## 2026-10-21: reported capture refusal corrected
+
+The owner reported E_COMPAT_UNKNOWN with no saved accounts. Fixed-name metadata
+showed both Desktop global-state files at 2,456,274 bytes. The app incorrectly
+used its 1 MiB credential limit for these unrelated UI state files. Native read
+and strict parsing now share a separate 16 MiB state limit; credential and TOML
+limits stay 1 MiB, with duplicate/depth/UTF-8 checks unchanged.
+
+The focused 2.5 MB regression failed before repair and passes after repair. Three
+selection tests, 23 existing vault tests, affected Clippy and release build pass.
+A temporary diagnostic using the production parser accepted both real selection
+files, displaying only success booleans. No auth file or account operation was
+accessed. The diagnostic source was removed; independent source review found no
+actionable issue. Actual account capture/switch remains to be retried by the owner.
+
+Corrected candidate: `dist/windows-x64-state-fix/codex-accounts-desktop.exe`.
+Close the older running candidate before using this one. SHA-256:
+`a59b281f1220a7e9d706767fe1b16fef6d18203c1cdc8486281b29dc144962ec`. Earlier payloads and evidence below are historical.
+
+
+## 2026-10-21: diagnostics and user acknowledgement
+
+The candidate now exports a strict allowlist of fixed operation codes, random
+operation IDs and timestamps through a native Save dialog. It preserves existing
+files and excludes account labels, credentials, paths and raw helper output.
+Acknowledgements validate the completed current generation and remain explicitly
+user-confirmed session metadata. They never assert automatic Desktop identity.
+
+The two new focused storage cases, five desktop Rust tests, existing synthetic
+browser flow, workspace all-target Clippy and optimized offline build pass.
+Dependency and macOS source-baseline checks pass; neither establishes native
+macOS behavior. No native Save-dialog trial or real A â†’ B â†’ A has been performed.
+
+## 2026-10-21: account controls and reauthentication completion
+
+The Windows source now includes profile-targeted official reauthentication,
+an encrypted interrupted-login record, native account confirmations and direct
+switch cancellation. A current-account repair publishes fresh credentials,
+non-promoting source evidence and its journal together. Cancellation after that
+publication retains forward recovery; superseded same-account credentials are
+never restored. An authenticated rejected fresh target becomes `NeedsLogin`
+after owned-helper exit and staging cleanup, so a fresh sign-in remains possible.
+Recovery repeats policy admission before resuming credential installation.
+
+The final integrated coordinator suite passed 32 cases, including recovery-policy
+admission and interrupted-helper refresh; five focused login/cleanup cases passed. The UI's
+five Rust tests, synthetic browser workflows and workspace all-target Clippy
+passed. The final payload is recorded in the current handoff.
+These are local checks using synthetic data. The running
+first build was preserved, and real account A â†’ B â†’ A is still awaiting the owner.
+No publication, signing or macOS native qualification is claimed.
+
+## 2026-10-21: current discovery repair passes locally
+
+The prior apartment-189 red run compiled the preserved pre-fix snapshot, which
+still used generated cached WinRT factories. It did not test the dirty uncached
+adapter. The current adapter initially failed compilation because three raw
+HRESULT values called `map_err` without converting through `ok()`.
+The corrected source now uses uncached registered activation and a SHA-256 owner
+that releases its interfaces before its apartment. Both scoped reader callbacks
+return owned observations; they are internal helpers, not a generally enforced
+lifetime API for arbitrary callbacks.
+
+On this source, the existing synthetic discovery suite passed 32 cases in each
+of debug and release. Sequential and concurrent apartment regressions also passed
+individually in fresh processes in both profiles. Discovery all-target Clippy
+with warnings denied, formatting and diff checks passed. Only the real installed
+inventory case was excluded from these focused synthetic runs; it remains in CI.
+The original failing artifacts and unknown hosted crash stack are preserved.
+Independent source review found no remaining interface escape in current callers.
+Full combined CI, live account switching and product qualification are not claimed.
+
+The owner requested completion of the existing build with focused functional
+validation and confirmed availability for a later interactive A -> B -> A check.
+No real credentials were used for these checks.
+
+## Signer post-merge debug crash and controlled pre-fix reproduction
+
+Main run 38815869659 at `9b3cc2dffc2be77f47d868918b9d9a2c5b42acee` failed the
+Windows debug workspace complement: discovery's test process exited
+STATUS_ACCESS_VIOLATION (0xc0000005). Release complement, supervisor proof and all
+108 named native executions passed. The aggregate correctly remained failed.
+Prior PR green does not supersede this separate result.
+
+A reviewed bounded diagnostic used the previously verified compiled library-test
+image from the same Rust source. Five fixed focused cases passed individually.
+The sixth invocation, a 20-case serial ordinary complement, crashed at
+`native_hash_uses_standard_sha256` immediately after the cached-signer report's
+hashing case completed. The diagnostic stopped at that first failure; none of
+its sixteen predeclared parallel complements ran. Owned cleanup proved an empty
+job and unchanged source/executable identity. No installed registration inventory,
+application entrypoint, real configuration/auth/history or credential operation
+was selected. This diagnostic excludes that inventory case and nine separately
+native cases; it is not a full CI pass or a change to the actual CI test inventory.
+Diagnostic SHA-256 is
+`95571fdfbcf16f292767e2940224e8e28024eb59035b92ca3203875db656549e`.
+
+The pinned windows-core 0.62.2 FactoryCache retains agile factory pointers past
+individual apartment teardown. Discovery uses generated cached factories, while
+the existing storage sync observer deliberately uses uncached registered activation.
+This is a concrete lifetime hazard consistent with the controlled second-hash
+crash. The exact original hosted failing thread/stack remains unknown. Fresh
+sequential/concurrent teardown tests and a scoped activation repair are pending;
+no passing repair, qualification or new native collection is claimed here.
+
+## PRs #24 and #23 merged; selected-build ancestor denial
+
+Supervisor repair [PR #24](https://github.com/SUaDtL/codex-accounts/pull/24)
+passed all six jobs in run 38812293928 and merged as
+`d5680a5c212ac68d1a0c71ea571b80128f2c1b8c`. Reviewed source `fcb0888`, tested
+merge `4419a719d4e2a38d8e08a61b267ac576232380d7` and actual merge share tree
+`5cb9fe18d83eab48b8453214eb004ff3296a6611`. Separate main run 38814063142
+also passed all six jobs. Both Windows logs prove 108 named native executions,
+398=344+54 compiled cases per profile and 12 supervisor tests/four actual fixtures.
+These later passes do not identify the original PR #22 post-merge failure cause.
+
+Signer [PR #23](https://github.com/SUaDtL/codex-accounts/pull/23) joined that repair
+in reviewed source `c7245dee0563ada92e8cc5ed6ed172cf2efddaf0`. All six jobs passed
+in combined run 38813448749 at tested merge
+`042549652aa4139a7b4634425f9522504305018b`. Actual merge
+`9b3cc2dffc2be77f47d868918b9d9a2c5b42acee` has the same
+`7b4f4de95c0a730e60a551e053de18673d4488dc` tree. Inspected Windows output proves
+108 named native executions, 401=347+54 compiled cases per profile, 96 codec
+executions and the unchanged supervisor proof. The combined local Python suite
+passed 260 tests with one existing platform skip. Its separate main run
+38815869659 is still pending at this record; PR green is not post-merge green.
+
+After #24 merged, one independently reviewed read-only observation selected
+Desktop 26.1007.9446.0 x64 and checked registration before/after. Ancestor indices
+zero and one attribute handles succeeded; index two READ_CONTROL-only open
+returned Win32 5 (access denied). No security descriptor was queried, all owned
+handles closed and the owned job emptied. Observation SHA-256 is
+`888bc7a9a55a8975d750d9b5f25704592145604d0f1d58e1ef5701934a795dd8`.
+Target identity/tag and protected ancestry remain unknown. No ACL, privilege,
+configuration, credential or history change occurred; no installed executable ran.
+
+One separately reviewed historical-package metadata attempt refused, child exit
+one, in 1.205 seconds with an empty owned job. Its generic private reporter lost
+the specific failure category, so package drift or network refusal is not proved.
+No metadata was admitted and no retry/new-build fallback occurred. Resource-body
+acquisition remains unestablished. Static runtime-selection evidence is the next
+bounded investigation; no observation enables account operations or qualification.
+
 ## PR #22 post-merge supervision failure and bounded fixture repair
 
 PR #22 merged as `6ffc3d4568364caae1dc5dc3a2d6402ef5cfee3b`, with the same
@@ -616,3 +1045,35 @@ recorded above; no Desktop or release qualification follows from these tests.
 Finish the CA-05C/D -> CA-05E review stack and inspect its exact-head checks. `next-pr.md` selects the
 bounded follow-on, not automatic runtime/login/UI integration. The single roadmap,
 root entry point, handoff and open-asks register retain the remaining gates.
+
+
+## 2026-10-21 functional Windows integration
+
+Local working tree in `.worktrees/native-signer182`; no integration commit, PR,
+merge or public release yet. The following checks establish their stated scope:
+
+- Optimized `codex-accounts-desktop` build passes offline using the existing pinned
+  dependency cache. All 407 external package identities/checksums are retained.
+- Combined workspace all-target Clippy passes with warnings denied.
+- Runtime: 148 unit cases, 14 framing cases, 11 JSON cases and 5 doctests pass.
+  Desktop: 5 Rust cases pass. Synthetic browser flows cover Add/cancel, closing
+  during cleanup, rename, quota projection, switching/recovery and the guide.
+- Current capture/rename, isolated duplicate-aware save and native private scratch
+  cleanup checks pass. No real account payloads are used as test fixtures.
+- The actual current official helper passes initialize, initialized, configuration
+  requirements, configuration read, explicit owned-job exit and final installation
+  revalidation in a new empty synthetic home. Both ordinary and current provisioned
+  registered-core selection have been exercised; no auth.json is created.
+- Python: 260 checks pass with one existing platform skip. After document/source
+  binding updates, the 46 affected checks pass. Specification integrity retains
+  43 requirements and 34 acceptance scenarios; no full release closure is claimed.
+
+The release executable renders the Accounts and Diagnostics interface and selects
+installed Store version 26.1016.6573.0. That number records this observation only;
+normal updates use operation-time checks and require no version approval.
+A UI opening smoke exposed and fixed an absent-login-namespace startup check
+that incorrectly reported vault recovery. The corrected optimized executable
+opens the existing protected empty vault and enables account controls. Its SHA256
+is a31018f7f1bd2422ba00fdeed326dc5c2b3eb2adb5ad76be6e70d09fa1e68ef9.
+Real browser login, account acceptance and A â†’ B â†’ A are still pending.
+The owner will perform the interactive sign-ins; macOS native delivery is not run.

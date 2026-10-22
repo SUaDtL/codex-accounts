@@ -29,3 +29,9 @@ Thumbs.db
 
 # Tauri-generated definitions are build output, not permission grants.
 /crates/shell-preparation/gen/
+
+# Local evidence, reports and pinned CI tool downloads are never source.
+/.review-evidence/
+/reports/
+/.ci-tools/
+/crates/desktop-app/gen/

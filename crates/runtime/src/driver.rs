@@ -1,5 +1,4 @@
-//! CA-05E private transport pump over owned synthetic endpoints.
-//! No official codec, OS pipe, process, credential operation or public constructor.
+//! Bounded transport pump over owned channel or nonblocking native IO adapters.
 #![forbid(unsafe_code)]
 // This entire private boundary has no production constructor until reviewed binding.
 #![cfg_attr(not(test), allow(dead_code))]
@@ -14,6 +13,8 @@ mod io;
 use io::{Chunk, ReadEnd, ReadStep, Stream, WriteEnd, CHUNK_BYTES};
 #[path = "codec.rs"]
 mod codec;
+#[path = "pipe_session.rs"]
+pub(super) mod pipe_session;
 
 const STDERR_TOTAL_LIMIT: usize = MAX_PENDING_BYTES;
 
@@ -268,11 +269,12 @@ impl TransportDriver {
             return Ok((false, None));
         };
         let end = (write.offset + CHUNK_BYTES).min(write.bytes.len());
-        match self.stdin.try_write(&write.bytes[write.offset..end]) {
-            Ok(false) => return Ok((false, None)),
+        let count = match self.stdin.write_some(&write.bytes[write.offset..end]) {
+            Ok(0) => return Ok((false, None)),
             Err(_) => return Err(self.fail(session, DriverFault::InputClosed)),
-            Ok(true) => {}
-        }
+            Ok(count) => count,
+        };
+        let end = write.offset + count;
         write.bytes[write.offset..end].zeroize();
         write.offset = end;
         if end != write.bytes.len() {
@@ -408,7 +410,11 @@ impl TransportDriver {
             }
             // Producer commits data/intent before a coalesced wake. A wake between
             // the scans and this wait is retained; stale wakes only cause a rescan.
-            let remaining = deadline.saturating_duration_since(Instant::now());
+            // Native pipes are nonblocking, with no producer-side wake channel.
+            // Bound each poll interval by the original session deadline.
+            let remaining = deadline
+                .saturating_duration_since(Instant::now())
+                .min(Duration::from_millis(10));
             match self.wake.recv_timeout(remaining) {
                 Ok(()) | Err(RecvTimeoutError::Timeout) => {}
                 Err(RecvTimeoutError::Disconnected) => {

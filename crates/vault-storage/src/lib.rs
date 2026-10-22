@@ -1,6 +1,6 @@
-//! CA-03C/CA-04: encrypted storage, journals and private native primitives.
-//! No Codex file reads, login, public process control, credential CLI, or authority to
-//! qualify a Desktop installation.
+//! Encrypted account storage and journaled native file-backend handoff.
+//! Credential paths, official executable selection, and process ownership stay
+//! inside the native adapter rather than crossing the renderer boundary.
 //!
 //! # Public metadata construction does not perform I/O
 //!
@@ -18,7 +18,7 @@
 //! use codex_accounts_vault_storage::engine::coordinator::Effects;
 //! ```
 //!
-//! # A public vault does not expose a live-switch entry point
+//! # A public vault does not expose the low-level coordinator
 //!
 //! ```compile_fail,E0599
 //! use codex_accounts_vault_storage::Vault;
@@ -30,19 +30,35 @@
 //! These executable API checks do not qualify any native or Desktop behavior.
 #![deny(unsafe_code)]
 #[cfg_attr(not(all(windows, target_arch = "x86_64")), allow(dead_code))]
+mod auth_capture;
+#[cfg_attr(not(all(windows, target_arch = "x86_64")), allow(dead_code))]
 mod codec;
+#[allow(dead_code)]
+mod desktop_selection;
 #[cfg_attr(not(all(windows, target_arch = "x86_64")), allow(dead_code))]
 mod engine;
+mod health;
+pub use health::AccountHealth;
+#[cfg_attr(not(all(windows, target_arch = "x86_64")), allow(dead_code))]
+mod login_control;
+pub use login_control::{LoginCancellation, LoginStage};
+mod switch_control;
+pub use switch_control::SwitchCancellation;
 #[cfg(all(windows, target_arch = "x86_64"))]
 #[allow(unsafe_code)]
 mod native;
 #[cfg_attr(not(all(windows, target_arch = "x86_64")), allow(dead_code))]
 mod records;
-// No production effects adapter exists in CA-04B. The private coordinator is
-// exercised by synthetic effects only; this does not relax any safety lint.
+// Journal effects remain private to the native operation adapter and tests.
 #[allow(dead_code)]
 mod journal;
 pub use journal::{OperationStatus, SwitchPhase};
+/// A saved inactive login or the exact outcome of repairing the current account.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ReauthenticationResult {
+    pub profile: ProfileId,
+    pub installation: Option<OperationStatus>,
+}
 // Observation logic is not a qualified installation or a public effect executor.
 #[allow(dead_code)]
 mod lifecycle_model;
@@ -54,6 +70,50 @@ use codex_accounts_vault::{CredentialSet, Identity, Resource, ResourceId, Resour
 pub use codex_accounts_vault::{GenerationId, ProfileId};
 pub use records::Recovery;
 use zeroize::Zeroizing;
+
+/// Fixed, non-secret operation result suitable for presentation by the desktop UI.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct OperationError(&'static str);
+impl OperationError {
+    pub fn code(self) -> &'static str {
+        self.0
+    }
+}
+impl std::fmt::Display for OperationError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.0)
+    }
+}
+impl std::error::Error for OperationError {}
+impl From<StorageError> for OperationError {
+    fn from(value: StorageError) -> Self {
+        Self(match value {
+            StorageError::Busy => "E_BUSY",
+            StorageError::Missing => "E_NOT_FOUND",
+            StorageError::RecoveryRequired | StorageError::SwitchPending => "E_RECOVERY_REQUIRED",
+            StorageError::TemporaryCleanupRequired => "E_TEMP_CLEANUP_FAILED",
+            StorageError::ExternalChange | StorageError::StaleParent => "E_EXTERNAL_CHANGE",
+            StorageError::UnsafePath | StorageError::AccessDenied => "E_STORAGE_UNSAFE",
+            StorageError::KeyUnavailable => "E_KEY_UNAVAILABLE",
+            StorageError::InputLimit => "E_STORAGE_LIMIT",
+            StorageError::IdentityMismatch => "E_IDENTITY_MISMATCH",
+            StorageError::UnsupportedPlatform => "E_UNSUPPORTED_PLATFORM",
+            StorageError::Corrupt | StorageError::InvalidData => "E_VAULT_CORRUPT",
+            _ => "E_STORAGE_FAILED",
+        })
+    }
+}
+
+/// User-facing metadata decrypted from the authenticated registry. Never contains
+/// credentials or account identifiers; callers must not include labels in logs.
+pub struct ProfileSummary {
+    pub id: ProfileId,
+    pub label: String,
+    pub domain: String,
+    pub generation: GenerationId,
+    /// Latest credential generation capture time, as Unix seconds; not a health check.
+    pub captured_at: u64,
+}
 
 /// Fixed errors never contain paths, labels, identities, or OS error text.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -68,6 +128,7 @@ pub enum StorageError {
     Corrupt,
     KeyUnavailable,
     RecoveryRequired,
+    TemporaryCleanupRequired,
     ExternalChange,
     InputLimit,
     InvalidData,
@@ -166,6 +227,18 @@ impl std::fmt::Debug for Vault {
     }
 }
 impl Vault {
+    /// Advisory presence only. Opening or creating still performs full native
+    /// validation. An inaccessible or partial layout is never reported absent.
+    pub fn exists() -> Result<bool, StorageError> {
+        #[cfg(all(windows, target_arch = "x86_64"))]
+        {
+            native::vault_exists()
+        }
+        #[cfg(not(all(windows, target_arch = "x86_64")))]
+        {
+            Err(StorageError::UnsupportedPlatform)
+        }
+    }
     /// Open existing storage only. Never regenerate a lost/corrupt root key.
     pub fn open() -> Result<Self, StorageError> {
         #[cfg(all(windows, target_arch = "x86_64"))]
@@ -191,6 +264,26 @@ impl Vault {
 }
 #[cfg(all(windows, target_arch = "x86_64"))]
 impl Vault {
+    /// Metadata only. This does not start, resume, or authorize a switch.
+    pub fn profiles(&self) -> Result<Vec<ProfileSummary>, StorageError> {
+        self.storage.profiles()
+    }
+
+    /// Last authenticated association observed by Accounts, not live Desktop identity.
+    /// Unknown associations and unfinished recovery expose no active profile.
+    pub fn last_known_active_profile(&self) -> Result<Option<ProfileId>, StorageError> {
+        self.storage.last_known_active_profile()
+    }
+
+    /// Rename encrypted profile metadata without changing credential generations.
+    pub fn rename_profile(
+        &mut self,
+        profile: ProfileId,
+        label: ProfileText,
+    ) -> Result<(), StorageError> {
+        self.storage.rename_profile(&self.root, profile, label)
+    }
+
     /// Metadata only. This does not start, resume, or authorize a switch.
     pub fn switch_status(&self) -> Result<Vec<OperationStatus>, StorageError> {
         self.storage.switch_status()

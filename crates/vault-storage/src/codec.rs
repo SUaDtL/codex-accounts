@@ -381,7 +381,7 @@ pub(crate) fn read_state(bytes: &[u8]) -> Result<State, StorageError> {
     let writes = d.blobs()?;
     let garbage = d.blobs()?;
     let deleting = d.boolean()?;
-    let n = d.count(2)?;
+    let n = d.count(3)?;
     let mut inline = Vec::with_capacity(n);
     for _ in 0..n {
         inline.push((d.blob()?, d.bytes(MAX_METADATA + 66)?.to_vec()));

@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/shell-preparation", "crates/core", "crates/platform", "crates/runtime", "crates/discovery", "crates/vault", "crates/vault-crypto", "crates/vault-storage"]
+members = ["crates/desktop-app", "crates/shell-preparation", "crates/core", "crates/platform", "crates/runtime", "crates/discovery", "crates/vault", "crates/vault-crypto", "crates/vault-storage"]
 resolver = "2"
 
 [workspace.package]
@@ -7,6 +7,7 @@ version = "0.1.0"
 edition = "2021"
 rust-version = "1.90"
 publish = false
+license = "AGPL-3.0-only"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

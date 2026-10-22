@@ -822,3 +822,29 @@ fn ca04d_staging_archive_failure_preserves_plaintext_and_live_state() {
 fn ca04d_repair_process_restart_boundaries() {
     restart::exercise("repair");
 }
+
+#[test]
+fn usage_shared_read_allows_an_existing_writer_without_modifying_auth() {
+    let dir = home();
+    let security = Security::new().unwrap();
+    let path = dir.0.join("auth.json");
+    let mut writer = open_file(
+        &path,
+        GENERIC_READ | GENERIC_WRITE | READ_CONTROL,
+        FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+        CREATE_NEW,
+        Some(&security),
+    )
+    .unwrap();
+    writer.write_all(A0).unwrap();
+    writer.flush().unwrap();
+    let target = Target::open_file_backend(&dir.0).unwrap();
+    assert_eq!(target.read_usage_auth().unwrap().as_slice(), A0);
+    // The observation must leave the existing writer usable without a helper
+    // or permission changes. A later coherent read sees the writer's new bytes.
+    writer.seek(SeekFrom::Start(0)).unwrap();
+    writer.set_len(0).unwrap();
+    writer.write_all(A1).unwrap();
+    writer.flush().unwrap();
+    assert_eq!(target.read_usage_auth().unwrap().as_slice(), A1);
+}

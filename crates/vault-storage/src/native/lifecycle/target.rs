@@ -1,5 +1,4 @@
-//! CA-04C synthetic target resources. No production constructor or Effects impl.
-//! This is NOT a qualified Desktop filesystem adapter. Retaining an old handle
+//! Fixed file-backend target and separate synthetic test layout. Retaining an old handle
 //! denies in-place writers but delete sharing is necessary for POSIX replacement:
 //! this primitive does not provide an atomic namespace compare-and-swap.
 use super::super::*;
@@ -9,6 +8,7 @@ use zeroize::Zeroizing;
 
 const LIMIT: usize = 1024 * 1024;
 const STAGE_PREFIX: &str = "ca04c-synthetic-";
+const FILE_STAGE_PREFIX: &str = ".codex-accounts-";
 type Plain = Zeroizing<Vec<u8>>;
 type Pinned = (File, Plain, Stamp);
 
@@ -17,6 +17,7 @@ pub(super) struct Target {
     lock: HomeLock,
     security: Security,
     slots: u16,
+    file_backend: bool,
     #[cfg(test)]
     pub(super) boundary: usize,
     #[cfg(test)]
@@ -24,14 +25,66 @@ pub(super) struct Target {
     #[cfg(test)]
     pub(super) crash: bool,
 }
+
 impl std::fmt::Debug for Target {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str("SyntheticTarget([REDACTED])")
+        f.write_str(if self.file_backend {
+            "FileBackendTarget([REDACTED])"
+        } else {
+            "SyntheticTarget([REDACTED])"
+        })
     }
 }
 impl Target {
-    /// Only tests can construct this adapter, for a fresh protected synthetic
-    /// directory. No consumer input, runtime flag or catalog record can enable it.
+    /// The caller has selected a file credential backend and must separately
+    /// quiesce other writers before mutation. No path or ACL is repaired here.
+    pub(super) fn open_file_backend(path: &Path) -> Result<Self, StorageError> {
+        let target = Self {
+            path: path.to_owned(),
+            lock: HomeLock::acquire_for_transaction(path)?,
+            security: Security::new()?,
+            slots: 1,
+            file_backend: true,
+            #[cfg(test)]
+            boundary: 0,
+            #[cfg(test)]
+            fail_at: None,
+            #[cfg(test)]
+            crash: false,
+        };
+        target.validate()?;
+        Ok(target)
+    }
+    /// Short shared read for usage observation. No helper, file write or account
+    /// association update. Existing clients may replace auth.json during reads;
+    /// reject a changed object rather than publishing mixed credentials.
+    pub(super) fn read_usage_auth(&self) -> Result<Plain, StorageError> {
+        let path = self.live(0)?;
+        let share = FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE;
+        let mut file = open_file(
+            &path,
+            GENERIC_READ | READ_CONTROL,
+            share,
+            OPEN_EXISTING,
+            None,
+        )?;
+        let bytes = self.read_plain(&mut file)?;
+        let current = open_file(
+            &path,
+            GENERIC_READ | READ_CONTROL,
+            share,
+            OPEN_EXISTING,
+            None,
+        )?;
+        if stamp(&file)? != stamp(&current)? {
+            return Err(StorageError::ExternalChange);
+        }
+        self.lock.revalidate()?;
+        Ok(bytes)
+    }
+
+    /// Only tests can select the synthetic multi-resource layout, for a fresh
+    /// protected directory. Production always uses the fixed file-backend layout.
     #[cfg(test)]
     pub(super) fn open(path: &Path, slots: u16) -> Result<Self, StorageError> {
         if slots == 0 {
@@ -42,6 +95,7 @@ impl Target {
             lock: HomeLock::for_synthetic_target(path)?,
             security: Security::new()?,
             slots,
+            file_backend: false,
             boundary: 0,
             fail_at: None,
             crash: false,
@@ -59,9 +113,20 @@ impl Target {
             None,
         )?;
         check_object(&directory, true)?;
-        // This exact DACL is a SYNTHETIC fixture contract, not an assertion about
-        // the correct ACL of a real Desktop home. Existing permissions never change.
-        self.security.check(&directory, true)
+        // HomeLock also requires the current user to own the leaf. Real homes
+        // may have inherited administrator/SYSTEM access; fixture ACLs stay exact.
+        self.security.check(&directory, !self.file_backend)?;
+        // cap_sid is unrelated filesystem sandbox capability state, not account
+        // authentication: openai/codex codex-rs/windows-sandbox-rs/src/cap.rs.
+        // The fixed file backend owns only auth.json; never read or replace SIDs.
+        Ok(())
+    }
+    fn check_resource(&self, file: &File) -> Result<(), StorageError> {
+        if self.file_backend {
+            self.security.check_credential(file)
+        } else {
+            self.security.check(file, true)
+        }
     }
     fn point(&mut self) -> Result<(), StorageError> {
         #[cfg(test)]
@@ -85,7 +150,11 @@ impl Target {
     }
     fn live(&self, slot: u8) -> Result<PathBuf, StorageError> {
         self.slot(slot)?;
-        Ok(self.path.join(format!("synthetic-resource-{slot:02}.bin")))
+        Ok(if self.file_backend {
+            self.path.join("auth.json")
+        } else {
+            self.path.join(format!("synthetic-resource-{slot:02}.bin"))
+        })
     }
     fn staged(&self, operation: Id, slot: u8) -> Result<PathBuf, StorageError> {
         self.slot(slot)?;
@@ -93,13 +162,16 @@ impl Target {
             return Err(StorageError::InvalidData);
         }
         let id: String = operation.iter().map(|b| format!("{b:02x}")).collect();
-        Ok(self
-            .path
-            .join(format!("{STAGE_PREFIX}{id}-{slot:02}.stage")))
+        let prefix = if self.file_backend {
+            FILE_STAGE_PREFIX
+        } else {
+            STAGE_PREFIX
+        };
+        Ok(self.path.join(format!("{prefix}{id}-{slot:02}.stage")))
     }
     fn read_plain(&self, file: &mut File) -> Result<Plain, StorageError> {
         let before = check_object(file, false)?;
-        self.security.check(file, true)?;
+        self.check_resource(file)?;
         if before.size > LIMIT as u64 {
             return Err(StorageError::InputLimit);
         }
@@ -110,7 +182,7 @@ impl Target {
         if stamp(file)? != before {
             return Err(StorageError::ExternalChange);
         }
-        self.security.check(file, true)?;
+        self.check_resource(file)?;
         Ok(bytes)
     }
     fn pin(&self, path: &Path, access: u32, share: u32) -> Result<Option<Pinned>, StorageError> {
@@ -317,7 +389,7 @@ impl Target {
     }
     fn dispose(&self, file: &File) -> Result<(), StorageError> {
         check_object(file, false)?;
-        self.security.check(file, true)?;
+        self.check_resource(file)?;
         let info = FILE_DISPOSITION_INFO { DeleteFile: true };
         // SAFETY: pinned validated DELETE handle, exact initialized SDK value.
         if unsafe {
@@ -347,11 +419,23 @@ impl Target {
         let mut count = 0;
         for entry in std::fs::read_dir(&self.path).map_err(|_| StorageError::Io)? {
             count += 1;
-            if count > 32 {
+            if count > if self.file_backend { 4096 } else { 32 } {
                 return Err(StorageError::InputLimit);
             }
             let entry = entry.map_err(|_| StorageError::Io)?;
             let path = entry.path();
+            // A real home contains configuration/history and other application
+            // files. Only our fixed credential and stage namespace is relevant;
+            // do not open, copy, or interpret unrelated entries.
+            if self.file_backend
+                && !entry
+                    .file_name()
+                    .to_string_lossy()
+                    .to_ascii_lowercase()
+                    .starts_with(FILE_STAGE_PREFIX)
+            {
+                continue;
+            }
             let mut known = false;
             for slot in 0..16 {
                 if self.slots & (1 << slot) == 0 {
@@ -494,5 +578,256 @@ impl Target {
             return Err(StorageError::ExternalChange);
         }
         Ok(Some(file))
+    }
+}
+
+#[cfg(test)]
+mod file_backend_tests {
+    use super::*;
+
+    fn home() -> super::super::super::tests::Sandbox {
+        let fixture = super::super::super::tests::Sandbox::new();
+        let security = Security::new().unwrap();
+        assert_ne!(
+            unsafe { CreateDirectoryW(wide(&fixture.0).unwrap().as_ptr(), &security.attrs()) },
+            0
+        );
+        fixture
+    }
+
+    #[test]
+    fn file_backend_replaces_restores_and_leaves_unrelated_entries_alone() {
+        let fixture = home();
+        let sandbox_sids = b"{\"workspace\":\"SYNTHETIC_SID\",\"readonly\":\"SYNTHETIC_READONLY\"}";
+        std::fs::write(fixture.0.join("cap_sid"), sandbox_sids).unwrap();
+        for n in 0..40 {
+            std::fs::write(
+                fixture.0.join(format!("synthetic-unrelated-{n}")),
+                b"UNCHANGED",
+            )
+            .unwrap();
+        }
+        let mut target = Target::open_file_backend(&fixture.0).unwrap();
+        let a = b"{\"synthetic\":\"a\"}";
+        let b = b"{\"synthetic\":\"b\"}";
+        target.replace([1; 16], 0, None, Some(a)).unwrap();
+        assert_eq!(target.live(0).unwrap(), fixture.0.join("auth.json"));
+        assert_eq!(target.read(1).unwrap_err(), StorageError::InvalidData);
+        target.replace([2; 16], 0, Some(a), Some(b)).unwrap();
+        assert_eq!(target.read(0).unwrap().unwrap().as_slice(), b);
+        assert_eq!(
+            target.replace([3; 16], 0, Some(a), Some(a)),
+            Err(StorageError::ExternalChange)
+        );
+        target.replace([4; 16], 0, Some(b), Some(a)).unwrap();
+        assert_eq!(target.read(0).unwrap().unwrap().as_slice(), a);
+        assert_eq!(
+            std::fs::read(fixture.0.join("cap_sid")).unwrap(),
+            sandbox_sids
+        );
+        for n in 0..40 {
+            assert_eq!(
+                std::fs::read(fixture.0.join(format!("synthetic-unrelated-{n}"))).unwrap(),
+                b"UNCHANGED"
+            );
+        }
+        std::fs::write(
+            fixture.0.join(".codex-accounts-unknown.stage"),
+            b"DO_NOT_ADOPT",
+        )
+        .unwrap();
+        assert_eq!(
+            target.stage([5; 16], 0, Some(b)),
+            Err(StorageError::ExternalChange)
+        );
+        assert_eq!(target.read(0).unwrap().unwrap().as_slice(), a);
+        assert!(target.snapshot().is_ok());
+    }
+
+    #[test]
+    fn file_backend_accepts_ordinary_admin_acl_but_refuses_untrusted_reader() {
+        let fixture = home();
+        let mut target = Target::open_file_backend(&fixture.0).unwrap();
+        let bytes = b"{\"synthetic\":\"not-a-credential\"}";
+        target.replace([1; 16], 0, None, Some(bytes)).unwrap();
+        let file = open_file(
+            &fixture.0.join("auth.json"),
+            WRITE_DAC | READ_CONTROL,
+            FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+            OPEN_EXISTING,
+            None,
+        )
+        .unwrap();
+        let add_grant = |sid: &[u8], mask| {
+            let mut old_acl = null_mut();
+            let mut descriptor = null_mut();
+            assert_eq!(
+                unsafe {
+                    GetSecurityInfo(
+                        file.as_raw_handle(),
+                        SE_FILE_OBJECT,
+                        DACL_SECURITY_INFORMATION,
+                        null_mut(),
+                        null_mut(),
+                        &mut old_acl,
+                        null_mut(),
+                        &mut descriptor,
+                    )
+                },
+                0
+            );
+            let _descriptor = Allocation(descriptor);
+            let entry = EXPLICIT_ACCESS_W {
+                grfAccessPermissions: mask,
+                grfAccessMode: GRANT_ACCESS,
+                grfInheritance: 0,
+                Trustee: TRUSTEE_W {
+                    pMultipleTrustee: null_mut(),
+                    MultipleTrusteeOperation: NO_MULTIPLE_TRUSTEE,
+                    TrusteeForm: TRUSTEE_IS_SID,
+                    TrusteeType: TRUSTEE_IS_UNKNOWN,
+                    ptstrName: sid.as_ptr().cast_mut().cast(),
+                },
+            };
+            let mut acl = null_mut();
+            assert_eq!(unsafe { SetEntriesInAclW(1, &entry, old_acl, &mut acl) }, 0);
+            let _acl = Allocation(acl.cast());
+            // Only this fresh synthetic file is changed; real ACLs are never repaired.
+            assert_eq!(
+                unsafe {
+                    SetSecurityInfo(
+                        file.as_raw_handle(),
+                        SE_FILE_OBJECT,
+                        DACL_SECURITY_INFORMATION | UNPROTECTED_DACL_SECURITY_INFORMATION,
+                        null_mut(),
+                        null_mut(),
+                        acl,
+                        null_mut(),
+                    )
+                },
+                0
+            );
+        };
+        add_grant(&target.security.admins, FILE_ALL_ACCESS);
+        target.security.check_credential(&file).unwrap();
+        assert!(target.security.check(&file, true).is_err());
+        add_grant(&known_sid(WinWorldSid).unwrap(), FILE_GENERIC_READ);
+        assert_eq!(
+            target.security.check_credential(&file),
+            Err(StorageError::UnsafePath)
+        );
+        drop(file);
+        assert_eq!(target.read(0).unwrap_err(), StorageError::UnsafePath);
+    }
+    #[test]
+    #[ignore = "requires the official local CodexSandboxUsers group"]
+    fn file_backend_accepts_codex_sandbox_read_only_but_refuses_write() {
+        let fixture = home();
+        let mut target = Target::open_file_backend(&fixture.0).unwrap();
+        let bytes = b"{\"synthetic\":\"not-a-credential\"}";
+        target.replace([1; 16], 0, None, Some(bytes)).unwrap();
+        let file = open_file(
+            &fixture.0.join("auth.json"),
+            WRITE_DAC | READ_CONTROL,
+            FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+            OPEN_EXISTING,
+            None,
+        )
+        .unwrap();
+        let add_grant = |sid: &[u8], mask| {
+            let mut old_acl = null_mut();
+            let mut descriptor = null_mut();
+            assert_eq!(
+                unsafe {
+                    GetSecurityInfo(
+                        file.as_raw_handle(),
+                        SE_FILE_OBJECT,
+                        DACL_SECURITY_INFORMATION,
+                        null_mut(),
+                        null_mut(),
+                        &mut old_acl,
+                        null_mut(),
+                        &mut descriptor,
+                    )
+                },
+                0
+            );
+            let _descriptor = Allocation(descriptor);
+            let entry = EXPLICIT_ACCESS_W {
+                grfAccessPermissions: mask,
+                grfAccessMode: GRANT_ACCESS,
+                grfInheritance: 0,
+                Trustee: TRUSTEE_W {
+                    pMultipleTrustee: null_mut(),
+                    MultipleTrusteeOperation: NO_MULTIPLE_TRUSTEE,
+                    TrusteeForm: TRUSTEE_IS_SID,
+                    TrusteeType: TRUSTEE_IS_UNKNOWN,
+                    ptstrName: sid.as_ptr().cast_mut().cast(),
+                },
+            };
+            let mut acl = null_mut();
+            assert_eq!(unsafe { SetEntriesInAclW(1, &entry, old_acl, &mut acl) }, 0);
+            let _acl = Allocation(acl.cast());
+            // Only this fresh synthetic file is changed; real ACLs are never repaired.
+            assert_eq!(
+                unsafe {
+                    SetSecurityInfo(
+                        file.as_raw_handle(),
+                        SE_FILE_OBJECT,
+                        DACL_SECURITY_INFORMATION | UNPROTECTED_DACL_SECURITY_INFORMATION,
+                        null_mut(),
+                        null_mut(),
+                        acl,
+                        null_mut(),
+                    )
+                },
+                0
+            );
+        };
+        let mut computer = [0_u16; 256];
+        let mut computer_len = computer.len() as u32;
+        assert_ne!(
+            unsafe {
+                windows_sys::Win32::System::WindowsProgramming::GetComputerNameW(
+                    computer.as_mut_ptr(),
+                    &mut computer_len,
+                )
+            },
+            0
+        );
+        let mut name = computer[..computer_len as usize].to_vec();
+        name.extend("\\CodexSandboxUsers\0".encode_utf16());
+        let mut sid = [0_u64; 16];
+        let mut sid_len = std::mem::size_of_val(&sid) as u32;
+        let mut domain = [0_u16; 256];
+        let mut domain_len = domain.len() as u32;
+        let mut kind = 0;
+        assert_ne!(
+            unsafe {
+                LookupAccountNameW(
+                    null(),
+                    name.as_ptr(),
+                    sid.as_mut_ptr().cast(),
+                    &mut sid_len,
+                    domain.as_mut_ptr(),
+                    &mut domain_len,
+                    &mut kind,
+                )
+            },
+            0
+        );
+        assert_eq!(kind, SidTypeAlias);
+        let sid = sid_copy(sid.as_mut_ptr().cast()).unwrap();
+        add_grant(&sid, FILE_GENERIC_READ | FILE_GENERIC_EXECUTE);
+        target.security.check_credential(&file).unwrap();
+        assert!(target.security.check(&file, true).is_err());
+        assert_eq!(target.read(0).unwrap().unwrap().as_slice(), bytes);
+        add_grant(&sid, FILE_WRITE_DATA);
+        assert_eq!(
+            target.security.check_credential(&file),
+            Err(StorageError::UnsafePath)
+        );
+        drop(file);
+        assert_eq!(target.read(0).unwrap_err(), StorageError::UnsafePath);
     }
 }

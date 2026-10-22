@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Codex Accounts</title><link rel="stylesheet" href="app.css"><script src="app.js" defer></script></head>
+<body>
+<a class="skip-link" href="#main">Skip to accounts</a>
+<main id="main" tabindex="-1">
+  <header class="app-header">
+    <div class="brand"><img src="app-icon.png" width="38" height="38" alt=""><h1 id="accounts-heading">Accounts <span id="account-count" class="account-count">0</span></h1></div>
+    <div class="actions"><button id="refresh-profiles" class="icon-button" type="button" aria-label="Refresh accounts" title="Refresh accounts and usage" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5M6.1 6.1A8 8 0 0 1 20 12M4 12a8 8 0 0 0 13.9 5.9"/></svg></button><button id="add-account" class="icon-button add-button" type="button" aria-label="Add account" title="Add account" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button><button id="settings-button" class="icon-button" type="button" aria-label="Settings" title="Settings"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9.5 3-.6 2-1.8 1-2-.5-2 3.5L4.5 10v2l-1.4 1 2 3.5 2-.5 1.8 1 .6 2h4l.6-2 1.8-1 2 .5 2-3.5-1.4-1v-2l1.4-1-2-3.5-2 .5-1.8-1-.6-2Z"/><circle cx="11.5" cy="11" r="3"/></svg></button></div>
+  </header>
+  <section id="accounts-view" aria-labelledby="accounts-heading">
+    <div id="active-account-status" class="account-status" hidden><span class="status-dot" aria-hidden="true"></span><span id="active-account-heading" role="status" aria-live="polite"></span></div>
+    <section id="login-panel" class="notice" aria-labelledby="login-heading" hidden><h2 id="login-heading">Add account</h2><p id="login-message" role="status" aria-live="polite"></p><p id="login-impact"></p><button id="cancel-login" type="button">Cancel sign-in</button></section>
+    <section id="switch-panel" class="notice" aria-labelledby="switch-heading" hidden><h2 id="switch-heading">Switching accounts</h2><p id="switch-message" role="status" aria-live="polite"></p><button id="cancel-switch" type="button">Cancel switch</button></section>
+    <div id="table-heading" class="table-heading" aria-hidden="true" hidden><span>ACCOUNT</span><span>USAGE REMAINING</span><span></span></div>
+    <ul id="profiles" class="account-list" aria-label="Saved accounts" hidden></ul>
+    <div id="profile-state" class="empty-state">
+      <h2 id="profile-heading">Your accounts, together.</h2><p id="profile-description">Checking your vault...</p>
+      <button id="setup-button" class="primary" type="button" disabled>Checking vault...</button>
+    </div>
+    <section id="recovery-panel" class="notice" aria-labelledby="recovery-heading" hidden><h2 id="recovery-heading">Recovery required</h2><p id="recovery-detail"></p><button id="recover-vault" type="button" hidden>Recover vault</button></section>
+    <section id="attention-panel" aria-label="Operation requiring attention" hidden><ul id="attention-operations" class="operation-list"></ul></section>
+  </section>
+  <footer id="usage-controls" class="app-footer" hidden><span id="usage-note" title="Last observed usage">Usage not checked</span></footer>
+  <p id="activity" class="activity" role="status" aria-live="polite" aria-atomic="true"></p>
+</main>
+<dialog id="settings-dialog" aria-labelledby="settings-heading">
+  <div class="section-heading settings-heading"><div><h2 id="settings-heading">Settings</h2></div><button id="accounts-nav" type="button" class="icon-button" aria-label="Close settings"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button></div>
+  <section class="settings-row"><div class="settings-copy"><h3>Vault</h3><p id="vault-message" role="status" aria-live="polite">Checking...</p></div><div class="actions"><button id="open-vault" type="button" disabled>Open vault</button><button id="create-vault" type="button" disabled>Create vault</button><button id="close-vault" type="button" hidden>Close vault</button></div></section>
+  <details class="advanced-settings"><summary>Diagnostics<svg class="chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></summary><div class="advanced-content">
+    <section id="diagnostics-view" aria-label="Installation diagnostics">
+      <dl class="diagnostic-facts"><div><dt>Codex</dt><dd id="selected-installation">Checking...</dd></div></dl>
+      <p id="inventory-detail" class="error" role="status"></p>
+      <div class="actions"><button id="refresh" type="button" disabled>Refresh</button><button id="export-diagnostics" type="button" disabled>Export report</button></div>
+      <p id="diagnostics-export-message" role="status" aria-live="polite"></p>
+    </section>
+  </div></details>
+</dialog>
+<dialog id="action-dialog" aria-labelledby="dialog-heading" aria-describedby="dialog-detail"><form id="action-form"><h2 id="dialog-heading"></h2><div class="dialog-body"><fieldset id="add-account-options" hidden><legend class="sr-only">Account source</legend><label><input type="radio" name="account-source" value="capture_current" checked><span>Save current account</span></label><label><input type="radio" name="account-source" value="add_account"><span>Sign in to another account</span></label></fieldset><p id="dialog-detail"></p><div id="label-field" hidden><label for="account-label">Account name</label><input id="account-label" type="text" maxlength="80" autocomplete="off" aria-describedby="account-name-examples"><p id="account-name-examples" class="field-help">Examples: “Personal” or “Work”</p></div><p id="dialog-error" class="error" role="alert"></p></div><div class="actions dialog-actions"><button id="dialog-cancel" type="button">Cancel</button><button id="dialog-submit" type="submit" class="primary">Continue</button></div></form></dialog>
+</body></html>

@@ -2,7 +2,7 @@
   "schema": "codex-accounts/dependency-review/v1",
   "packet": "CA-02B",
   "status": "source_reviewed",
-  "review_date": "2026-10-15",
+  "review_date": "2026-10-21",
   "subject": "Exact two Windows SDK binding features for bounded cached primary signer leaf observation; no account, launch, publisher approval or product qualification authority.",
   "predecessor_sha256": {
     "docs/ca-02-dependencies.json": "ceaffa36b058d90fef01df21634610938aa47755edd8b6a15f7adc7257f6cc5f",
@@ -15,9 +15,9 @@
     "docs/ca-06b-dependencies.json": "2fb9f49d7b9e9ddb2d27f562ce6f45f506c5313fc3f8b6836f76b33201a456b1"
   },
   "historical_review_policy": "All eight predecessors immutable. Concatenate only their packages arrays (seven original records58 plus CA06B349); their retained_package_identity arrays are assertions, never additive package contributions.",
-  "lock_sha256": "759e4d1cd2000b89f2ff0f085de86d9ef34276d6a2da196437218c5dad3825c1",
+  "lock_sha256": "ef1abe60c517883bde15e775ee541da33bd186dea91acbd4beeabe594d00a525",
   "manifest_sha256": {
-    "Cargo.toml": "4becf6232fa20752a27ae966e40d7fb176981a204d40ab54792cb85fda60d6bf",
+    "Cargo.toml": "b46b5d4972aa0170f0eba4ed9dea4ed210fbab54f98e58fec5c50c6e80739612",
     "crates/shell-preparation/Cargo.toml": "43e88f57060bde60c69cdfe26dde808aa0a703839e8108dc786829a4b12aeef8",
     "crates/core/Cargo.toml": "209eb46bb52c2f4fb11dcd931e4274927be939318b5e3f5fdbe881de96b8788e",
     "crates/platform/Cargo.toml": "1e17352db76845b523486cf2cd6c844e7fb06582e25a2df8f437f7b5675f3846",
@@ -25,9 +25,10 @@
     "crates/discovery/Cargo.toml": "6368321869390d7c823bce6890eaf6152702b99f73913464c06c75b67d136a55",
     "crates/vault/Cargo.toml": "dc5ac46edfd6dbea78ad8588cf124cbd602958d49537624cccbf207ef4cd1229",
     "crates/vault-crypto/Cargo.toml": "d48fbb2861c50086613bbde5caa9d6971385a3a8c1664d45e9b2a4426ccc4e8f",
-    "crates/vault-storage/Cargo.toml": "fbc1b139e656239d9b230832c5aa6f7804f06c57bf64dffd15c9c46e02dd0d69"
+    "crates/vault-storage/Cargo.toml": "c3bc1873bc6a697567cdcbe6d52a7556dbdb4e375e2ed223b410c7270689a0b5",
+    "crates/desktop-app/Cargo.toml": "cd0b4aabc88d7a3069a787bb8f99555ef83612062d72ff42f725ae889d628f60"
   },
-  "manifest_pin_scope": "Final integrated nine manifest bytes verified against the CA06B base, with only the two reviewed discovery SDK features added.",
+  "manifest_pin_scope": "Ten current workspace manifests: existing external versions and source checksums retained, with local application/runtime/discovery integration edges and reuse of serde derive, serde_json, TOML parse and the Windows pipe API. The existing Windows SDK also exposes the native Save dialog; no package change.",
   "packages": [],
   "retained_package_identity": [
     {
@@ -3952,5 +3953,32 @@
   ],
   "dependencies_source_reviewed": true,
   "integration_ready": true,
-  "product_qualification": false
+  "product_qualification": false,
+  "desktop_application_reuse": {
+    "date": "2026-10-21",
+    "pre_amendment_review_sha256": "bccbfe779b29b99d5dfe0f4df3a6d45585c1580e656d35c08ecfbee8b31edc60",
+    "scope": "Desktop application reuses existing Tauri wry/custom-protocol, tauri-build config-json, serde derive, serde_json and local core/runtime/vault/discovery crates. Vault storage adds local runtime/discovery edges and reuses pinned serde derive, serde_json, TOML parse and windows-sys Win32_System_Pipes. All 407 external package versions, registry checksums and build scripts are unchanged. The Windows pipe API and TOML parsing are used only for bounded private native integration. Source/license/advisory records are inherited historical evidence, not a fresh audit.",
+    "new_workspace_member": "crates/desktop-app",
+    "validation": "Cargo offline build succeeded; lock diff adds only local application package edges."
+  },
+  "native_diagnostics_dialog_reuse": {
+    "date": "2026-10-21",
+    "pre_amendment_review_sha256": "48c19a8094fda4555061fc4ba587efc808c1476983348816ed3230f815aab78a",
+    "feature": "windows-sys 0.61.2 Win32_UI_Controls_Dialogs",
+    "source_review": "Independent cached-source review: all 257 source files match the locked archive. Dialogs -> Controls -> UI -> Win32 -> Foundation; no new package, build script or dependency edge. GetSaveFileNameW and CommDlgExtendedError use SDK OPENFILENAMEW and comdlg32.dll. MIT OR Apache-2.0 obligations retained.",
+    "archive_sha256": "ae137229bcbd6cdf0f7b80a31df61766145077ddf49416a728b02cb3921ff3fc",
+    "dialogs_source_sha256": "7ce37e1115a79fa0752529f4e79580a2b58762d086040ebf2e6ac134a4895a67",
+    "advisory_scope": "No fresh advisory or maintenance scan. Existing pinned package-version review retained; this is a bounded feature/source review, not a new full audit.",
+    "result": "CLEAR for offline compilation with existing cache"
+  },
+  "native_usage_transport_reuse": {
+    "date": "2026-10-21",
+    "pre_amendment_review_sha256": "cb5b3810998c394bf37be4a6ae697e6a88a579afd0312e858ff874408368d3bb",
+    "feature": "windows-sys 0.61.2 Win32_Networking_WinHttp",
+    "scope": "Read-only bounded GET to fixed official usage endpoint; no redirects, cookies, automatic authentication, OAuth refresh, new packages or lock changes.",
+    "source_review": "Independent agent reviewed cached archive, WinHttp generated bindings and MIT/Apache license files against locked crate checksum. Feature adds SDK namespace, no build script or package acquisition.",
+    "archive_sha256": "ae137229bcbd6cdf0f7b80a31df61766145077ddf49416a728b02cb3921ff3fc",
+    "result": "CLEAR for offline compilation with existing cache",
+    "advisory_scope": "No new full advisory scan; pinned package history retained."
+  }
 }

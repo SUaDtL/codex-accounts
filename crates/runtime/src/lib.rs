@@ -1,5 +1,6 @@
-//! Bounded transport primitives, not an executable runtime adapter.
-//! Strict JSON validation and sealed session sequencing; no qualified schema or IO.
+//! Bounded transport, strict JSON validation and session sequencing.
+//! PipeSession connects backend-owned nonblocking IO to the existing typed codec.
+//! No process selection/launch, credential access or installation authority.
 //! LF delimits raw UTF-8 payloads; CR is preserved, not normalized.
 //! Successful EOF is terminal. Classification below grants no invocation authority.
 //! No caller may treat a decoded byte frame as a valid JSON-RPC response.
@@ -13,8 +14,12 @@ mod json_object;
 mod session;
 pub use json_object::{JsonFrameError, JsonObjectDecoder, JsonObjectFrame};
 pub use session::{
-    CancellationState, IssuedRequest, LoginCompletion, LoginId, ProtocolSession, RequestId,
-    ResponseOutcome, SessionError, SessionPhase,
+    AccountPresence, AllowedLoginMethods, CancellationState, ChatGptEndpoint, ConfigObservation,
+    ConfigSettings, CredentialStore, IssuedRequest, LoginCompletion, LoginId, LoginMethod,
+    ObjectSummary, Observed, PipeCancellation, PipeEvent, PipeSession, PipeSessionError,
+    PolicySettings, ProtocolSession, Provider, RateLimitSummary, RateLimitWindow, RequestId,
+    RequirementsObservation, ResponseOutcome, RuntimeText, SessionError, SessionPhase,
+    StringOverride, WorkspaceRestriction,
 };
 
 pub const MAX_FRAME_BYTES: usize = 1024 * 1024;
@@ -35,6 +40,8 @@ pub enum Method {
     LoginStart,
     LoginCancel,
     RateLimitsRead,
+    ConfigRead,
+    ConfigRequirementsRead,
 }
 
 impl Method {
@@ -46,6 +53,8 @@ impl Method {
             Self::LoginStart => "account/login/start",
             Self::LoginCancel => "account/login/cancel",
             Self::RateLimitsRead => "account/rateLimits/read",
+            Self::ConfigRead => "config/read",
+            Self::ConfigRequirementsRead => "configRequirements/read",
         }
     }
 
@@ -72,6 +81,8 @@ impl Method {
             "account/login/start" => Some(Self::LoginStart),
             "account/login/cancel" => Some(Self::LoginCancel),
             "account/rateLimits/read" => Some(Self::RateLimitsRead),
+            "config/read" => Some(Self::ConfigRead),
+            "configRequirements/read" => Some(Self::ConfigRequirementsRead),
             _ => None,
         }
     }
