@@ -6,6 +6,7 @@ import platform
 import re
 import subprocess
 import tempfile
+import sys
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
@@ -216,11 +217,13 @@ def run_profile(profile: str) -> bool:
     return not failed
 
 
-def run() -> None:
+def run(profiles: tuple[str, ...] = ("debug", "release")) -> None:
     if platform.system() != 'Windows' or platform.machine().lower() not in {'amd64', 'x86_64'}:
         raise ValueError('Windows x64 is required; a portable skip is not a pass')
     failed = False
-    for profile in ('debug', 'release'):
+    if not profiles or any(profile not in {'debug', 'release'} for profile in profiles):
+        raise ValueError('Invalid native test profile')
+    for profile in profiles:
         started = time.monotonic()
         passed = run_profile(profile)
         failed |= not passed
@@ -234,6 +237,8 @@ def run() -> None:
 
 if __name__ == '__main__':
     try:
-        run()
+        if len(sys.argv) > 2:
+            raise ValueError("Invalid invocation")
+        run(tuple(sys.argv[1:]) or ("debug", "release"))
     except (OSError, ValueError, subprocess.SubprocessError):
         raise SystemExit('Named native execution did not pass; inspect the workspace test step') from None

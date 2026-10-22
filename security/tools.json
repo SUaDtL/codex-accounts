@@ -1,0 +1,30 @@
+{
+  "trivy": {
+    "version": "0.76.1",
+    "license": "Apache-2.0",
+    "linux": {
+      "name": "trivy_0.76.1_Linux-64bit.tar.gz",
+      "url": "https://github.com/aquasecurity/trivy/releases/download/v0.76.1/trivy_0.76.1_Linux-64bit.tar.gz",
+      "sha256": "c7cbe3137fb8a48a17574bede3dd6beb16742d1e9772929940fc90082c39d9c0"
+    },
+    "windows": {
+      "name": "trivy_0.76.1_windows-64bit.zip",
+      "url": "https://github.com/aquasecurity/trivy/releases/download/v0.76.1/trivy_0.76.1_windows-64bit.zip",
+      "sha256": "1051f49cb22d5284f43425f72aad9cda63ca12ceb92e7caa06903490c82dc9bf"
+    }
+  },
+  "opengrep": {
+    "version": "1.31.0",
+    "license": "LGPL-2.1",
+    "linux": {
+      "name": "opengrep_manylinux_x86",
+      "url": "https://github.com/opengrep/opengrep/releases/download/v1.31.0/opengrep_manylinux_x86",
+      "sha256": "dbbe3c2058dbe600c449a8ba22ea79a1643a6660658400090d0323a8d0d31147"
+    },
+    "windows": {
+      "name": "opengrep_windows_x86.exe",
+      "url": "https://github.com/opengrep/opengrep/releases/download/v1.31.0/opengrep_windows_x86.exe",
+      "sha256": "fdd2e22549e7000ceb66976a01366db6910760b2aa4e457b6bda62545070d26a"
+    }
+  }
+}

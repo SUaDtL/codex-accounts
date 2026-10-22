@@ -1,0 +1,48 @@
+name: Scheduled security scans
+
+on:
+  schedule:
+    - cron: '23 7 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: scheduled-security
+  cancel-in-progress: false
+
+jobs:
+  security:
+    name: Security (${{ matrix.scanner }})
+    strategy:
+      fail-fast: false
+      matrix:
+        scanner: [trivy, opengrep]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        id: checkout
+        with:
+          persist-credentials: false
+      - name: Run pinned security scanner
+        id: scan
+        run: python3 tools/security_scan.py ${{ matrix.scanner }}
+      - name: Upload security findings
+        if: ${{ !cancelled() && hashFiles('reports/security/*.sarif') != '' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
+        uses: github/codeql-action/upload-sarif@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4, Node 24
+        with:
+          sarif_file: reports/security/
+          category: ${{ matrix.scanner }}
+      - name: Retain scanner report briefly
+        if: ${{ !cancelled() && hashFiles('reports/security/*.sarif') != '' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: security-${{ matrix.scanner }}-${{ github.run_id }}
+          path: reports/security/
+          if-no-files-found: error
+          retention-days: 2

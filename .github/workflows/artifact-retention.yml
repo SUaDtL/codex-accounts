@@ -1,0 +1,33 @@
+name: Keep latest successful build
+
+on:
+  workflow_run:
+    workflows: [Repository checks]
+    types: [completed]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-artifact-retention
+  cancel-in-progress: false
+
+jobs:
+  retain:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      # Always the default branch, never the triggering PR revision.
+      # This job reads API metadata only; it never downloads candidate artifacts.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+      - name: Remove obsolete build artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 tools/retain_latest_build.py --apply

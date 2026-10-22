@@ -1,0 +1,34 @@
+rules:
+  - id: renderer-code-execution
+    languages: [javascript]
+    severity: ERROR
+    message: Do not execute strings in the renderer. Use fixed bundled functions.
+    pattern-either:
+      - pattern: eval(...)
+      - pattern: new Function(...)
+    metadata:
+      cwe: CWE-95
+      category: security
+  - id: renderer-html-injection
+    languages: [javascript]
+    severity: ERROR
+    message: Render account and IPC data through textContent or DOM nodes, not HTML strings.
+    pattern-either:
+      - pattern: $EL.innerHTML = $VALUE
+      - pattern: $EL.outerHTML = $VALUE
+      - pattern: $EL.insertAdjacentHTML(...)
+      - pattern: document.write(...)
+    metadata:
+      cwe: CWE-79
+      category: security
+  - id: renderer-persistent-storage
+    languages: [javascript]
+    severity: ERROR
+    message: Keep account state in the protected native vault, not browser persistent storage.
+    pattern-either:
+      - pattern: localStorage.setItem(...)
+      - pattern: sessionStorage.setItem(...)
+      - pattern: indexedDB.open(...)
+    metadata:
+      cwe: CWE-922
+      category: security

@@ -47,7 +47,7 @@ class DependencyAcquisitionContractTests(unittest.TestCase):
         self.reject("${{ !cancelled() && steps.checkout.outcome == 'success' }}", "${{ success() }}")
 
     def test_missing_documentation_release_or_host_check_refuses(self) -> None:
-        for identifier in ["doctests", "release_build", "release_tests", "native_tests", "isolated", "source_evidence", "source_upload", "host"]:
+        for identifier in ["doctests", "release_build", "package_scan", "native_tests", "isolated", "source_evidence", "source_upload", "host"]:
             with self.subTest(identifier=identifier):
                 self.reject(f"id: {identifier}\n", f"id: disabled_{identifier}\n")
 
@@ -61,7 +61,7 @@ class DependencyAcquisitionContractTests(unittest.TestCase):
 
     def test_aggregate_gate_cannot_skip_failed_jobs(self) -> None:
         self.reject("    if: ${{ always() }}\n", "    if: ${{ success() }}\n")
-        self.reject("needs: [source-and-python, rust-models, isolated-build]", "needs: [source-and-python]")
+        self.reject("needs: [source-and-python, rust-models, isolated-build, security, desktop-ui]", "needs: [source-and-python]")
 
     def test_outcomes_cannot_be_replaced_by_literal_success(self) -> None:
         self.reject("${{ toJSON(needs) }}", "success")
@@ -91,7 +91,7 @@ class DependencyAcquisitionContractTests(unittest.TestCase):
 
     def test_isolated_check_cannot_fallback_to_connected_host(self) -> None:
         self.reject("run: python3 tools/ci_isolated.py", "run: cargo test --offline")
-        self.reject("rust-models, isolated-build]", "rust-models]")
+        self.reject("rust-models, isolated-build, security", "rust-models, security")
 
     def test_artifact_is_exact_source_only_and_pinned(self) -> None:
         for old, new in [("/ca-source-evidence/", "/"), ("retention-days: 7", "retention-days: 90"),
@@ -109,6 +109,8 @@ class DependencyAcquisitionContractTests(unittest.TestCase):
             workflows = root / ".github/workflows"
             workflows.mkdir(parents=True)
             (workflows / "ci.yml").write_text(self.text, encoding="utf-8")
+            for name in ("artifact-retention.yml", "security-scheduled.yml"):
+                (workflows / name).write_text((WORKFLOW.parent / name).read_text(encoding="utf-8"), encoding="utf-8")
             pin = (ROOT / "rust-toolchain.toml").read_text(encoding="utf-8")
             (root / "rust-toolchain.toml").write_text(pin, encoding="utf-8")
             check(root)

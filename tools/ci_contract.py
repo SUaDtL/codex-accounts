@@ -43,7 +43,7 @@ def check_contract(text: str) -> None:
         raise ValueError("Checks may not mask failures or replace reviewed shell behavior")
     pairs = re.split(r"(?m)^  ([a-z][a-z0-9-]*):\n", text.split("\njobs:\n", 1)[1])
     names = pairs[1::2]
-    if names != ["source-and-python", "rust-models", "isolated-build", "ci-gate"]:
+    if names != ["source-and-python", "rust-models", "isolated-build", "security", "desktop-ui", "ci-gate"]:
         raise ValueError("Reviewed job set changed")
     jobs = dict(zip(names, pairs[2::2]))
 
@@ -119,24 +119,47 @@ def check_contract(text: str) -> None:
     toolchain_if = "${{ !cancelled() && steps.toolchain.outcome == 'success' }}"
     command(rust, "compiler", "rustc --version --verbose", toolchain_if)
     command(rust, "host", "python tools/ci_gate.py host", SOURCE_IF)
-    command(rust, "format", "cargo fmt --all -- --check", toolchain_if)
+    command(rust, "format", "cargo fmt --all -- --check", toolchain_if[:-3] + " && matrix.profile == 'debug' }}")
     for identifier, value in [
-        ("tests", "python tools/ci_workspace_tests.py debug"),
+        ("tests", "python tools/ci_workspace_tests.py ${{ matrix.profile }}"),
         ("doctests", "cargo test --workspace --doc --no-fail-fast --locked --offline"),
-        ("release_build", "cargo build --workspace --all-targets --release --locked --offline"),
-        ("release_tests", "python tools/ci_workspace_tests.py release"),
+        ("release_build", "cargo build --workspace --release --locked --offline"),
         ("clippy", "cargo clippy --workspace --all-targets --locked --offline -- -D warnings"),
     ]:
-        command(rust, identifier, value, RUST_IF)
+        condition = RUST_IF
+        if identifier in {"doctests", "clippy"}:
+            condition = condition[:-3] + " && matrix.profile == 'debug' }}"
+        elif identifier == "release_build":
+            condition = condition[:-3] + " && matrix.profile == 'release' }}"
+        command(rust, identifier, value, condition)
     native_if = RUST_IF[:-3] + " && matrix.os == 'windows-latest' }}"
     command(rust, "supervisor_tests", "python tools/check_windows_process.py", native_if)
-    command(rust, "native_tests", "python tools/run_native_tests.py",
+    command(rust, "native_tests", "python tools/run_native_tests.py ${{ matrix.profile }}",
             native_if[:-3] + " && steps.supervisor_tests.outcome == 'success' }}")
     if "          CI_MATRIX_OS: ${{ toJSON(matrix.os) }}" in text:
         raise ValueError("Lane must retain the actual unquoted value")
     if "          CI_MATRIX_OS: ${{ matrix.os }}\n" not in step(rust, "assess"):
         raise ValueError("Rust outcome gate must include native evidence for Windows")
     command(rust, "assess", "python tools/ci_gate.py rust", ASSESS_IF)
+    if "        profile: [debug, release]\n" not in jobs[rust] or "          CI_PROFILE: ${{ matrix.profile }}\n" not in step(rust, "assess"):
+        raise ValueError("Both profile shards must run and report their identity")
+    package_if = "${{ success() && matrix.os == 'windows-latest' && matrix.profile == 'release' }}"
+    command(rust, "package", "python tools/package_windows.py", package_if)
+    command(rust, "package_scan", "python tools/security_scan.py package", package_if)
+    for required in ["if-no-files-found: error", "retention-days: 90", "path: dist/windows-x64/", "if: " + package_if]:
+        if required not in step(rust, "package_upload"):
+            raise ValueError("Build artifact publication boundary changed")
+    if "        scanner: [trivy, opengrep]\n" not in jobs["security"]:
+        raise ValueError("Both security scanners are mandatory")
+    command("security", "scan", "python3 tools/security_scan.py ${{ matrix.scanner }}", None)
+    for required in ["npm ci --ignore-scripts --no-audit --no-fund", "node node_modules/playwright/cli.js install --with-deps chromium", "npm run test:ui"]:
+        if "        run: " + required + "\n" not in jobs["desktop-ui"]:
+            raise ValueError("Browser behavior checks are mandatory")
+    if "uses: actions/cache@" in jobs["isolated-build"]:
+        raise ValueError("The isolated build must use a fresh target")
+    for action in re.findall(r"uses: ([^ #\n]+)", text):
+        if not re.fullmatch(r"[a-zA-Z0-9_/-]+@[0-9a-f]{40}", action):
+            raise ValueError("All actions must be pinned to commits")
     isolated = "isolated-build"
     command(isolated, "revision", 'git log -1 --format="%H %T"', None)
     command(isolated, "dependency_review", "python tools/check_dependencies.py", None)
@@ -150,7 +173,7 @@ def check_contract(text: str) -> None:
     if "    runs-on: ubuntu-24.04\n" not in jobs[isolated]:
         raise ValueError("Network isolation requires the reviewed standard VM lane")
     gate = jobs["ci-gate"].split("    steps:\n", 1)[0]
-    if gate != "    name: CI gate\n    needs: [source-and-python, rust-models, isolated-build]\n    if: ${{ always() }}\n    runs-on: ubuntu-24.04\n    timeout-minutes: 5\n":
+    if gate != "    name: CI gate\n    needs: [source-and-python, rust-models, isolated-build, security, desktop-ui]\n    if: ${{ always() }}\n    runs-on: ubuntu-24.04\n    timeout-minutes: 5\n":
         raise ValueError("Aggregate gate must always assess every prerequisite")
     command("ci-gate", "assess", "python3 tools/ci_gate.py jobs", None)
     for job in [source, rust, isolated]:
@@ -163,7 +186,7 @@ def check_contract(text: str) -> None:
 
     expected_ids = {
         source: {"checkout", "revision", "spec", "dependency_review", "workflow_contract", "proof_toolchain", "python", "source_evidence", "source_upload", "assess"},
-        rust: {"checkout", "revision", "dependency_review", "toolchain", "dependencies", "compiler", "host", "format", "tests", "doctests", "release_build", "release_tests", "supervisor_tests", "native_tests", "clippy", "assess"},
+        rust: {"checkout", "revision", "dependency_review", "toolchain", "dependencies", "compiler", "host", "format", "tests", "doctests", "release_build", "cache", "package", "package_scan", "package_upload", "supervisor_tests", "native_tests", "clippy", "assess"},
         isolated: {"checkout", "revision", "dependency_review", "toolchain", "dependencies", "isolated", "assess"},
         "ci-gate": {"checkout", "assess"},
     }
@@ -171,17 +194,19 @@ def check_contract(text: str) -> None:
         ids = re.findall(r"(?m)^        id: ([a-z_]+)$", jobs[job])
         if len(ids) != len(wanted) or set(ids) != wanted or len(steps(job)) != len(wanted):
             raise ValueError("Unreviewed, omitted or duplicate step")
-        actions = re.findall(r"(?m)^      - uses: ([^ #]+)", jobs[job])
+        actions = re.findall(r"(?m)^(?:      - |        )uses: ([^ #]+)", jobs[job])
         expected_actions = ["actions/checkout@" + CHECKOUT]
         if job == source:
             expected_actions.append("actions/upload-artifact@" + UPLOAD)
+        if job == rust:
+            expected_actions.extend(["actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9", "actions/upload-artifact@" + UPLOAD])
         if actions != expected_actions:
             raise ValueError("Unreviewed third-party action")
 
 
 def check(root: Path = ROOT) -> None:
     workflows = root / ".github/workflows"
-    if sorted(p.name for p in workflows.iterdir() if p.suffix in {".yml", ".yaml"}) != ["ci.yml"]:
+    if sorted(p.name for p in workflows.iterdir() if p.suffix in {".yml", ".yaml"}) != ["artifact-retention.yml", "ci.yml", "security-scheduled.yml"]:
         raise ValueError("Unreviewed workflow or temporary preparation workflow")
     toolchain = tomllib.loads((root / "rust-toolchain.toml").read_text(encoding="utf-8"))
     if toolchain != {"toolchain": {"channel": "1.90.0", "profile": "minimal", "components": ["rustfmt", "clippy"]}}:

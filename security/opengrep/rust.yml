@@ -1,0 +1,33 @@
+rules:
+  - id: rust-tls-verification-disabled
+    languages: [rust]
+    severity: ERROR
+    message: Preserve TLS certificate and hostname verification.
+    pattern-either:
+      - pattern: $CLIENT.danger_accept_invalid_certs(true)
+      - pattern: $CLIENT.danger_accept_invalid_hostnames(true)
+    metadata:
+      cwe: CWE-295
+      category: security
+  - id: native-tls-ignore-flags
+    languages: [generic]
+    severity: ERROR
+    message: Do not bypass WinHTTP TLS validation.
+    paths:
+      include: ["*.rs"]
+    pattern-regex: '\bSECURITY_FLAG_IGNORE_(UNKNOWN_CA|CERT_DATE_INVALID|CERT_CN_INVALID|CERT_WRONG_USAGE)\b'
+    metadata:
+      cwe: CWE-295
+      category: security
+  - id: rust-shell-command
+    languages: [rust]
+    severity: ERROR
+    message: Launch the verified executable directly; a shell is not an account-operation boundary.
+    pattern-either:
+      - pattern: Command::new("cmd")
+      - pattern: Command::new("cmd.exe")
+      - pattern: Command::new("powershell")
+      - pattern: Command::new("sh")
+    metadata:
+      cwe: CWE-78
+      category: security
