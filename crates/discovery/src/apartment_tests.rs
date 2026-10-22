@@ -8,6 +8,42 @@ use std::sync::{Arc, Barrier};
 const EXPECTED: &str = "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad";
 
 #[test]
+fn registered_activation_retries_only_server_stopping_with_a_fixed_bound() {
+    use windows::core::{Error, HRESULT};
+    for (code, failures, expected_calls) in [
+        (0x80080008u32, 2, 3),
+        (0x80080008, 10, 4),
+        (0x80070005, 10, 1),
+        (0x80040154, 10, 1),
+        (0x80010106, 10, 1),
+    ] {
+        let mut calls = 0;
+        let mut pauses = 0;
+        let result = crate::native::activate_registered(
+            || {
+                calls += 1;
+                if calls <= failures {
+                    Err(Error::from_hresult(HRESULT(code as i32)))
+                } else {
+                    Ok(42)
+                }
+            },
+            |delay| {
+                assert_eq!(delay, std::time::Duration::from_millis(50));
+                pauses += 1;
+            },
+        );
+        assert_eq!(calls, expected_calls);
+        assert_eq!(pauses, expected_calls - 1);
+        if failures < expected_calls {
+            assert_eq!(result.unwrap(), 42);
+        } else {
+            assert_eq!(result.unwrap_err().code().0, code as i32);
+        }
+    }
+}
+
+#[test]
 fn scoped_sha256_preserves_empty_and_chunked_vectors_without_caller_apartment() {
     // The owner retains its own apartment; the safe API never exposes WinRT
     // objects requiring a caller's unexpressed lifetime promise.

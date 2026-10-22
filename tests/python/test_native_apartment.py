@@ -13,7 +13,7 @@ class ApartmentLifetimeTests(unittest.TestCase):
         self.assertNotIn('thread_local!', code)
         self.assertIn('let _apartment = Apartment::enter()?;', code)
         self.assertLess(code.index('let _apartment = Apartment::enter()?;'),
-                        code.index('let factory:'))
+                        code.index('let roots:'))
         self.assertIn('impl Drop for Apartment', code)
         self.assertIn('RoUninitialize()', code)
         self.assertIn('PhantomData<std::rc::Rc<()>>', code)

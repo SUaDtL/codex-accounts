@@ -28,7 +28,11 @@ fn onboarding_record_authenticates_cleanup_and_recovers_unpublished_torn_write()
     .unwrap();
     let home = record.home(&namespace);
     namespace.create_home(&home).unwrap();
-    std::fs::write(home.join("auth.json"), b"SYNTHETIC_NO_REAL_CREDENTIAL").unwrap();
+    super::super::tests::runtime_fixture(
+        &home.join("auth.json"),
+        Some(b"SYNTHETIC_NO_REAL_CREDENTIAL"),
+        &namespace.security,
+    );
     drop(record);
     let wrong = RootKey::generate().unwrap();
     assert!(namespace.cleanup_all(&wrong).is_err());

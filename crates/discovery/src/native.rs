@@ -219,12 +219,33 @@ fn winrt_error(error: windows::core::Error) -> ReadError {
     }
 }
 
+// Final apartment teardown on another thread can overlap registered activation.
+// Only COM's explicit server-stopping result permits another attempt. Retain the
+// caller's apartment throughout; never cache a factory or reinterpret failure.
+pub(super) fn activate_registered<T>(
+    mut activate: impl FnMut() -> windows::core::Result<T>,
+    mut pause: impl FnMut(std::time::Duration),
+) -> windows::core::Result<T> {
+    for _ in 1..4 {
+        match activate() {
+            Err(error) if error.code().0 == CO_E_SERVER_STOPPING => {
+                pause(std::time::Duration::from_millis(50));
+            }
+            result => return result,
+        }
+    }
+    activate()
+}
+
 fn registered_factory<T: Interface>(class: &'static str) -> Result<T, ReadError> {
     // SAFETY: Call sites below select only fixed registered SDK classes and
     // generated interfaces, inside their already initialized stack apartment.
     // Unlike the generated static helpers, this has no cache or DLL-search path.
-    unsafe { windows::Win32::System::WinRT::RoGetActivationFactory(&HSTRING::from(class)) }
-        .map_err(winrt_error)
+    activate_registered(
+        || unsafe { windows::Win32::System::WinRT::RoGetActivationFactory(&HSTRING::from(class)) },
+        std::thread::sleep,
+    )
+    .map_err(winrt_error)
 }
 
 fn registered_instance<T: Interface>(class: &'static str) -> Result<T, ReadError> {

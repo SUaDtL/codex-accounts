@@ -728,6 +728,57 @@ pub(in crate::native) fn cleanup_abandoned(root: &RootKey) -> Result<(), Storage
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // Elevated Windows runners can default new objects to Administrators ownership.
+    // Model an ordinary user runtime explicitly, while leaving the DACL absent
+    // so these files still exercise real inheritance from the private home.
+    pub(super) fn runtime_fixture(path: &Path, bytes: Option<&[u8]>, security: &Security) {
+        let mut descriptor = SECURITY_DESCRIPTOR::default();
+        let descriptor_ptr = (&mut descriptor as *mut SECURITY_DESCRIPTOR).cast();
+        let mut name: Vec<u16> = r"\\?\".encode_utf16().collect();
+        assert!(path.is_absolute());
+        name.extend(path.as_os_str().encode_wide());
+        name.push(0);
+        // SAFETY: stack-owned absolute descriptor and live current-user SID;
+        // initialization leaves SE_DACL_PRESENT clear, never a present NULL DACL.
+        unsafe {
+            assert_ne!(InitializeSecurityDescriptor(descriptor_ptr, 1), 0);
+            assert_ne!(
+                SetSecurityDescriptorOwner(
+                    descriptor_ptr,
+                    security.user.as_ptr().cast_mut().cast(),
+                    0,
+                ),
+                0
+            );
+        }
+        let attrs = SECURITY_ATTRIBUTES {
+            nLength: std::mem::size_of::<SECURITY_ATTRIBUTES>() as u32,
+            lpSecurityDescriptor: descriptor_ptr,
+            bInheritHandle: 0,
+        };
+        if let Some(bytes) = bytes {
+            // SAFETY: fresh fixture path, live descriptor, non-inheritable handle.
+            let handle = unsafe {
+                CreateFileW(
+                    name.as_ptr(),
+                    GENERIC_WRITE,
+                    0,
+                    &attrs,
+                    CREATE_NEW,
+                    FILE_ATTRIBUTE_NORMAL,
+                    null_mut(),
+                )
+            };
+            assert_ne!(handle, INVALID_HANDLE_VALUE);
+            // SAFETY: transfer the single newly created handle into File.
+            let mut file = unsafe { File::from_raw_handle(handle) };
+            file.write_all(bytes).unwrap();
+        } else {
+            // SAFETY: exact new fixture directory with live owner descriptor.
+            assert_ne!(unsafe { CreateDirectoryW(name.as_ptr(), &attrs) }, 0);
+        }
+    }
     #[test]
     fn reauthentication_mismatch_preserves_selected_generation_and_current_profile() {
         let sandbox = super::super::super::tests::Sandbox::new();
@@ -872,10 +923,11 @@ mod tests {
         namespace.create_home(&path).unwrap();
         let plugins = path.join("synthetic-plugin-name-".repeat(5));
         let assets = plugins.join("synthetic-plugin-assets-".repeat(4));
-        std::fs::create_dir_all(&assets).unwrap();
+        runtime_fixture(&plugins, None, &namespace.security);
+        runtime_fixture(&assets, None, &namespace.security);
         let asset = assets.join("synthetic-asset.txt");
         assert!(asset.as_os_str().encode_wide().count() > 260);
-        std::fs::write(&asset, b"SYNTHETIC").unwrap();
+        runtime_fixture(&asset, Some(b"SYNTHETIC"), &namespace.security);
         namespace
             .cleanup_registered(&record)
             .expect("long runtime plugin paths must be cleaned");
@@ -896,7 +948,11 @@ mod tests {
         let assets = path.join("synthetic-assets");
         create_directory(&assets, &namespace.security).unwrap();
         for index in 0..8192 {
-            std::fs::write(assets.join(format!("synthetic-{index}")), b"SYNTHETIC").unwrap();
+            runtime_fixture(
+                &assets.join(format!("synthetic-{index}")),
+                Some(b"SYNTHETIC"),
+                &namespace.security,
+            );
         }
         namespace
             .cleanup_registered(&record)
@@ -917,7 +973,11 @@ mod tests {
         let path = record.home(&namespace);
         namespace.create_home(&path).unwrap();
         let auth = path.join("auth.json");
-        std::fs::write(&auth, b"{\"SYNTHETIC_ONLY\":true}").unwrap();
+        runtime_fixture(
+            &auth,
+            Some(b"{\"SYNTHETIC_ONLY\":true}"),
+            &namespace.security,
+        );
         let target = Target::open_file_backend(&path).unwrap();
         assert_eq!(
             &**target.read(0).unwrap().unwrap(),
