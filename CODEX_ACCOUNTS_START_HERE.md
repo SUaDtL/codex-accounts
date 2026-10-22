@@ -1,6 +1,6 @@
 # Codex Accounts: start here
 
-Checkpoint **2026-10-22** · UI accepted; documentation and CI delivery in progress.
+Checkpoint **2026-10-22** · UI accepted; Windows application and CI delivery in PR #25.
 
 Current build: `dist/windows-x64-refined/codex-accounts-desktop.exe`.
 Includes the unified vault/settings design, compact controls and read-only usage
@@ -23,9 +23,10 @@ registration/runtime/storage/policy checks, with no version allowlist or repeate
 approval. See the specification amendment dated 2026-10-21.
 
 Main was last verified at `587b18c64f82e13dbbf4e5386e427ef48c246855`; PRs #14–#24
-were merged. Refresh remote state before publication. This integration is
-uncommitted; no new PR, merge or release has been made. Historical packet claims
-below describe earlier snapshots, including the now-repaired discovery crash.
+were merged. The integration is committed in [PR #25](https://github.com/SUaDtL/codex-accounts/pull/25).
+Read its current checks for exact-head hosted results. No merge or release has been
+authorized. Historical packet claims below describe earlier snapshots, including
+the now-repaired discovery crash.
 
 ## Minimum reading order
 

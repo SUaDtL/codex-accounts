@@ -1,5 +1,14 @@
 # Current packet: finish the Windows application
 
+## Active delivery: PR #25
+
+[PR #25](https://github.com/SUaDtL/codex-accounts/pull/25) contains the integrated Windows
+application, documentation and CI delivery. Current hosted results belong to its current
+head, not the historical records below. The first run exposed duplicate Trivy SARIF
+categories and Windows-only helpers compiled into portable builds; both were corrected.
+Hosted Trivy/OpenGrep and UI jobs passed on the intervening run. The final combined run
+must pass before merge. No merge, signing or release is authorized by this record.
+
 2026-10-21: the owner requested a functioning application with focused checks and
 explicitly rejected exact-build approval. Normal Desktop updates must work after
 runtime, storage, policy and recovery checks. The canonical specification records
