@@ -1244,6 +1244,7 @@ impl<D: Files> Storage<D> {
 
 #[path = "stage_repair.rs"]
 mod stage_repair;
+#[cfg(any(windows, test))]
 pub(crate) use stage_repair::StagingRepair;
 
 #[cfg(test)]
