@@ -4,6 +4,8 @@ A compact Windows app for switching between saved ChatGPT accounts in Codex Desk
 
 **0.1.0 · Pre-1.0 · Windows x64**
 
+[![Download for Windows](https://img.shields.io/badge/Download-Windows_x64-2c9b80?style=for-the-badge)](https://github.com/SUaDtL/codex-accounts/releases/download/preview/codex-accounts-windows-x64.zip)
+
 Save the account you already use, add another through the official browser sign-in,
 and switch when you need to. See each account's remaining usage and reset countdowns
 without closing Codex. Credentials stay on your computer.
@@ -14,16 +16,22 @@ without closing Codex. Credentials stay on your computer.
 
 ## Get a build
 
-Open [Repository checks](https://github.com/SUaDtL/codex-accounts/actions/workflows/ci.yml),
-choose the newest **successful** run, and download its
-`codex-accounts-windows-x64-…` artifact. GitHub requires sign-in for artifact downloads.
-Extract the archive and run `codex-accounts-desktop.exe`.
+Download the [Windows Preview](https://github.com/SUaDtL/codex-accounts/releases/download/preview/codex-accounts-windows-x64.zip),
+extract the archive and run `codex-accounts-desktop.exe`. No GitHub sign-in is required.
+**No Windows signature:** Windows may show an unknown-publisher or SmartScreen warning.
+Cosign verification is available for the executable and checksum manifest;
+[verify your download](docs/verify-download.md). This does not change Windows trust.
 
-The artifact includes `SHA256SUMS`, `BUILD.json`, `Cargo.lock` and `SBOM.cdx.json`.
-These are unsigned development builds, not signed installers or published releases.
-After the retention workflow reaches the default branch, it keeps one successful
-build from this repository; a failed newer run does not replace it. GitHub's
-90-day artifact expiry still applies if no new build succeeds.
+The archive includes `SHA256SUMS`, `BUILD.json`, `Cargo.lock`, `SBOM.cdx.json`,
+`LICENSE`, Cosign verification bundles and the exact corresponding source in `source.tar.gz`.
+One rolling [Preview release](https://github.com/SUaDtL/codex-accounts/releases/tag/preview)
+holds the latest successfully published main build. Failed checks leave the previous
+download available. The release notes identify the exact source revision.
+
+The first Preview becomes available after this workflow reaches `main` and its CI passes.
+Until then, developers can download the Windows artifact from a successful
+[Repository checks](https://github.com/SUaDtL/codex-accounts/actions/workflows/ci.yml)
+run; Actions artifact downloads require GitHub sign-in and expire after 90 days.
 
 Requirements: Windows x64, the official Microsoft Store Codex Desktop installation,
 and Microsoft Edge WebView2. No Node installation or frontend server is needed.
@@ -78,6 +86,11 @@ The UI is embedded in the executable.
 - [Security](SECURITY.md): protection limits and safe reporting.
 - [Documentation index](docs/README.md): specification, roadmap and historical evidence.
 
+## License
+
+Codex Accounts is licensed under [GNU AGPL version 3 only](LICENSE)
+(`AGPL-3.0-only`). Third-party dependencies retain their own licenses.
+
 The owner has confirmed a real account round trip and accepted the current UI.
-That is distinct from signed release qualification. No public release is published
-by this pipeline, and no project license has yet been selected by the owner.
+Preview builds remain unsigned and pre-1.0; a passing pipeline is not a complete
+independent security audit.

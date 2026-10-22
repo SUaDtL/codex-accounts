@@ -65,21 +65,48 @@ A successful Windows release shard uploads `codex-accounts-windows-x64-RUN-ATTEM
 - `BUILD.json`: source revision, version, payload and lock hashes, run identity.
 - `Cargo.lock` and `SBOM.cdx.json`: exact dependency inventory.
 - `SHA256SUMS` and `README.txt`: verification and usage notes.
+- `LICENSE` and `source.tar.gz`: AGPL-3.0-only terms and corresponding committed source.
 
 Only choose an artifact from a **fully successful Repository checks run**. Upload can
 finish before other jobs, so its presence alone is not a passing CI result.
 
-`Keep latest successful build` runs after CI completes. It uses code from the default
-branch and only GitHub API metadata, never PR code or downloaded artifacts. It preserves
+`Publish Preview and retain latest build` runs after CI completes, or manually. Both jobs
+use trusted default-branch code with checkout credentials disabled. The Preview job
+selects the newest successful owner-repository `main` push/manual run of `ci.yml`,
+checks its artifact digest, file list, checksums, PE architecture and source/run identity,
+then signs the EXE and checksum manifest with pinned Cosign and publishes one prerelease.
+Both signatures must verify with the exact publishing workflow identity and GitHub OIDC
+issuer. Their bundles are included in the ZIP; no Authenticode signing is performed.
+PR and fork artifacts cannot be published.
+Artifact files are read as data and never extracted or executed by the publisher.
+The GitHub token is not forwarded to the signed artifact-storage URL.
+
+The README download button uses a fixed `preview` tag and asset name. The tag anchors
+the channel's first publication and is not moved; release notes and `BUILD.json` identify
+the actual binary revision, and the ZIP includes that revision's source archive. GitHub's
+automatically generated tag-source links refer to the anchor, so use the bundled source
+or the explicit source link in the release notes for the current binary.
+
+The publisher uploads and verifies a candidate before renaming the old download and
+promoting the candidate. GitHub does not offer an atomic asset-name swap, so the fixed URL
+can briefly be unavailable during those two renames. An ordinary promotion failure restores
+the old name; an interruption preserves both assets for retry. No old bytes are deleted
+until the replacement is published. Repeated and late runs cannot roll the channel backward.
+It uses the public Sigstore service with ephemeral GitHub OIDC credentials and no paid
+subscription. The workflow does not publish a 1.0 release or change Windows trust.
+
+Retention runs only after publication succeeds or finds no eligible candidate, so a failed
+publication keeps its input artifact available for retry. Its separate token has `actions:write`
+but no repository-content write permission. The metadata-only retention tool preserves
 the newest successful owner-repository run/attempt and deletes older build artifacts and
 failed completed candidates. A failed rerun cannot discard the preceding successful
 attempt. Running/unknown runs are untouched. Fork candidates are removed after completion
 and cannot replace the owner's last good build. Reports expire after two days; committed
 source evidence after seven. The retained binary has GitHub's 90-day expiry if no newer
-successful build arrives. No tags or releases are created.
+successful build arrives. The rolling release asset does not inherit Actions artifact expiry.
 
-The cleanup workflow activates only after it exists on the default branch. The manual
-workflow dispatch runs the same cleanup; `python tools/retain_latest_build.py` defaults
+The publishing/cleanup workflow activates only after it exists on the default branch. Its
+manual dispatch retries publication and cleanup; `python tools/retain_latest_build.py` defaults
 to a read-only preview with `GITHUB_REPOSITORY` and `GH_TOKEN` supplied locally.
 
 ## Merge and release boundaries
@@ -87,4 +114,6 @@ to a read-only preview with `GITHUB_REPOSITORY` and `GH_TOKEN` supplied locally.
 At inspection on 2026-10-22, main had no branch protection or rulesets. The workflow
 provides a stable CI gate but does not itself enforce merge policy. A maintainer can
 configure that check as required separately. This work does not change repository
-protections, merge PRs, select a license, sign an executable or publish a release.
+protections or merge PRs. The owner selected AGPL-3.0-only and authorized automatic unsigned
+Preview delivery from successful main CI, with Cosign verification added at the owner's
+request. Authenticode signing and Store distribution are not configured.

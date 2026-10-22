@@ -56,10 +56,11 @@ or bypass compatibility checks to make a test pass. A failing check needs a diag
 
 PRs should explain the resulting behavior, focused local evidence and remaining limits.
 CI builds a downloadable Windows candidate and must pass before merge. Opening a PR
-does not authorize merging, signing or publishing a release. Product versions remain
-in the 0.x series until the owner explicitly chooses otherwise.
+does not authorize merging or signing. Successful main builds update the unsigned
+Preview automatically. Product versions remain in the 0.x series until the owner
+explicitly chooses otherwise.
 
 Documentation lives in [docs](docs/README.md). Keep current guidance separate from dated
 historical evidence. Do not copy locally generated `.review-evidence`, account files or
-build outputs into a commit. No project license is selected yet; do not add one on the
-owner's behalf.
+build outputs into a commit. The owner selected AGPL-3.0-only; see [LICENSE](LICENSE).
+Preserve third-party notices and licenses when modifying or redistributing their code.

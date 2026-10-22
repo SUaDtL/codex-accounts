@@ -7,6 +7,7 @@ These tools run in development/CI and are not shipped in Codex Accounts.
 | Trivy | 0.76.1 | Apache-2.0 | Cargo/npm CVEs, secrets, supported configuration and package SBOM scans. |
 | OpenGrep | 1.31.0 | LGPL-2.1 | Repository-owned static rules and their positive/negative fixtures. |
 | Playwright | 1.64.1 | Apache-2.0 | Synthetic Chromium UI checks. |
+| Cosign | 3.1.4 | Apache-2.0 | Keyless Preview signatures and exact workflow-identity verification. |
 
 [tools.json](tools.json) records exact official release URLs and SHA-256 hashes for Linux
 and Windows x64 scanner assets. `tools/security_tools.py` verifies the downloaded bytes
@@ -76,3 +77,21 @@ asset URLs and SHA-256 values together, then run both scanner fixtures and sourc
 For browser updates, update package.json and package-lock.json together and rerun UI checks.
 Action updates require a verified upstream commit and review of permissions/events.
 Record actual output and limitations. See [CI](../docs/ci.md) for trust and retention policy.
+
+## Preview signatures
+
+The owner selected Cosign as a free verification mechanism, accepting that it does not
+provide Windows Authenticode or SmartScreen trust. The Preview job alone receives
+`id-token:write`. Cosign requests a short-lived GitHub Actions identity token, signs
+the EXE and checksum manifest, and verifies both against the exact default-branch
+publishing workflow identity before uploading. Verification bundles travel inside
+the same ZIP, avoiding separately updated binary/signature release assets.
+Signing/verification failures leave the previous download in place. No persistent
+signing key, paid service, local developer sign-in or application credential is used.
+
+Cosign 3.1.4 acquisition uses the existing immutable URL/checksum installer. Its
+Apache-2.0 license, official release/checksum metadata and published advisories were
+reviewed on 2026-10-22. Trivy 0.76.1 scanned upstream checksum-verified SBOMs covering
+256 Linux and 266 Windows packages with no HIGH/CRITICAL findings reported. This is
+bounded SBOM evidence, not an exhaustive audit. See the [official release](https://github.com/sigstore/cosign/releases/tag/v3.1.4)
+and [advisory fixed before this version](https://github.com/sigstore/cosign/security/advisories/GHSA-fx35-mq7g-6g98).

@@ -1,5 +1,16 @@
 # Session handoff: functional Windows build
 
+## 2026-10-22: AGPL and consumer Preview delivery
+
+The owner selected AGPL-3.0-only and approved a README download button backed by one
+rolling Preview release. The owner rejected a paid signing subscription and selected
+Cosign for verification, explicitly accepting remaining SmartScreen warnings. The
+current PR adds publication from successful owner/main CI, exact workflow-identity
+verification, matching source/license in the ZIP and replacement recovery. See
+docs/ci.md and docs/verify-download.md. No merge authority was granted. Live GitHub OIDC
+signing and first Preview publication require the workflow to reach main; source tests
+and review are not evidence that these live operations have occurred.
+
 ## Active delivery: PR #25
 
 [PR #25](https://github.com/SUaDtL/codex-accounts/pull/25) contains the integrated Windows
