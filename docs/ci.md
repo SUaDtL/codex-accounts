@@ -19,6 +19,10 @@ Debug shards run formatting, doctests and strict Clippy. Both profiles run works
 tests; Windows also runs the process supervisor and the complete named native fixture
 partition for that profile. Release shards build optimized binaries. The Windows release
 shard packages and scans the dependency SBOM before uploading the executable.
+Native cases have a 180-second process deadline, except the restoration batch's
+300 seconds for its control plus 17 crash/recovery fixtures. Its individual child
+watchdogs remain 75 seconds; no case is retried after failure. The Windows job has
+a separate 30-minute limit.
 
 Compiler caches are separated by OS, architecture, toolchain, profile and dependency
 identity. Cache hits never skip checks. The isolated lane uses a fresh target and does
@@ -42,7 +46,11 @@ Trivy does not decompile the PE to prove all machine-code components are safe.
 
 OpenGrep runs eight repository-owned rules with positive/negative fixtures. They cover
 renderer injection/storage, unsafe Python execution/deserialization, shell spawning and
-TLS-validation bypass patterns. No floating public rule registry is used. SARIF appears
+TLS-validation bypass patterns. These are structural rules; cross-function and cross-file
+taint coverage is not claimed. The scan requires every Rust/JavaScript/Python source in
+`crates/` and `tools/`, including first-party tests, and rejects missing targets or reported
+analysis errors. JSON, SARIF and scan metadata are retained together. No floating public
+rule registry is used. SARIF appears
 in GitHub code scanning where permissions allow; fork PRs still execute blocking scans
 and upload short-lived reports without requesting write access. Tool errors fail the job.
 

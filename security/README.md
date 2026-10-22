@@ -29,8 +29,37 @@ Official sources: [Trivy releases](https://github.com/aquasecurity/trivy/release
 Rules and fixture pairs live in `opengrep/`. Add a positive and a negative example when
 changing a rule. Run `python tools/security_scan.py opengrep`; fixtures run before the
 source scan. Rules inspect `crates/` and `tools/`, including new untracked source locally.
-Build output, generated dependencies, reports and test rule fixtures are excluded.
+All Rust, JavaScript and Python files in those roots must appear in the scanner's target
+inventory, including first-party tests. `.semgrepignore` replaces implicit test exclusions
+and excludes only generated Tauri schemas. Build output, dependencies and scanner rule
+fixtures live outside these source roots; the rule fixtures run separately.
 `--strict`, `--error` and disabled inline suppression keep failures visible.
+
+OpenGrep writes JSON and SARIF from the same scan. Empty or incomplete target inventories,
+reported parse/time/resource errors, malformed reports and failed execution block CI.
+Every finding blocks. Metadata records actual engine/rule/report hashes, source counts,
+analysis mode, elapsed time and the CI commit. Reports are cleared before installation;
+failed reruns leave incomplete metadata. Scanner cache, logs and settings use a fresh
+temporary runtime, separate from an authenticated developer session.
+
+### OpenGrep coverage contract
+
+These eight rules use **structural SAST**, not source-to-sink taint analysis. A prohibited
+construct is rejected regardless of the input's origin. No intrafile or cross-file flow
+coverage is claimed. Keep the stable pinned engine; an experimental interfile engine is
+not part of the required scan. Changes to analysis mode need representative flow fixtures.
+
+| Component | Inputs and operations | Wrapper boundary and limitation | Proof |
+| --- | --- | --- | --- |
+| Renderer JavaScript | Account labels, sanitized IPC and form input; DOM, code execution and storage | Direct dangerous HTML/code/storage APIs are prohibited. Does not prove native IPC authorization. | `opengrep/javascript.js`: positive and clean alternatives for three rules. |
+| Python developer tools | CLI arguments, GitHub metadata, downloaded bytes; subprocess and deserialization | Direct shell/pickle/eval constructs are prohibited. Does not prove archive/path validation or argument safety. | `opengrep/python.py`: positive and clean alternatives for two rules. |
+| Native Rust | Files, runtime replies and usage responses; process launch and HTTPS | Direct shell launch and TLS bypass patterns are prohibited. Does not prove FFI safety, credential ownership or recovery logic. | `opengrep/rust.rs`: positive and clean alternatives for three rules. |
+
+Repository rules are locally authored; no external rule pack or floating registry is
+downloaded. Review source, runtime behavior and dependency advisories separately. The
+2026-10-22 local expanded scan covered 97 Rust, one JavaScript and 24 Python files with
+zero findings and zero reported errors. These counts are evidence, not a fixed allowlist:
+new source files become required targets automatically.
 
 Trivy blocks on HIGH/CRITICAL CVE/configuration findings without `--ignore-unfixed`.
 Secrets run separately at all severities, including Markdown and test fixtures. A
