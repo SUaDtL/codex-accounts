@@ -1,7 +1,9 @@
 #![forbid(unsafe_code)]
 use crate::random::{self, Entropy, SystemEntropy};
 use crate::{CryptoError, EnvelopeContext};
+#[cfg(any(test, all(windows, target_arch = "x86_64")))]
 use argon2::{Algorithm, Argon2, Block, Params, Version};
+#[cfg(any(test, all(windows, target_arch = "x86_64")))]
 use chacha20poly1305::{
     aead::{AeadInPlace, KeyInit},
     Key, Tag, XChaCha20Poly1305, XNonce,
@@ -23,8 +25,11 @@ const HARDENED_TAG_BYTES: usize = 16;
 const HARDENED_M_COST: u32 = 64 * 1024;
 const HARDENED_T_COST: u32 = 3;
 const HARDENED_P_COST: u32 = 1;
+#[cfg(any(test, all(windows, target_arch = "x86_64")))]
 const MIN_PASSPHRASE_BYTES: usize = 12;
+#[cfg(any(test, all(windows, target_arch = "x86_64")))]
 const MAX_PASSPHRASE_BYTES: usize = 1024;
+#[cfg(any(test, all(windows, target_arch = "x86_64")))]
 const HARDENED_AAD: &[u8] = b"codex-accounts/protected-root/v1\0";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -255,10 +260,12 @@ impl ProtectedRootKey {
         &self.0[10..]
     }
 
+    #[cfg(all(windows, target_arch = "x86_64"))]
     fn harden(&self, passphrase: &[u8]) -> Result<Self, CryptoError> {
         self.harden_using(passphrase, &mut SystemEntropy)
     }
 
+    #[cfg(any(test, all(windows, target_arch = "x86_64")))]
     fn harden_using(&self, passphrase: &[u8], rng: &mut impl Entropy) -> Result<Self, CryptoError> {
         if self.protection() != RootProtection::WindowsUser {
             return Err(CryptoError::UnsupportedAlgorithm);
@@ -294,6 +301,7 @@ impl ProtectedRootKey {
         Self::from_bytes(&bytes)
     }
 
+    #[cfg(any(test, all(windows, target_arch = "x86_64")))]
     fn unharden(&self, passphrase: &[u8]) -> Result<Self, CryptoError> {
         if self.protection() != RootProtection::Passphrase {
             return Err(CryptoError::UnsupportedAlgorithm);
@@ -330,6 +338,7 @@ fn encoded_len(bytes: &[u8]) -> Result<usize, CryptoError> {
     Ok(encoded_u32(bytes)? as usize)
 }
 
+#[cfg(any(test, all(windows, target_arch = "x86_64")))]
 fn check_passphrase(passphrase: &[u8]) -> Result<(), CryptoError> {
     if !(MIN_PASSPHRASE_BYTES..=MAX_PASSPHRASE_BYTES).contains(&passphrase.len()) {
         return Err(CryptoError::InputLimit);
@@ -337,6 +346,7 @@ fn check_passphrase(passphrase: &[u8]) -> Result<(), CryptoError> {
     Ok(())
 }
 
+#[cfg(any(test, all(windows, target_arch = "x86_64")))]
 fn hardened_key(passphrase: &[u8], salt: &[u8]) -> Result<Zeroizing<[u8; 32]>, CryptoError> {
     let params = Params::new(HARDENED_M_COST, HARDENED_T_COST, HARDENED_P_COST, Some(32))
         .map_err(|_| CryptoError::KeyProtectionUnavailable)?;

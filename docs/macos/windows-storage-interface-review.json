@@ -24,7 +24,7 @@
     {
       "path": "crates/vault-crypto/src/keys.rs",
       "before_sha256": "f3f0746562f24b6d3c797554558541bc57575289d251cf83cc3fb51fca53f11c",
-      "after_sha256": "ab78e19e5ad40775cc547cc55cc7a7d665777faf6cf7d38f598b076460df7e80"
+      "after_sha256": "b648079c038097ace7c6320f13dd3e607a9c54700cb83f2815100a4c63f2b68f"
     },
     {
       "path": "crates/vault-storage/src/engine.rs",
