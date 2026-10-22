@@ -1,156 +1,83 @@
 # Codex Accounts
 
-Manual, owner-controlled account handoff for the official Codex Desktop application.
+A compact Windows app for switching between saved ChatGPT accounts in Codex Desktop.
 
-**Development only. No Desktop build is qualified. Capture, login, live account
-switching and Desktop process control are not enabled. Persistent storage and
-native lifecycle primitives are development libraries, not an account manager.**
+**0.1.0 · Pre-1.0 · Windows x64**
 
-## Current implementation
+Save the account you already use, add another through the official browser sign-in,
+and switch when you need to. See each account's remaining usage and reset countdowns
+without closing Codex. Credentials stay on your computer.
 
-PRs #24 and #23 merged after their exact-source CI gates passed. The supervisor
-repair also passed its separate main run; refresh the signer's post-merge run.
-Next is bounded static Desktop runtime-selection evidence. Fresh selected-build
-ancestor metadata access was denied; protection and qualification remain unknown.
+![Accounts with synthetic Personal and Work profiles](docs/images/accounts.png)
 
-PRs #14 through #24 are merged. CA-05F/G/H provide private schema-pinned
-handshake, account-read, managed-login/cancellation and rate-limit codecs over
-synthetic endpoints. CA-06B adds a Windows-only Tauri developer preview of the
-existing disabled pages, with no application commands or native adapter. See
-[the preview boundary](docs/ca-06b-static-preview.md). Historical review-stack
-references below do not reopen merged PRs.
-CA-02B extends read-only discovery with a bounded cached primary signer digest and
-distinct unavailable/cleanup states. Its [exact-build observation](docs/ca-02b-cached-primary-signer.md)
-does not establish publisher approval or qualify an installation.
+*Preview uses synthetic accounts and usage values.*
 
-CA-02 provides read-only Windows x64 registered-package discovery, bounded native
-executable/configuration observations and conservative compatibility evaluation.
-Unknown publisher, runtime, effective home/backend or policy remains unknown.
-Finding `auth.json` does not establish file storage. The qualification catalog is
-empty and the source-level mutation gate refuses every backend.
+## Get a build
 
-CA-03A supplies exact-byte/absence preservation, bounded JSON, composite identity
-and generation rules. CA-03B adds authenticated envelopes, separated keys, OS
-randomness, owned-buffer zeroization and current-user Windows DPAPI. CA-03C adds
-protected encrypted persistence, immutable generations, write-ahead commits,
-startup reconciliation, deferred retention and explicit encrypted-evidence repair.
-See [data](docs/ca-03-vault-data.md), [crypto](docs/ca-03b-crypto.md) and
-[storage](docs/ca-03c-storage.md) contracts.
+Open [Repository checks](https://github.com/SUaDtL/codex-accounts/actions/workflows/ci.yml),
+choose the newest **successful** run, and download its
+`codex-accounts-windows-x64-…` artifact. GitHub requires sign-in for artifact downloads.
+Extract the archive and run `codex-accounts-desktop.exe`.
 
-CA-04A provides the private storage-backed switch coordinator: complete generation
-holds, newest-source preservation, post-helper capture, per-resource intent,
-cancellation, conflict preservation and journaled restoration. Its external effects
-remain synthetic-only; no public switch entry point exists. See
-[the journal contract](docs/ca-04a-journal.md).
+The artifact includes `SHA256SUMS`, `BUILD.json`, `Cargo.lock` and `SBOM.cdx.json`.
+These are unsigned development builds, not signed installers or published releases.
+After the retention workflow reaches the default branch, it keeps one successful
+build from this repository; a failed newer run does not replace it. GitHub's
+90-day artifact expiry still applies if no new build succeeds.
 
-CA-04B, merged through PR #9, adds private Windows owner/canonical-home kernel locks, retained
-process start/owner/image observations, bounded descendant tracking, normal-window
-quit and independently proven owned-job exit. Native tests create only fresh
-synthetic directories, hidden windows and owned children. These primitives do not
-identify a qualified shared-home writer set, grant consent or connect to live
-credential replacement. See [lifecycle and native checks](docs/ca-04b-lifecycle.md).
+Requirements: Windows x64, the official Microsoft Store Codex Desktop installation,
+and Microsoft Edge WebView2. No Node installation or frontend server is needed.
 
-CA-04C/D add synthetic target-resource operations and encrypted staging recovery.
-CA-05A/B provide bounded framing and strict JSON object validation. Draft
-[PR #14](https://github.com/SUaDtL/codex-accounts/pull/14) adds session sequencing,
-login-ID correlation and cancellation; stacked draft
-[PR #15](https://github.com/SUaDtL/codex-accounts/pull/15) adds the private synthetic
-transport pump. Its owned in-memory channels exercise real scheduling, backpressure
-and EOF handling. They are not native pipes or an official runtime adapter.
-See [the transport boundary](docs/ca-05e-transport-driver.md).
+## Use it
 
-All full Q0/Q1/Q2 and complete release scenarios remain open. Owner Windows 11,
-ordinary-user isolation, unavailable stores, sync-provider environments, actual
-Desktop contracts and physical-power-loss/directory-metadata qualification remain
-separate. macOS native persistence/lifecycle is not implemented. Ubuntu CI tests
-portable code and build isolation; it does not add Linux/WSL product support.
+1. Create your vault on first use, or open the existing one.
+2. Use **+** to save the current account or sign in to another. Give it any label.
+3. Quit Codex clients normally before saving, signing in or switching.
+4. Select **Switch** beside an account. Codex opens after the switch succeeds.
 
-The direction remains Rust core plus a thin Tauri 2 shell. No inference proxy,
-credential CLI/MCP/HTTP interface, automatic rotation, host patch, self-updater or
-broad history migration belongs in this product.
+The lit indicator marks the last known active account. **Open Codex** reopens it.
+The header refresh button reloads accounts and usage; the cog opens Settings.
+Account menus provide rename, removal and **Sign in again**.
 
-## Start here
+Usage refreshes once per minute while this window is visible and the vault is open.
+Codex can stay open during monitoring. Expired credentials clear usage instead of
+showing stale balances. Only reported quota windows appear. Available banked resets
+appear when the service reports them; the app never consumes resets.
 
-New sessions: read [CODEX_ACCOUNTS_START_HERE.md](CODEX_ACCOUNTS_START_HERE.md),
-[the handoff](docs/maintainers/session-handoff.md) and [parallel-work boundaries](docs/maintainers/parallel-work.md).
-The [open-asks register](docs/maintainers/open-asks.md) separates owner evidence from
-safe implementation work. Resume CA-02B, refreshing live refs/open PRs before
-execution. PRs #14 through #22 are merged. The original CA-02
-Project routing is superseded.
+Accounts share this computer's Codex projects and conversation history. Switching
+changes the sign-in, not the history. Vault encryption uses your Windows account;
+it does not protect against software already running as you or an administrator.
 
-The normative [specification](docs/local-codex-switcher-spec.html) owns behavior
-through its canonical `artifact-model`; the visible projection is checked against
-it. The [implementation plan](docs/implementation-plan.html) is the single working
-roadmap. The [next packet](docs/next-pr.md) describes the subsequent bounded work,
-not permission to execute it. [Validation](docs/validation.md) separates source,
-hosted native API execution and real Desktop qualification.
+## Compatibility
 
-The scoped T-07 clarification and v2 provenance migration were adopted through PR
-#3. [The amendment](docs/spec-amendments/ca-02-t07.md) preserves reconstruction of
-original specification bytes. Unchanged research/index inputs retain their hashes.
-A merge or document check never qualifies an installation. The
-[comparison](docs/codex-switchers-comparison.html) is supporting research only.
+Normal Codex updates do not need a version allowlist. Operations check the actual
+installation, runtime, storage, policy and running clients. Unsupported configurations
+are refused without changing credentials. This build supports native Windows
+file-backed ChatGPT sign-ins. WSL, API-key accounts, custom runtimes/providers and
+macOS account switching are not supported.
 
-## Build and validate
+## Build from source
 
-Prerequisites: Python 3.11+, pinned Rust 1.90.0, rustfmt and Clippy. Run commands
-individually, inspect each exit status, and stop acquisition if review fails.
+Install Rust 1.90.0 and Visual Studio C++ Build Tools with the Windows SDK, then:
 
 ```console
 python tools/check_dependencies.py
 cargo fetch --locked
-python tools/spec_index.py check
-python tools/ci_contract.py
-python -m unittest discover -s tests/python -v
-cargo fmt --all -- --check
-python tools/ci_workspace_tests.py debug
-cargo test --workspace --doc --no-fail-fast --locked --offline
-cargo build --workspace --all-targets --release --locked --offline
-python tools/ci_workspace_tests.py release
-cargo clippy --workspace --all-targets --locked --offline -- -D warnings
+cargo build -p codex-accounts-desktop --release --locked --offline
 ```
 
-Standard GitHub-hosted Ubuntu, Windows and macOS jobs retain these blocking checks.
-On Windows, the workspace verifier proves the compiled inventory partition before
-running its complement; `tools/run_native_tests.py` runs all 27 named native
-behaviors independently in debug and release. Together they cover the inventory
-without counting child harnesses as scenarios; skipped/zero native tests fail.
-The native verifier is Windows-only. Other platforms run the portable workspace.
-A separate standard Ubuntu job recompiles and runs debug/release tests, doctests
-and Clippy in a new direct-IP-isolated namespace after reviewed acquisition.
-Cargo `--offline` alone is not OS network isolation. The isolated lane does not
-sandbox filesystem/Unix-domain IPC or establish Windows/macOS network isolation.
+Run `target/release/codex-accounts-desktop.exe`. Close any older Accounts window first.
+The UI is embedded in the executable.
 
-[The CI review](docs/ci-review.md) and [scoped native/Actions review](docs/ca-04b-native-review.md)
-record the evidence boundary and remaining work. CI retains only exact committed
-public source and a digest record, not test vaults, raw helper output or dependencies.
-No real authentication fixture belongs in Git, logs or support reports.
+## Documentation
 
-## Read-only discovery
+- [User guide](docs/user-guide.md): account management, usage and recovery.
+- [Development](CONTRIBUTING.md): setup, focused checks and contribution workflow.
+- [Architecture](docs/architecture.md): crate responsibilities and credential boundaries.
+- [CI and build delivery](docs/ci.md): parallel jobs, security scans and artifact retention.
+- [Security](SECURITY.md): protection limits and safe reporting.
+- [Documentation index](docs/README.md): specification, roadmap and historical evidence.
 
-Build `codex-accounts-discovery` and run it without arguments to inventory current-user
-registered candidates. Follow the [Q0 procedure](docs/q0-qualification.md) for safe
-selection, expected refusal and redaction. `--show-local-paths` is terminal-only and
-must not be shared. The legacy `tools/q0_inventory.py` remains a synthetic developer
-aid, not an effective Desktop configuration resolver. Neither inventory executes a
-nominated runtime, reads live auth, writes the nominated home or qualifies a build.
-
-## Source layout and authority
-
-| Path | Purpose |
-| --- | --- |
-| `crates/core` | Refusal, compatibility observations and distinct outcomes |
-| `crates/platform` | Platform classification; no credential writer |
-| `crates/discovery` | Read-only inventory with a narrow native boundary |
-| `crates/runtime` | Framing, strict JSON, sealed sequencing and private synthetic transport |
-| `crates/vault` | Exact-byte in-memory resource/identity/generation rules |
-| `crates/vault-crypto` | Authenticated envelopes and Windows root protection |
-| `crates/vault-storage` | Protected persistence, journal and private native lifecycle |
-| `app` | Canonical disabled synthetic static previews |
-| `crates/shell-preparation` | Windows-only static Tauri developer shell; no backend |
-| `compatibility` | Empty catalog; no boolean enables production authority |
-| `docs` / `tools` | Specification, roadmap, scoped reviews and developer checks |
-
-Changing accounts does not isolate local history or workspaces. Real Desktop
-qualification, ordinary-user behavior, packaging, signing, reproducibility and the
-license decision remain release work. Crates retain `publish = false`.
+The owner has confirmed a real account round trip and accepted the current UI.
+That is distinct from signed release qualification. No public release is published
+by this pipeline, and no project license has yet been selected by the owner.

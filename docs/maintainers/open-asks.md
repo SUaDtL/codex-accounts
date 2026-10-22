@@ -1,25 +1,25 @@
 # Open asks and narrow blockers
 
-Checkpoint: **2026-10-15**, after merged PRs #14 through #22. These are missing evidence or owner
+Checkpoint: **2026-10-21**, functional Windows integration. These are missing evidence or owner
 decisions, not claims that the owner promised particular hardware, accounts or
 access. None authorizes collecting secrets or changing an existing configuration.
 [The roadmap](../implementation-plan.html) owns phase gates; this register identifies
 what to collect and what remains safe to build without it.
 
-The owner selected this Windows host's registered Desktop as the first Q0 target
-and authorized continued development under a standing engine workflow override.
-Registered metadata and explicit nominated-image observation are implemented for
-package 26.1007.9446.0. Separate [partial runtime evidence](../runtime-provenance-observation.md)
-matches image bytes to the official download and records one contained original
-version invocation. This leaves protected ancestry, exclusive runtime selection,
-effective home/backend/policy and auth resources unresolved. A separate reviewed
-collector now pins the exact schema from one contained original invocation; native
-protocol behavior and integration remain unqualified. Neither image equality,
-version nor schema collection enables credential access.
+The owner selected Windows first and authorized finishing the application. The
+owner explicitly rejected exact-build approval because Desktop updates frequently.
+The app now selects the current official installation and checks runtime, storage,
+policy and process ownership for each operation. The current helper completed
+handshake/configuration/exit in an empty synthetic home, and the standalone app
+opened its protected vault. The owner agreed to perform real browser sign-in and
+A -> B -> A. On 2026-10-21 they confirmed completion and an additional return to B;
+the screenshot shows official-runtime acceptance and Desktop confirmations for
+both accounts. OA-01 is resolved for this Windows build. Historical image/schema packets do not
+reinstate an exact-version allowlist or an always-disabled application.
 
 | Ask | Safe next action and expected redacted result | Blocks | Does not block |
 | --- | --- | --- | --- |
-| **OA-01: exact Desktop contract** | Use the read-only sequence in [Q0 qualification](../q0-qualification.md). Review the default sanitized candidate report; supply exact-build evidence references for publisher/runtime, effective home/backend/policy, resource semantics, writer/lifecycle and identity observations. Unknown fields stay unknown | Real installation-specific effects, approved runtime integration and qualification | CA-04C synthetic target adapter, pure protocol tests and static UI preparation |
+| **OA-01: real account trial, resolved 2026-10-21** | Owner reported successful A -> B -> A and return to B; screenshots show saved profiles, active indicator, runtime acceptance and Desktop confirmations | Nothing further for this host trial | Broader release qualification remains separate |
 | **OA-02: intended native test lane** | Confirm an owner-controlled ordinary Windows 11 x64 environment or an explicit different supported design lane. On the reviewed Windows checkout run the synthetic commands below; report source commit, OS/build, profile/case and outcome only | Claims about owner Windows 11 and ordinary-user behavior | Hosted Windows Server API tests and portable-core work |
 | **OA-03: two-user and unavailable-store protection** | Follow [CA-03B two-user procedure](../ca-03b-crypto.md) using two already-existing ordinary users, creator controls before/after and byte-identical synthetic fixture confirmation. Report NOT RUN when unavailable. Unavailable-store trials need a separately agreed safe test environment, not service stoppage or security bypass | Full native protection/T-16 and release qualification | Envelopes, journal and synthetic fault implementation |
 | **OA-04: representative sync/path environments** | Select permitted test directories and provider environments for the existing path-safety tests; report only case/outcome/OS-build and limits. No existing ACL repair, disabling a provider or copying a real home | Qualification of supported storage locations and path-refusal behavior | Existing controlled synthetic path/link/sharing tests |
@@ -51,10 +51,11 @@ packet adds cases. This is native OS evidence only, not Q0 or a Desktop-switch
 qualification; it does not close OA-03, OA-04 or OA-05. Follow parent-owned fixture
 cleanup; never delete arbitrary test-looking directories or force-close user apps.
 
-For OA-01, the exact build and invocation sequence is already maintained in the Q0
-procedure. The expected report has `qualified: false` and
-`credential_mutation_enabled: false`. Exit 0 means collection completed, not switch
-support. Do not upload `--show-local-paths` output or paste a real authentication file.
+For OA-01, use the current portable application and the A → B → A instructions
+in `dist/windows-x64/README.txt`. Report success or the visible fixed error code.
+The historical read-only Q0 collector is not the real-account trial, and its
+disabled-operation report does not describe the current application. Never paste
+a real authentication file, login URL or local-path collector output.
 
 ## Safe evidence handling
 
