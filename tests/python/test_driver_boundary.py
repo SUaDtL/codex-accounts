@@ -16,7 +16,7 @@ class DriverBoundaryTests(unittest.TestCase):
         self.assertIn('struct TransportDriver {', driver)
         self.assertIn('compile_fail', driver)
         self.assertRegex(io, r'#\[cfg\(test\)\]\s*pub\(super\) fn pair\(')
-        self.assertRegex(io, r'#\[cfg\(test\)\]\s*pub\(super\) fn cancellation\(')
+        self.assertIn('pub(super) fn cancellation(', io)
         for source in (driver, io):
             for forbidden in ('pub struct', 'pub fn', 'pub mod', 'pub use',
                               'Deserialize', 'Serialize', 'unsafe {',
@@ -45,7 +45,7 @@ class DriverBoundaryTests(unittest.TestCase):
         self.assertIn('requested.store(true, Ordering::Release)', source)
         self.assertIn('self.cancel.load(Ordering::Acquire)', driver)
         self.assertIn('self.wake.recv_timeout(remaining)', driver)
-        self.assertIn('deadline.saturating_duration_since(Instant::now())', driver)
+        self.assertRegex(driver, r'deadline\s*\.saturating_duration_since\(Instant::now\(\)\)')
         for forbidden in ('.send(', '.recv()', 'read_to_end', 'write_all', 'thread::spawn'):
             self.assertNotIn(forbidden, source + driver)
 

@@ -257,6 +257,9 @@ impl Drop for TaskString {
     }
 }
 fn wide(p: &Path) -> Result<Vec<u16>, StorageError> {
+    wide_bounded(p, 240)
+}
+fn wide_bounded(p: &Path, limit: usize) -> Result<Vec<u16>, StorageError> {
     // Reject mapped network/removable/unknown drives before opening any object.
     let Some(Component::Prefix(prefix)) = p.components().next() else {
         return Err(StorageError::UnsafePath);
@@ -270,7 +273,7 @@ fn wide(p: &Path) -> Result<Vec<u16>, StorageError> {
         return Err(StorageError::UnsafePath);
     }
     let mut w: Vec<_> = p.as_os_str().encode_wide().collect();
-    if w.is_empty() || w.len() > 240 || w.contains(&0) {
+    if w.is_empty() || w.len() > limit || w.contains(&0) {
         return Err(StorageError::UnsafePath);
     }
     w.push(0);
@@ -364,6 +367,8 @@ struct Security {
     installer: Vec<u8>,
     descriptor: Allocation,
 }
+mod package_capability;
+mod sandbox_group;
 fn sid_copy(sid: *mut c_void) -> Result<Vec<u8>, StorageError> {
     // SAFETY: valid OS descriptor/token owns the SID while it is copied.
     if sid.is_null() || unsafe { IsValidSid(sid) } == 0 {
@@ -489,6 +494,21 @@ impl Security {
         }
     }
     fn check(&self, file: &File, strict: bool) -> Result<(), StorageError> {
+        self.check_access(file, strict, false)
+    }
+    /// Existing credential files may inherit a secure DACL. Unlike ancestor
+    /// checks, this requires current-user ownership. The local official sandbox
+    /// group may retain read-only access; arbitrary other readers still refuse.
+    /// It never changes an existing security descriptor.
+    fn check_credential(&self, file: &File) -> Result<(), StorageError> {
+        self.check_access(file, false, true)
+    }
+    fn check_access(
+        &self,
+        file: &File,
+        strict: bool,
+        credential: bool,
+    ) -> Result<(), StorageError> {
         let mut owner = null_mut();
         let mut dacl = null_mut();
         let mut sd = null_mut();
@@ -510,7 +530,9 @@ impl Security {
         }
         let sd = Allocation(sd);
         let owner = sid_copy(owner)?;
-        if (strict && owner != self.user) || (!strict && !self.ancestor_owner_allowed(&owner)) {
+        if ((strict || credential) && owner != self.user)
+            || (!strict && !credential && !self.ancestor_owner_allowed(&owner))
+        {
             return Err(StorageError::UnsafePath);
         }
         if dacl.is_null() || unsafe { IsValidAcl(dacl) } == 0 {
@@ -529,6 +551,11 @@ impl Security {
             return Err(StorageError::UnsafePath);
         }
         let (mut own, mut sys) = (false, false);
+        // Resolve exceptions only when an ACE actually needs them. The common
+        // private user/SYSTEM DACL needs no account-service lookup. These caches
+        // last only for this descriptor check, never across account operations.
+        let sandbox_group = std::cell::OnceCell::new();
+        let package_capability = std::cell::OnceCell::new();
         for i in 0..count {
             let mut ace = null_mut();
             if unsafe { GetAce(dacl, i as u32, &mut ace) } == 0 {
@@ -580,6 +607,30 @@ impl Security {
                 } else {
                     return Err(StorageError::UnsafePath);
                 }
+            } else if credential {
+                if sid == self.user || sid == self.system || sid == self.admins {
+                    continue;
+                }
+                let sensitive = FILE_READ_DATA
+                    | FILE_WRITE_DATA
+                    | FILE_APPEND_DATA
+                    | FILE_WRITE_EA
+                    | FILE_WRITE_ATTRIBUTES
+                    | FILE_EXECUTE
+                    | DELETE
+                    | WRITE_DAC
+                    | WRITE_OWNER
+                    | GENERIC_ALL
+                    | GENERIC_READ
+                    | GENERIC_WRITE
+                    | GENERIC_EXECUTE;
+                let group = sandbox_group.get_or_init(sandbox_group::resolve).as_deref();
+                let sandbox = group == Some(sid.as_slice());
+                if (sandbox && !sandbox_group::permits(group, &sid, allowed.Mask))
+                    || (!sandbox && allowed.Mask & sensitive != 0)
+                {
+                    return Err(StorageError::UnsafePath);
+                }
             } else if !self.ancestor_owner_allowed(&sid) {
                 // Broad sibling creation alone cannot replace our pinned path.
                 // Actual object delete/control/reparse writes remain prohibited.
@@ -591,7 +642,12 @@ impl Security {
                     | FILE_WRITE_ATTRIBUTES
                     | GENERIC_ALL
                     | GENERIC_WRITE;
-                if allowed.Mask & dangerous != 0 {
+                if allowed.Mask & dangerous != 0
+                    && package_capability
+                        .get_or_init(package_capability::resolve)
+                        .as_deref()
+                        != Some(sid.as_slice())
+                {
                     return Err(StorageError::UnsafePath);
                 }
             }
@@ -780,6 +836,15 @@ fn open_file(
     security: Option<&Security>,
 ) -> Result<File, StorageError> {
     let name = wide(path)?;
+    open_file_encoded(&name, access, share, creation, security)
+}
+fn open_file_encoded(
+    name: &[u16],
+    access: u32,
+    share: u32,
+    creation: u32,
+    security: Option<&Security>,
+) -> Result<File, StorageError> {
     let attrs = security.map(Security::attrs);
     // SAFETY: arguments and descriptor stay live for the synchronous call. No
     // inheritance; no recall; leaf reparse is opened itself and then rejected.
@@ -1891,8 +1956,33 @@ fn bootstrap(disk: &mut impl Files, create: bool) -> Result<RootKey, StorageErro
     )
     .map_err(|_| StorageError::KeyUnavailable)
 }
+pub(crate) fn vault_exists() -> Result<bool, StorageError> {
+    let paths = fixed_locations()?;
+    // Include partial/reserved layouts so first-run never suggests creation over
+    // existing state. Metadata only, no keys, files, locks or directory creation.
+    let container = paths[1].parent().ok_or(StorageError::UnsafePath)?;
+    let reserved = known_folder(&FOLDERID_Profile)?.join(VAULT_CHILD);
+    for path in [paths[0].as_path(), container, reserved.as_path()] {
+        match std::fs::symlink_metadata(path) {
+            Ok(_) => return Ok(true),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(_) => return Err(StorageError::AccessDenied),
+        }
+    }
+    Ok(false)
+}
+
 pub(crate) fn open_vault(create: bool) -> Result<Vault, StorageError> {
-    open_vault_dispatch(create, b"application", fixed_locations)
+    let mut vault = open_vault_dispatch(create, b"application", fixed_locations)?;
+    // Only the production entry point touches the fixed login scratch namespace.
+    // Fixture opening must never clean real application state.
+    lifecycle::login::cleanup_abandoned(&vault.root)?;
+    // Retire only already-completed records after this verified later opening.
+    // Pending recovery/evidence and each profile's latest generation are retained.
+    if !create && vault.recovery() == crate::Recovery::Clean {
+        vault.prune()?;
+    }
+    Ok(vault)
 }
 fn open_vault_dispatch(
     create: bool,
@@ -1922,7 +2012,7 @@ fn finish_vault(mut disk: Disk, create: bool) -> Result<Vault, StorageError> {
 #[path = "native_tests.rs"]
 mod tests;
 
-// Private native primitives; no qualified production caller or public executor.
+// Private native adapters; no public path or process executor.
 #[allow(dead_code)]
 mod lifecycle;
 

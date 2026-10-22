@@ -14,6 +14,8 @@ use std::path::PathBuf;
 mod native;
 #[cfg(windows)]
 mod windows_reader;
+#[cfg(windows)]
+pub use windows_reader::OfficialInstallation;
 
 pub const MAX_CONFIG_BYTES: usize = 1024 * 1024;
 pub const MAX_REPORT_BYTES: usize = 1024 * 1024;

@@ -5,10 +5,15 @@ use codex_accounts_core::compatibility::select;
 use std::io::{Read, Seek, SeekFrom};
 use windows::core::{Interface, HSTRING};
 use windows::ApplicationModel::{Package, PackageSignatureKind};
-use windows::Data::Xml::Dom::{XmlDocument, XmlElement, XmlLoadSettings};
-use windows::Management::Deployment::PackageManager;
-use windows::Security::Cryptography::Core::HashAlgorithmProvider;
-use windows::Security::Cryptography::CryptographicBuffer;
+use windows::Data::Xml::Dom::XmlElement;
+
+#[path = "official.rs"]
+mod official;
+pub use official::OfficialInstallation;
+
+#[cfg(test)]
+#[path = "apartment_tests.rs"]
+mod apartment_tests;
 
 fn winerr(error: windows::core::Error) -> ReadError {
     if error.code().0 as u32 == 0x80070005 {
@@ -24,11 +29,9 @@ fn bounded(value: HSTRING) -> Result<String, ReadError> {
     String::from_utf16(&value).map_err(|_| ReadError::InvalidMetadata)
 }
 fn hash_bytes(bytes: &[u8]) -> Result<String, ReadError> {
-    let algorithm =
-        HashAlgorithmProvider::OpenAlgorithm(&HSTRING::from("SHA256")).map_err(winerr)?;
-    let buffer = CryptographicBuffer::CreateFromByteArray(bytes).map_err(winerr)?;
-    let hash = algorithm.HashData(&buffer).map_err(winerr)?;
-    bounded(CryptographicBuffer::EncodeToHexString(&hash).map_err(winerr)?)
+    let digest = crate::native::Sha256::new()?;
+    digest.append(bytes)?;
+    digest.finish()
 }
 
 fn signature_report(
@@ -63,6 +66,7 @@ fn signature_report(
 struct Candidate {
     id: String,
     full_name: String,
+    family: String,
     name: String,
     publisher: String,
     root: PathBuf,
@@ -80,6 +84,7 @@ impl Candidate {
         let identity = package.Id().map_err(winerr)?;
         let name = bounded(identity.Name().map_err(winerr)?)?;
         let full_name = bounded(identity.FullName().map_err(winerr)?)?;
+        let family = bounded(identity.FamilyName().map_err(winerr)?)?;
         let publisher = bounded(identity.Publisher().map_err(winerr)?)?;
         let root = PathBuf::from(bounded(
             package
@@ -100,6 +105,7 @@ impl Candidate {
         Ok(Self {
             id: hash_bytes(full_name.as_bytes())?,
             full_name,
+            family,
             name,
             publisher,
             root,
@@ -128,34 +134,46 @@ impl Candidate {
 }
 
 fn candidates() -> Result<Vec<Candidate>, ReadError> {
-    let manager = PackageManager::new().map_err(winerr)?;
-    // Empty SID is the documented current-user query, not all users/elevation.
-    let packages = manager
-        .FindPackagesByUserSecurityId(&HSTRING::new())
-        .map_err(winerr)?;
-    let iterator = packages.First().map_err(winerr)?;
-    let mut result = Vec::new();
-    let mut count = 0;
-    while iterator.HasCurrent().map_err(winerr)? {
-        count += 1;
-        if count > MAX_PACKAGES {
-            return Err(ReadError::InputLimit);
+    candidates_for_family(None)
+}
+
+fn candidates_for_family(family: Option<&str>) -> Result<Vec<Candidate>, ReadError> {
+    crate::native::with_package_manager(|manager| {
+        // Empty SID is the documented current-user query, not all users/elevation.
+        // Operation binding knows the exact official family. Avoid enumerating
+        // unrelated packages on each revalidation; diagnostic inventory stays broad.
+        let packages = match family {
+            Some(family) => manager.FindPackagesByUserSecurityIdPackageFamilyName(
+                &HSTRING::new(),
+                &HSTRING::from(family),
+            ),
+            None => manager.FindPackagesByUserSecurityId(&HSTRING::new()),
         }
-        let package = iterator.Current().map_err(winerr)?;
-        let name = bounded(package.Id().map_err(winerr)?.Name().map_err(winerr)?)?;
-        if is_candidate_hint(&name)
-            && !package.IsFramework().map_err(winerr)?
-            && !package.IsResourcePackage().map_err(winerr)?
-        {
-            if result.len() == MAX_CANDIDATES {
+        .map_err(winerr)?;
+        let iterator = packages.First().map_err(winerr)?;
+        let mut result = Vec::new();
+        let mut count = 0;
+        while iterator.HasCurrent().map_err(winerr)? {
+            count += 1;
+            if count > MAX_PACKAGES {
                 return Err(ReadError::InputLimit);
             }
-            result.push(Candidate::from_package(&package)?);
+            let package = iterator.Current().map_err(winerr)?;
+            let name = bounded(package.Id().map_err(winerr)?.Name().map_err(winerr)?)?;
+            if is_candidate_hint(&name)
+                && !package.IsFramework().map_err(winerr)?
+                && !package.IsResourcePackage().map_err(winerr)?
+            {
+                if result.len() == MAX_CANDIDATES {
+                    return Err(ReadError::InputLimit);
+                }
+                result.push(Candidate::from_package(&package)?);
+            }
+            iterator.MoveNext().map_err(winerr)?;
         }
-        iterator.MoveNext().map_err(winerr)?;
-    }
-    result.sort_by(|a, b| a.id.cmp(&b.id));
-    Ok(result)
+        result.sort_by(|a, b| a.id.cmp(&b.id));
+        Ok(result)
+    })
 }
 
 fn manifest_executables(root: &Path) -> Result<Vec<String>, ReadError> {
@@ -171,69 +189,70 @@ fn parse_manifest(bytes: &[u8], registered: Option<&Candidate>) -> Result<Vec<St
     // WinRT takes decoded XML text, so remove only the optional encoding marker.
     // Validate UTF-8 first; another marker or malformed prefix remains invalid XML.
     let text = text.strip_prefix('\u{feff}').unwrap_or(text);
-    let doc = XmlDocument::new().map_err(winerr)?;
-    let settings = XmlLoadSettings::new().map_err(winerr)?;
-    settings.SetProhibitDtd(true).map_err(winerr)?;
-    settings.SetResolveExternals(false).map_err(winerr)?;
-    settings.SetMaxElementDepth(64).map_err(winerr)?;
-    doc.LoadXmlWithSettings(&HSTRING::from(text), &settings)
-        .map_err(|_| ReadError::InvalidMetadata)?;
-    if let Some(candidate) = registered {
-        let identities = doc
-            .SelectNodes(&HSTRING::from(
-                "/*[local-name()='Package']/*[local-name()='Identity']",
-            ))
-            .map_err(winerr)?;
-        if identities.Length().map_err(winerr)? != 1 {
-            return Err(ReadError::InvalidMetadata);
+    crate::native::with_xml_document(|doc, settings| {
+        settings.SetProhibitDtd(true).map_err(winerr)?;
+        settings.SetResolveExternals(false).map_err(winerr)?;
+        settings.SetMaxElementDepth(64).map_err(winerr)?;
+        doc.LoadXmlWithSettings(&HSTRING::from(text), settings)
+            .map_err(|_| ReadError::InvalidMetadata)?;
+        if let Some(candidate) = registered {
+            let identities = doc
+                .SelectNodes(&HSTRING::from(
+                    "/*[local-name()='Package']/*[local-name()='Identity']",
+                ))
+                .map_err(winerr)?;
+            if identities.Length().map_err(winerr)? != 1 {
+                return Err(ReadError::InvalidMetadata);
+            }
+            let identity: XmlElement =
+                identities.Item(0).map_err(winerr)?.cast().map_err(winerr)?;
+            let attr = |name| {
+                bounded(
+                    identity
+                        .GetAttribute(&HSTRING::from(name))
+                        .map_err(winerr)?,
+                )
+            };
+            let architecture = match candidate.architecture {
+                0 => "x86",
+                5 => "arm",
+                9 => "x64",
+                11 => "neutral",
+                12 => "arm64",
+                _ => return Err(ReadError::InvalidMetadata),
+            };
+            let version = candidate.version.map(|n| n.to_string()).join(".");
+            if attr("Name")? != candidate.name
+                || attr("Publisher")? != candidate.publisher
+                || attr("Version")? != version
+                || attr("ProcessorArchitecture")? != architecture
+            {
+                return Err(ReadError::InvalidMetadata);
+            }
         }
-        let identity: XmlElement = identities.Item(0).map_err(winerr)?.cast().map_err(winerr)?;
-        let attr = |name| {
-            bounded(
-                identity
-                    .GetAttribute(&HSTRING::from(name))
+        let nodes = doc.SelectNodes(&HSTRING::from("/*[local-name()='Package']/*[local-name()='Applications']/*[local-name()='Application']")).map_err(winerr)?;
+        let count = nodes.Length().map_err(winerr)?;
+        if count as usize > MAX_APPLICATIONS {
+            return Err(ReadError::InputLimit);
+        }
+        let mut paths = Vec::new();
+        for i in 0..count {
+            let element: XmlElement = nodes.Item(i).map_err(winerr)?.cast().map_err(winerr)?;
+            let executable = bounded(
+                element
+                    .GetAttribute(&HSTRING::from("Executable"))
                     .map_err(winerr)?,
-            )
-        };
-        let architecture = match candidate.architecture {
-            0 => "x86",
-            5 => "arm",
-            9 => "x64",
-            11 => "neutral",
-            12 => "arm64",
-            _ => return Err(ReadError::InvalidMetadata),
-        };
-        let version = candidate.version.map(|n| n.to_string()).join(".");
-        if attr("Name")? != candidate.name
-            || attr("Publisher")? != candidate.publisher
-            || attr("Version")? != version
-            || attr("ProcessorArchitecture")? != architecture
-        {
-            return Err(ReadError::InvalidMetadata);
+            )?;
+            if executable.is_empty() {
+                return Err(ReadError::InvalidMetadata);
+            }
+            validate_relative_executable(&executable)?;
+            if !paths.contains(&executable) {
+                paths.push(executable);
+            }
         }
-    }
-    let nodes = doc.SelectNodes(&HSTRING::from("/*[local-name()='Package']/*[local-name()='Applications']/*[local-name()='Application']")).map_err(winerr)?;
-    let count = nodes.Length().map_err(winerr)?;
-    if count as usize > MAX_APPLICATIONS {
-        return Err(ReadError::InputLimit);
-    }
-    let mut paths = Vec::new();
-    for i in 0..count {
-        let element: XmlElement = nodes.Item(i).map_err(winerr)?.cast().map_err(winerr)?;
-        let executable = bounded(
-            element
-                .GetAttribute(&HSTRING::from("Executable"))
-                .map_err(winerr)?,
-        )?;
-        if executable.is_empty() {
-            return Err(ReadError::InvalidMetadata);
-        }
-        validate_relative_executable(&executable)?;
-        if !paths.contains(&executable) {
-            paths.push(executable);
-        }
-    }
-    Ok(paths)
+        Ok(paths)
+    })
 }
 
 fn binary_observation(
@@ -247,12 +266,15 @@ fn binary_observation(
     binary_from_handle(&mut handle, &path, local, false).map(|observation| (observation, handle))
 }
 
-fn binary_from_handle(
-    handle: &mut ReadHandle,
-    path: &Path,
-    local: bool,
-    partial: bool,
-) -> Result<Value, ReadError> {
+/// The bounded image facts needed by operation-time package binding. Signature
+/// diagnostics are deliberately separate: official selection already checks the
+/// exact Store package identity and protected retained image handles.
+struct BinaryIdentity {
+    sha256: String,
+    machine: u16,
+    size: u64,
+}
+fn binary_identity(handle: &mut ReadHandle) -> Result<BinaryIdentity, ReadError> {
     let before = handle.identity();
     // Inspect only an on-disk PE image, never load it as a library or process.
     let mut dos = [0u8; 64];
@@ -288,9 +310,7 @@ fn binary_from_handle(
         .file
         .seek(SeekFrom::Start(0))
         .map_err(|_| ReadError::Io)?;
-    let algorithm =
-        HashAlgorithmProvider::OpenAlgorithm(&HSTRING::from("SHA256")).map_err(winerr)?;
-    let digest = algorithm.CreateHash().map_err(winerr)?;
+    let digest = crate::native::Sha256::new()?;
     let mut buffer = [0u8; 65536];
     let mut total = 0u64;
     loop {
@@ -302,16 +322,32 @@ fn binary_from_handle(
         if total > MAX_EXECUTABLE_BYTES {
             return Err(ReadError::InputLimit);
         }
-        let block = CryptographicBuffer::CreateFromByteArray(&buffer[..n]).map_err(winerr)?;
-        digest.Append(&block).map_err(winerr)?;
+        digest.append(&buffer[..n])?;
     }
     if total != before.size {
         return Err(ReadError::Changed);
     }
-    let hash = bounded(
-        CryptographicBuffer::EncodeToHexString(&digest.GetValueAndReset().map_err(winerr)?)
-            .map_err(winerr)?,
-    )?;
+    let hash = digest.finish()?;
+    handle.revalidate()?;
+    Ok(BinaryIdentity {
+        sha256: hash,
+        machine,
+        size: total,
+    })
+}
+
+fn binary_from_handle(
+    handle: &mut ReadHandle,
+    path: &Path,
+    local: bool,
+    partial: bool,
+) -> Result<Value, ReadError> {
+    let before = handle.identity();
+    let BinaryIdentity {
+        sha256: hash,
+        machine,
+        size: total,
+    } = binary_identity(handle)?;
     let (signature, primary_signer) = signature_report(handle.cached_signature())?;
     let writable = if partial {
         Value::String("unknown".into())
@@ -555,6 +591,7 @@ mod tests {
             let candidate = Candidate {
                 id: "a".repeat(64),
                 full_name: "Synthetic.Codex_1.2.3.4_x64_fixture".into(),
+                family: "Synthetic.Codex_fixture".into(),
                 name: "Synthetic.Codex".into(),
                 publisher: "CN=Synthetic".into(),
                 root,

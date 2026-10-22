@@ -101,9 +101,9 @@ class MacosPreparationTests(unittest.TestCase):
                 changes.append(dict(original, **{key: value}))
             for field in ('before_sha256', 'after_sha256', 'path'):
                 review = deepcopy(original)
-                review['changed_source'][field] = '../outside' if field == 'path' else '0' * 64
+                review['changed_sources'][0][field] = '../outside' if field == 'path' else '0' * 64
                 changes.append(review)
-            for field in ('changed_source', 'assessment', 'unchanged_interfaces'):
+            for field in ('changed_sources', 'assessment', 'unchanged_interfaces'):
                 review = deepcopy(original)
                 del review[field]
                 changes.append(review)

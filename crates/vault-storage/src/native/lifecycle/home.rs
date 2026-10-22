@@ -200,6 +200,11 @@ impl HomeLock {
     pub(super) fn acquire(path: &Path) -> Result<Self, StorageError> {
         Self::acquire_with_leaf_share(path, FILE_SHARE_READ)
     }
+    /// Keep the directory identity and lifetime mutex while permitting child-file
+    /// replacement. This does not establish that other Codex writers have exited.
+    pub(super) fn acquire_for_transaction(path: &Path) -> Result<Self, StorageError> {
+        Self::acquire_with_leaf_share(path, FILE_SHARE_READ | FILE_SHARE_WRITE)
+    }
     /// Synthetic mutation tests ONLY. A child rename opens its parent for write;
     /// read-only lifecycle observation deliberately excludes that access. Keep
     /// ancestor write/delete denial and leaf DELETE denial, the same canonical

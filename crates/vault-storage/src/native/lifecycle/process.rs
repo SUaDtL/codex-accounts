@@ -274,6 +274,100 @@ pub(super) struct Inventory {
     pub(super) complete: bool,
 }
 impl Inventory {
+    /// Inspect possible Codex writers and their snapshot descendants. Protected
+    /// unrelated system processes are not evidence of an unknown Codex writer.
+    /// Names select blockers, never permission to terminate or trust a process.
+    pub(super) fn capture_codex() -> Result<Self, Fault> {
+        let snapshot = unsafe { CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0) };
+        if snapshot == INVALID_HANDLE_VALUE {
+            return Err(failed());
+        }
+        let snapshot = Token(snapshot);
+        let mut entry = PROCESSENTRY32W {
+            dwSize: std::mem::size_of::<PROCESSENTRY32W>() as u32,
+            ..Default::default()
+        };
+        let mut rows = BTreeMap::new();
+        let mut selected = BTreeSet::new();
+        let start = Instant::now();
+        let mut found = unsafe { Process32FirstW(snapshot.0, &mut entry) };
+        while found != 0 {
+            if rows.len() >= MAX_PROCESSES || start.elapsed() >= Duration::from_secs(2) {
+                return Err(Fault::Bound);
+            }
+            if rows
+                .insert(entry.th32ProcessID, entry.th32ParentProcessID)
+                .is_some()
+            {
+                return Err(Fault::Incomplete);
+            }
+            let length = entry
+                .szExeFile
+                .iter()
+                .position(|v| *v == 0)
+                .ok_or(Fault::Incomplete)?;
+            let name =
+                String::from_utf16(&entry.szExeFile[..length]).map_err(|_| Fault::Incomplete)?;
+            if [
+                "codex.exe",
+                "chatgpt.exe",
+                "codex-command-runner.exe",
+                "codex-code-mode-host.exe",
+                "codex-windows-sandbox-service.exe",
+                "codex-windows-sandbox-setup.exe",
+            ]
+            .iter()
+            .any(|known| name.eq_ignore_ascii_case(known))
+            {
+                selected.insert(entry.th32ProcessID);
+            }
+            found = unsafe { Process32NextW(snapshot.0, &mut entry) };
+        }
+        if unsafe { GetLastError() } != ERROR_NO_MORE_FILES {
+            return Err(Fault::Incomplete);
+        }
+        loop {
+            let before = selected.len();
+            for (pid, parent) in &rows {
+                if selected.contains(parent) {
+                    selected.insert(*pid);
+                }
+            }
+            if selected.len() == before {
+                break;
+            }
+            if start.elapsed() >= Duration::from_secs(2) {
+                return Err(Fault::Bound);
+            }
+        }
+        let mut inventory = Self {
+            entries: Vec::new(),
+            complete: true,
+        };
+        for pid in selected {
+            if start.elapsed() >= Duration::from_secs(2) {
+                return Err(Fault::Bound);
+            }
+            match ObservedProcess::open(pid) {
+                Ok(process) => inventory.entries.push((rows[&pid], process)),
+                // A selected process becoming inaccessible/disappearing is not
+                // silently treated as absence. A fresh operation may rescan it.
+                Err(_) => inventory.complete = false,
+            }
+        }
+        Ok(inventory)
+    }
+    pub(super) fn has_live_clients(&self) -> Result<bool, Fault> {
+        if !self.complete {
+            return Err(Fault::Incomplete);
+        }
+        for (_, process) in &self.entries {
+            if !process.signalled()? {
+                return Ok(true);
+            }
+        }
+        Ok(false)
+    }
     pub(super) fn capture() -> Result<Self, Fault> {
         // SAFETY: read-only process snapshot, no inherited snapshot handle.
         let snapshot = unsafe { CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0) };

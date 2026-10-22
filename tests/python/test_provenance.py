@@ -38,7 +38,7 @@ class InPlaceProvenanceTests(unittest.TestCase):
 
     def test_v1_manifest_cannot_authorize_the_in_place_candidate(self) -> None:
         self.write_manifest(spec_proposal.original_manifest())
-        with self.assertRaisesRegex(ValueError, 'v2 provenance'):
+        with self.assertRaisesRegex(ValueError, 'v3 provenance'):
             spec_proposal.check_candidate(self.root)
 
     def test_original_digest_cannot_be_changed_or_omitted(self) -> None:
@@ -77,7 +77,7 @@ class InPlaceProvenanceTests(unittest.TestCase):
         path.write_bytes(path.read_bytes() + b'UNREVIEWED')
         self.manifest['files'][0]['sha256'] = hashlib.sha256(path.read_bytes()).hexdigest()
         self.write_manifest(self.manifest)
-        with self.assertRaisesRegex(ValueError, 'reviewed T-07 candidate'):
+        with self.assertRaisesRegex(ValueError, 'owner-directed specification'):
             spec_proposal.check_candidate(self.root)
 
     def test_missing_or_extra_manifest_entries_are_rejected(self) -> None:

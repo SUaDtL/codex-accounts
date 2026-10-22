@@ -1,6 +1,5 @@
-//! Storage-backed cold-handoff coordinator. This module is private: the only
-//! Effects implementation is cfg(test). There is no production qualification,
-//! consent, filesystem, process, helper or launch adapter in CA-04A.
+//! Storage-backed cold-handoff coordinator. Only the private native adapter and
+//! synthetic tests supply effects; callers cannot inject execution authority.
 #![forbid(unsafe_code)]
 use super::*;
 use crate::journal::*;
@@ -21,8 +20,7 @@ pub(crate) enum Check {
 }
 /// Narrow internal effects; no path, executable, URL, RPC, or arbitrary callback
 /// crosses the public library boundary. Return success only after the indicated
-/// modeled prerequisite/effect actually happened. Future native adapters require
-/// their own reviewed evidence and must never accept the synthetic implementation.
+/// modeled prerequisite/effect actually happened.
 pub(crate) trait Effects {
     fn confirm(&mut self, request: &Request) -> Result<(), Failure>;
     fn guard(&mut self, check: Check, binding: &[u8; 32]) -> Result<(), Failure>;
@@ -187,6 +185,29 @@ fn matches(
             )
             .is_ok())
 }
+fn captured_marks(
+    root: &RootKey,
+    g: &Generation,
+    capture: &Capture,
+) -> Result<Vec<Mark>, StorageError> {
+    g.rules
+        .iter()
+        .map(|rule| {
+            let bytes = capture
+                .data
+                .resource(ResourceId::new(rule.slot)?)
+                .ok_or(StorageError::Corrupt)?
+                .as_bytes();
+            Ok(Mark {
+                slot: rule.slot,
+                present: bytes.is_some(),
+                tag: *root
+                    .fingerprint(&mark_context(GenerationRef::from(g), rule.slot)?, bytes)?
+                    .storage_bytes(),
+            })
+        })
+        .collect()
+}
 /// Verify independent generation references, ALL persisted holds, keyed expected
 /// resources and encrypted evidence before a registry becomes selectable.
 pub(super) fn verify_journals<D: Files>(
@@ -212,7 +233,114 @@ pub(super) fn verify_journals<D: Files>(
     Ok(())
 }
 impl<D: Files> Storage<D> {
-    fn journal(&self, id: Id) -> Result<Journal, SwitchError> {
+    /// Fresh official login and exact current bytes are published together with
+    /// their journal. The live source is evidence, never the profile's latest.
+    pub(crate) fn begin_reauthentication(
+        &mut self,
+        root: &RootKey,
+        effects: &mut impl Effects,
+        profile: ProfileId,
+        fresh: Capture,
+        binding: [u8; 32],
+    ) -> Result<Id, SwitchError> {
+        self.idle()?;
+        if binding == [0; 32]
+            || self.registry.journals.len() >= MAX_JOURNALS
+            || self.registry.generations.len() + 2 > MAX_GENERATIONS
+        {
+            return Err(StorageError::InputLimit.into());
+        }
+        if self
+            .registry
+            .holds
+            .iter()
+            .any(|hold| !self.registry.journals.iter().any(|j| j.id == hold.id))
+        {
+            return Err(StorageError::SwitchPending.into());
+        }
+        let selected = self
+            .registry
+            .profiles
+            .iter()
+            .find(|p| p.id == profile.to_bytes())
+            .ok_or(StorageError::Missing)?;
+        if selected.identity != fresh.identity
+            || (self.registry.active_known && self.registry.active != Some(selected.id))
+        {
+            return Err(Failure::ExternalChange.into());
+        }
+        effects.guard(Check::Lock, &binding)?;
+        effects.guard(Check::Quiesce, &binding)?;
+        let previous = generation(
+            &self.registry,
+            GenerationRef {
+                profile: selected.id,
+                generation: selected.latest,
+            },
+        )?;
+        let source_capture = effects.snapshot()?.capture(previous, &selected.identity)?;
+        if source_capture.schema != fresh.schema || source_capture.rules != fresh.rules {
+            return Err(Failure::Binding.into());
+        }
+        let (source, mut writes) =
+            self.make_generation(root, selected.id, Some(selected.latest), &source_capture)?;
+        let (target, target_writes) =
+            self.make_generation(root, selected.id, Some(selected.latest), &fresh)?;
+        let request = Request {
+            source: GenerationRef::from(&source),
+            target: GenerationRef::from(&target),
+            binding,
+            online: true,
+        };
+        effects.confirm(&request)?;
+        let id = random_id()?;
+        if self.registry.journals.iter().any(|j| j.id == id) {
+            return Err(StorageError::AlreadyExists.into());
+        }
+        let timestamp = now()?;
+        let j = Journal {
+            id,
+            binding,
+            created: timestamp,
+            updated: timestamp,
+            source: request.source,
+            target: request.target,
+            original_target: request.target,
+            phase: SwitchPhase::Requested,
+            source_saved: false,
+            online: true,
+            staging_intent: 0,
+            staging_done: 0,
+            write_intent: 0,
+            write_done: 0,
+            restore_intent: 0,
+            restore_done: 0,
+            helper: Helper::Never,
+            cancel: false,
+            committed: false,
+            cleaned: false,
+            failure: None,
+            restoration_failure: None,
+            acceptance: CredentialAcceptance::Unknown,
+            launch: DesktopLaunch::NotRequested,
+            source_marks: captured_marks(root, &source, &source_capture)?,
+            target_marks: captured_marks(root, &target, &fresh)?,
+            evidence: vec![],
+        };
+        let mut next = self.copy_registry()?;
+        next.profiles
+            .iter_mut()
+            .find(|p| p.id == profile.to_bytes())
+            .ok_or(StorageError::Corrupt)?
+            .latest = target.id;
+        next.rejected.retain(|id| *id != profile.to_bytes());
+        next.generations.extend([source, target]);
+        writes.extend(target_writes);
+        self.write_journal(root, j, next, writes, Some(profile.to_bytes()))?;
+        self.switch_session = Some(id);
+        Ok(id)
+    }
+    pub(crate) fn journal(&self, id: Id) -> Result<Journal, SwitchError> {
         self.ready()?;
         self.registry
             .journals
@@ -369,7 +497,7 @@ impl<D: Files> Storage<D> {
             .iter()
             .find(|p| p.id == reference.profile)
             .ok_or(StorageError::Corrupt)?;
-        if p.latest != reference.generation {
+        if (target || !j.reauthentication()) && p.latest != reference.generation {
             return Err(StorageError::StaleParent.into());
         }
         let capture = snapshot.capture(template, &p.identity)?;
@@ -414,17 +542,22 @@ impl<D: Files> Storage<D> {
                 j.source = reference;
                 j.source_marks = expected;
             }
-            next.profiles
-                .iter_mut()
-                .find(|p| p.id == g.profile)
-                .ok_or(StorageError::Corrupt)?
-                .latest = g.id;
+            if target || !j.reauthentication() {
+                next.profiles
+                    .iter_mut()
+                    .find(|p| p.id == g.profile)
+                    .ok_or(StorageError::Corrupt)?
+                    .latest = g.id;
+            }
             next.generations.push(g);
             writes = new_writes;
         }
         if target {
             j.helper = Helper::Reaped;
-            j.phase = if j.failure.is_some() {
+            j.phase = if j.failure.is_some()
+                && j.acceptance != CredentialAcceptance::Accepted
+                && !(j.reauthentication() && j.acceptance == CredentialAcceptance::Rejected)
+            {
                 SwitchPhase::Recovery
             } else {
                 SwitchPhase::Observed
@@ -780,6 +913,19 @@ impl<D: Files> Storage<D> {
                 self.capture_journal(root, j, &snapshot, true)?;
             }
             Observed => {
+                if j.reauthentication() && j.acceptance == CredentialAcceptance::Rejected {
+                    effects.guard(Check::Write, &j.binding)?;
+                    self.exact_live(root, &j, &effects.snapshot()?, true)?;
+                    self.cleanup_staging(root, effects, &j)?;
+                    j.cleaned = true;
+                    j.failure.get_or_insert(Failure::LoginRequired);
+                    j.phase = NeedsLogin;
+                    self.save_journal(root, j)?;
+                    return Ok(());
+                }
+                if j.reauthentication() && j.acceptance != CredentialAcceptance::Accepted {
+                    return Err(Failure::Interrupted.into());
+                }
                 if j.acceptance == CredentialAcceptance::Rejected {
                     return Err(Failure::LoginRequired.into());
                 }
@@ -836,7 +982,7 @@ impl<D: Files> Storage<D> {
         j.cancel = true;
         j.failure.get_or_insert(Failure::Cancelled);
         self.save_journal(root, j.clone())?;
-        if j.write_intent == 0 {
+        if j.write_intent == 0 && !j.reauthentication() {
             // Cancellation before any replacement never closes a user app or
             // changes the live bytes/active association merely to "restore" them.
             match self.cleanup_staging(root, effects, &j) {
@@ -874,6 +1020,77 @@ impl<D: Files> Storage<D> {
             other => other,
         }
     }
+    /// Native Finish admission for a same-profile repair. Configuration startup
+    /// can maintain auth, so compare first, always reap, and preserve the result
+    /// on the matching journal branch before permitting another replacement.
+    pub(crate) fn check_reauthentication_recovery(
+        &mut self,
+        root: &RootKey,
+        effects: &mut impl Effects,
+        id: Id,
+    ) -> Result<(), SwitchError> {
+        let mut j = self.journal(id)?;
+        if !j.reauthentication() || j.committed || j.terminal() {
+            return Err(SwitchError::InvalidTransition);
+        }
+        effects.guard(Check::Confirm, &j.binding)?;
+        effects.guard(Check::Lock, &j.binding)?;
+        effects.guard(Check::Recovery, &j.binding)?;
+        effects.guard(Check::Quiesce, &j.binding)?;
+        if j.helper == Helper::MayRun {
+            // The authenticated launch intent already authorizes preserving a
+            // same-identity target refresh after proven exit. Recover that owned
+            // run before comparing bytes for a new configuration helper.
+            effects.reap_helper(id)?;
+            effects.guard(Check::Write, &j.binding)?;
+            let refreshed = effects.snapshot()?;
+            self.capture_journal(root, j.clone(), &refreshed, true)?;
+            j = self.journal(id)?;
+        }
+        let before = effects.snapshot()?;
+        // Prefer target if both generations contain identical bytes. An already
+        // installed fresh target must never be classified as an older source.
+        let target = if self.exact_live(root, &j, &before, true).is_ok() {
+            true
+        } else {
+            self.exact_live(root, &j, &before, false)?;
+            false
+        };
+        if target {
+            if j.write_intent == 0 {
+                // Equal source/target bytes before any write are still source.
+                self.exact_live(root, &j, &before, false)?;
+            } else {
+                j.write_done = j.mask();
+                j.write_intent = j.mask();
+            }
+        }
+        let target = target && j.write_intent != 0;
+        j.phase = SwitchPhase::Recovery;
+        self.save_journal(root, j.clone())?;
+        // A crash leaves Recovery and exact authenticated expectations. Changed
+        // bytes on a later run fail closed; they never authorize a replay.
+        let checked = effects.start_helper(id);
+        if let Err(error) = effects.reap_helper(id) {
+            j.failure.get_or_insert(error);
+            self.save_journal(root, j)?;
+            return Err(error.into());
+        }
+        let preserved = (|| {
+            effects.guard(Check::Write, &j.binding)?;
+            let after = effects.snapshot()?;
+            self.capture_journal(root, j.clone(), &after, target)?;
+            Ok::<(), SwitchError>(())
+        })();
+        let mut current = self.journal(id)?;
+        current.phase = SwitchPhase::Recovery;
+        if let Err(error) = checked {
+            current.failure.get_or_insert(error);
+        }
+        self.save_journal(root, current)?;
+        checked.map_err(SwitchError::from)?;
+        preserved
+    }
     fn recover_inner(
         &mut self,
         root: &RootKey,
@@ -902,7 +1119,23 @@ impl<D: Files> Storage<D> {
             j.failure = Some(Failure::Interrupted);
             self.save_journal(root, j.clone())?;
         }
+        if j.reauthentication() && matches!(choice, Choice::Restore) {
+            return Err(SwitchError::InvalidTransition);
+        }
         if j.write_intent == 0 {
+            if j.reauthentication() && matches!(choice, Choice::Finish) {
+                effects.guard(Check::Quiesce, &j.binding)?;
+                self.exact_live(root, &j, &effects.snapshot()?, false)?;
+                self.switch_session = Some(j.id);
+                j.cancel = false;
+                j.phase = if j.source_saved {
+                    SwitchPhase::SourceSaved
+                } else {
+                    SwitchPhase::Requested
+                };
+                self.save_journal(root, j)?;
+                return Ok(());
+            }
             return self.cancel_switch(root, effects, j.id);
         }
         effects.guard(Check::Recovery, &j.binding)?;
@@ -917,18 +1150,40 @@ impl<D: Files> Storage<D> {
         }
         let snapshot = effects.snapshot()?;
         self.mixed_live(root, &j, &snapshot)?;
+        if j.reauthentication() && j.acceptance == CredentialAcceptance::Rejected {
+            self.exact_live(root, &j, &snapshot, true)?;
+            j.phase = SwitchPhase::Observed;
+            self.save_journal(root, j)?;
+            return Ok(());
+        }
         match choice {
             Choice::Finish => {
-                if j.cancel
+                if (j.cancel && !j.reauthentication())
                     || j.restore_intent != 0
                     || j.acceptance == CredentialAcceptance::Rejected
                 {
                     return Err(SwitchError::InvalidTransition);
                 }
+                if j.reauthentication() && j.write_done != j.mask() {
+                    // Resume only authenticated source/target mixtures, always
+                    // forward toward the fresh target. No old-token restoration.
+                    j.phase = SwitchPhase::Applying;
+                    j.cancel = false;
+                    self.save_journal(root, j)?;
+                    return Ok(());
+                }
                 self.exact_live(root, &j, &snapshot, true)?;
                 j.write_done = j.mask();
                 j.write_intent = j.mask();
-                j.phase = SwitchPhase::Observed;
+                j.phase = if j.online {
+                    // Current policy and online acceptance are observed again
+                    // under persisted helper intent; recovery performs no helper
+                    // startup before comparing the authenticated live snapshot.
+                    j.acceptance = CredentialAcceptance::Unknown;
+                    SwitchPhase::TargetInstalled
+                } else {
+                    SwitchPhase::Observed
+                };
                 self.save_journal(root, j)?;
             }
             Choice::Restore => {
@@ -945,7 +1200,7 @@ impl<D: Files> Storage<D> {
         mut j: Journal,
     ) -> Result<(), SwitchError> {
         effects.guard(Check::Write, &j.binding)?;
-        if j.committed || j.helper == Helper::MayRun {
+        if j.committed || j.helper == Helper::MayRun || j.reauthentication() {
             return Err(SwitchError::InvalidTransition);
         }
         let snapshot = effects.snapshot()?;
@@ -989,7 +1244,6 @@ impl<D: Files> Storage<D> {
 
 #[path = "stage_repair.rs"]
 mod stage_repair;
-#[cfg(test)]
 pub(crate) use stage_repair::StagingRepair;
 
 #[cfg(test)]

@@ -342,6 +342,20 @@ name = "codex-accounts-core"
 version = "0.1.0"
 
 [[package]]
+name = "codex-accounts-desktop"
+version = "0.1.0"
+dependencies = [
+ "codex-accounts-core",
+ "codex-accounts-discovery",
+ "codex-accounts-runtime",
+ "codex-accounts-vault-storage",
+ "serde",
+ "serde_json",
+ "tauri",
+ "tauri-build",
+]
+
+[[package]]
 name = "codex-accounts-discovery"
 version = "0.1.0"
 dependencies = [
@@ -401,10 +415,15 @@ name = "codex-accounts-vault-storage"
 version = "0.1.0"
 dependencies = [
  "codex-accounts-core",
+ "codex-accounts-discovery",
+ "codex-accounts-runtime",
  "codex-accounts-vault",
  "codex-accounts-vault-crypto",
  "getrandom 0.3.4",
+ "serde",
+ "serde_json",
  "sha2",
+ "toml 0.8.23",
  "windows",
  "windows-collections",
  "windows-sys 0.61.2",

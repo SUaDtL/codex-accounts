@@ -9,6 +9,11 @@ use std::os::windows::ffi::OsStrExt;
 use std::os::windows::io::{AsRawHandle, FromRawHandle};
 use std::path::{Component, Path, PathBuf, Prefix};
 use std::ptr::{null, null_mut};
+use windows::core::{Interface, Type, HSTRING};
+use windows::Security::Cryptography::Core::{
+    CryptographicHash, HashAlgorithmProvider, IHashAlgorithmProviderStatics,
+};
+use windows::Security::Cryptography::ICryptographicBufferStatics;
 use windows::Win32::System::WinRT::{RoInitialize, RoUninitialize, RO_INIT_MULTITHREADED};
 use windows_sys::Win32::Foundation::*;
 use windows_sys::Win32::Security::Authorization::*;
@@ -206,6 +211,135 @@ impl Drop for Apartment {
     }
 }
 
+fn winrt_error(error: windows::core::Error) -> ReadError {
+    if error.code().0 as u32 == 0x80070005 {
+        ReadError::AccessDenied
+    } else {
+        ReadError::EnumerationUnavailable
+    }
+}
+
+fn registered_factory<T: Interface>(class: &'static str) -> Result<T, ReadError> {
+    // SAFETY: Call sites below select only fixed registered SDK classes and
+    // generated interfaces, inside their already initialized stack apartment.
+    // Unlike the generated static helpers, this has no cache or DLL-search path.
+    unsafe { windows::Win32::System::WinRT::RoGetActivationFactory(&HSTRING::from(class)) }
+        .map_err(winrt_error)
+}
+
+fn registered_instance<T: Interface>(class: &'static str) -> Result<T, ReadError> {
+    let factory: windows::Win32::System::WinRT::IActivationFactory = registered_factory(class)?;
+    // SAFETY: Registered factory queried for the SDK activation interface. The
+    // owned instance is cast through QueryInterface, never a guessed vtable.
+    unsafe { factory.ActivateInstance() }
+        .map_err(winrt_error)?
+        .cast()
+        .map_err(winrt_error)
+}
+
+// Internal observation helpers, not a general lifetime-enforcing API. The two
+// reader call sites must return owned data and must not retain cloned interfaces
+// in their captures. Keep this invariant when adding another observation.
+pub(super) fn with_package_manager<R>(
+    inspect: impl FnOnce(&windows::Management::Deployment::PackageManager) -> Result<R, ReadError>,
+) -> Result<R, ReadError> {
+    let _apartment = Apartment::enter()?;
+    let manager = registered_instance("Windows.Management.Deployment.PackageManager")?;
+    // The reader's candidate collector returns only owned metadata.
+    inspect(&manager)
+}
+
+pub(super) fn with_xml_document<R>(
+    inspect: impl FnOnce(
+        &windows::Data::Xml::Dom::XmlDocument,
+        &windows::Data::Xml::Dom::XmlLoadSettings,
+    ) -> Result<R, ReadError>,
+) -> Result<R, ReadError> {
+    let _apartment = Apartment::enter()?;
+    let document = registered_instance("Windows.Data.Xml.Dom.XmlDocument")?;
+    let settings = registered_instance("Windows.Data.Xml.Dom.XmlLoadSettings")?;
+    inspect(&document, &settings)
+}
+
+// Field drop order is part of the lifetime contract: every scoped SDK interface
+// is released before the final apartment guard. No interface escapes this owner.
+pub struct Sha256 {
+    digest: CryptographicHash,
+    buffers: ICryptographicBufferStatics,
+    _algorithm: HashAlgorithmProvider,
+    _apartment: Apartment,
+}
+impl Sha256 {
+    pub fn new() -> Result<Self, ReadError> {
+        let apartment = Apartment::enter()?;
+        let factory: IHashAlgorithmProviderStatics =
+            registered_factory("Windows.Security.Cryptography.Core.HashAlgorithmProvider")?;
+        let buffers = registered_factory("Windows.Security.Cryptography.CryptographicBuffer")?;
+        let name = HSTRING::from("SHA256");
+        // SAFETY: Exact generated SDK OpenAlgorithm vtable call and HSTRING ABI,
+        // matching windows0.62.2's helper without its process-wide FactoryCache.
+        // All inputs outlive the synchronous call; successful output is owned.
+        let algorithm: HashAlgorithmProvider = unsafe {
+            let mut raw = null_mut();
+            (factory.vtable().OpenAlgorithm)(
+                factory.as_raw(),
+                std::mem::transmute_copy(&name),
+                &mut raw,
+            )
+            .ok()
+            .map_err(winrt_error)?;
+            Type::from_abi(raw).map_err(winrt_error)?
+        };
+        let digest = algorithm.CreateHash().map_err(winrt_error)?;
+        Ok(Self {
+            digest,
+            buffers,
+            _algorithm: algorithm,
+            _apartment: apartment,
+        })
+    }
+
+    pub fn append(&self, bytes: &[u8]) -> Result<(), ReadError> {
+        let count = u32::try_from(bytes.len()).map_err(|_| ReadError::InputLimit)?;
+        // SAFETY: Exact SDK CreateFromByteArray signature; input is a live slice
+        // of the admitted length, output becomes one owned SDK IBuffer.
+        let buffer: windows::Storage::Streams::IBuffer = unsafe {
+            let mut raw = null_mut();
+            (self.buffers.vtable().CreateFromByteArray)(
+                self.buffers.as_raw(),
+                count,
+                bytes.as_ptr(),
+                &mut raw,
+            )
+            .ok()
+            .map_err(winrt_error)?;
+            Type::from_abi(raw).map_err(winrt_error)?
+        };
+        self.digest.Append(&buffer).map_err(winrt_error)
+    }
+
+    pub fn finish(&self) -> Result<String, ReadError> {
+        let buffer = self.digest.GetValueAndReset().map_err(winrt_error)?;
+        // SAFETY: Exact generated SDK EncodeToHexString signature/owned HSTRING
+        // result. The input interface remains live and no raw output escapes.
+        let hex: HSTRING = unsafe {
+            let mut raw = null_mut();
+            (self.buffers.vtable().EncodeToHexString)(
+                self.buffers.as_raw(),
+                buffer.as_raw(),
+                &mut raw,
+            )
+            .ok()
+            .map_err(winrt_error)?;
+            std::mem::transmute(raw)
+        };
+        if hex.len() > MAX_PATH_UNITS {
+            return Err(ReadError::InputLimit);
+        }
+        String::from_utf16(&hex).map_err(|_| ReadError::InvalidMetadata)
+    }
+}
+
 pub fn error(code: u32) -> ReadError {
     match code {
         ERROR_ACCESS_DENIED => ReadError::AccessDenied,
@@ -386,7 +520,12 @@ impl RegisteredRoot {
         }))
     }
     pub fn open_relative(&self, relative: &str) -> Result<ReadHandle, ReadError> {
-        if relative != "AppxManifest.xml" {
+        if !matches!(
+            relative,
+            "AppxManifest.xml"
+                | "app/resources/app.asar"
+                | "microsoft.system.package.metadata/Custom.data"
+        ) {
             crate::validate_relative_executable(relative)?;
         }
         self.revalidate()?;
@@ -414,6 +553,9 @@ impl RegisteredRoot {
     }
     pub fn revalidate(&self) -> Result<(), ReadError> {
         self.0.revalidate().map_err(|_| ReadError::Changed)
+    }
+    pub fn current_user_can_replace_or_modify(&self) -> Result<bool, ReadError> {
+        self.0.current_user_can_replace_or_modify()
     }
 }
 impl std::fmt::Debug for ReadHandle {
@@ -480,6 +622,25 @@ impl ReadHandle {
         if bytes.len() > limit || bytes.len() as u64 != self.initial.size {
             return Err(ReadError::Changed);
         }
+        self.revalidate()?;
+        Ok(bytes)
+    }
+    pub fn range(&mut self, offset: u64, size: usize) -> Result<Vec<u8>, ReadError> {
+        if self.directory
+            || size > 8 * crate::MAX_CONFIG_BYTES
+            || offset
+                .checked_add(size as u64)
+                .is_none_or(|end| end > self.initial.size)
+        {
+            return Err(ReadError::InputLimit);
+        }
+        self.file
+            .seek(SeekFrom::Start(offset))
+            .map_err(|_| ReadError::Io)?;
+        let mut bytes = vec![0; size];
+        self.file
+            .read_exact(&mut bytes)
+            .map_err(|_| ReadError::Io)?;
         self.revalidate()?;
         Ok(bytes)
     }

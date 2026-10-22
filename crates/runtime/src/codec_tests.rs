@@ -9,6 +9,193 @@ mod managed;
 mod rates;
 
 const INIT: &str = r#"{"codexHome":"C:\\SYNTHETIC_HOME","platformFamily":"windows","platformOs":"windows","userAgent":"SYNTHETIC_AGENT"}"#;
+
+#[test]
+fn config_and_requirements_project_only_typed_policy_metadata() {
+    use super::super::codec::config::*;
+    let (mut s, mut d, peer, c, _cancel) = bind();
+    ready_codec(&mut s, &mut d, &peer, &c);
+    c.queue(&mut s, &mut d, Method::ConfigRead).unwrap();
+    written(&mut d, &mut s, Method::ConfigRead);
+    let mut last = Zeroizing::new(Vec::new());
+    while let ReadStep::Data(chunk) = peer.input.try_read().unwrap() {
+        last = chunk.bytes;
+    }
+    assert_eq!(
+        last.as_slice(),
+        b"{\"id\":2,\"method\":\"config/read\",\"params\":{\"includeLayers\":false}}\n"
+    );
+    response(
+        &peer,
+        2,
+        r#"{"config":{"cli_auth_credentials_store":"file","forced_login_method":"chatgpt","forced_chatgpt_workspace_id":["SYNTHETIC_WORKSPACE"],"model_provider":"openai","model_providers":{"synthetic":{"base_url":"https://synthetic.invalid/secret"}},"chatgpt_base_url":null,"future_optional":{"secret":"SYNTHETIC_SECRET"}},"origins":{},"futureResult":true}"#,
+    );
+    let frame = take_frame(&mut d, &mut s);
+    let CodecEvent::Config(result) = c.consume(&mut s, &mut d, frame).unwrap() else {
+        panic!("expected config");
+    };
+    assert_eq!(
+        result.config.credential_store,
+        Observed::Value(CredentialStore::File)
+    );
+    assert_eq!(
+        result.config.forced_login,
+        Observed::Value(LoginMethod::ChatGpt)
+    );
+    assert_eq!(
+        result.config.workspace_restriction,
+        Observed::Value(WorkspaceRestriction::List { entries: 1 })
+    );
+    assert_eq!(result.config.provider, Observed::Value(Provider::OpenAi));
+    assert_eq!(
+        result.config.provider_definitions,
+        Observed::Value(ObjectSummary { entries: 1 })
+    );
+    assert_eq!(result.config.chatgpt_base_url, Observed::Null);
+    assert_eq!(result.config.base_url, Observed::Missing);
+    assert!(!format!("{result:?}").contains("SYNTHETIC"));
+    c.queue(&mut s, &mut d, Method::ConfigRequirementsRead)
+        .unwrap();
+    written(&mut d, &mut s, Method::ConfigRequirementsRead);
+    let ReadStep::Data(chunk) = peer.input.try_read().unwrap() else {
+        panic!("request absent");
+    };
+    assert_eq!(
+        chunk.bytes.as_slice(),
+        b"{\"id\":3,\"method\":\"configRequirements/read\",\"params\":null}\n"
+    );
+    response(
+        &peer,
+        3,
+        r#"{"requirements":{"cliAuthCredentialsStore":"keyring","allowedLoginMethods":[],"modelProvider":"SYNTHETIC_PROVIDER","chatgptBaseUrl":"https://synthetic.invalid/secret"},"supportsIndependentSpeedModes":true}"#,
+    );
+    let frame = take_frame(&mut d, &mut s);
+    let CodecEvent::Requirements(result) = c.consume(&mut s, &mut d, frame).unwrap() else {
+        panic!("expected requirements");
+    };
+    let Observed::Value(policy) = result.requirements else {
+        panic!("expected policy");
+    };
+    assert_eq!(
+        policy.credential_store,
+        Observed::Value(CredentialStore::Keyring)
+    );
+    assert_eq!(
+        policy.allowed_login_methods,
+        Observed::Value(AllowedLoginMethods {
+            chatgpt: false,
+            api: false,
+            unknown: false
+        })
+    );
+    assert_eq!(policy.provider, Observed::Value(Provider::Other));
+    assert_eq!(
+        policy.chatgpt_base_url,
+        Observed::Value(ChatGptEndpoint::Other)
+    );
+    assert!(!format!("{result:?}").contains("SYNTHETIC"));
+}
+
+#[test]
+fn config_missing_null_and_unknown_values_never_become_defaults() {
+    use super::super::codec::config::*;
+    for (payload, expected) in [
+        (r#"{"config":{},"origins":{}}"#, Observed::Missing),
+        (
+            r#"{"config":{"cli_auth_credentials_store":null},"origins":{}}"#,
+            Observed::Null,
+        ),
+        (
+            r#"{"config":{"cli_auth_credentials_store":"future"},"origins":{}}"#,
+            Observed::Value(CredentialStore::Unknown),
+        ),
+    ] {
+        let (mut s, mut d, peer, c, _cancel) = bind();
+        ready_codec(&mut s, &mut d, &peer, &c);
+        c.queue(&mut s, &mut d, Method::ConfigRead).unwrap();
+        written(&mut d, &mut s, Method::ConfigRead);
+        response(&peer, 2, payload);
+        let frame = take_frame(&mut d, &mut s);
+        let CodecEvent::Config(result) = c.consume(&mut s, &mut d, frame).unwrap() else {
+            panic!("expected config");
+        };
+        assert_eq!(result.config.credential_store, expected);
+    }
+    for payload in [
+        r#"{"origins":{}}"#,
+        r#"{"config":{}}"#,
+        r#"{"config":{},"origins":null}"#,
+        r#"{"config":{"forced_login_method":3},"origins":{}}"#,
+    ] {
+        let (mut s, mut d, peer, c, _cancel) = bind();
+        ready_codec(&mut s, &mut d, &peer, &c);
+        c.queue(&mut s, &mut d, Method::ConfigRead).unwrap();
+        written(&mut d, &mut s, Method::ConfigRead);
+        response(&peer, 2, payload);
+        let frame = take_frame(&mut d, &mut s);
+        assert_eq!(
+            c.consume(&mut s, &mut d, frame).unwrap_err().primary,
+            SessionError::InvalidMessage
+        );
+    }
+    for (payload, expected) in [
+        ("{}", Observed::Missing),
+        (r#"{"requirements":null}"#, Observed::Null),
+    ] {
+        let (mut s, mut d, peer, c, _cancel) = bind();
+        ready_codec(&mut s, &mut d, &peer, &c);
+        c.queue(&mut s, &mut d, Method::ConfigRequirementsRead)
+            .unwrap();
+        written(&mut d, &mut s, Method::ConfigRequirementsRead);
+        response(&peer, 2, payload);
+        let frame = take_frame(&mut d, &mut s);
+        let CodecEvent::Requirements(result) = c.consume(&mut s, &mut d, frame).unwrap() else {
+            panic!("expected requirements");
+        };
+        assert_eq!(result.requirements, expected);
+    }
+}
+
+#[test]
+fn additive_initialize_account_fields_are_ignored_but_duplicates_still_refuse() {
+    let (mut s, mut d, peer, c, _cancel) = bind();
+    c.queue(&mut s, &mut d, Method::Initialize).unwrap();
+    written(&mut d, &mut s, Method::Initialize);
+    let init = format!(
+        "{},\"future\":{{\"private\":\"SYNTHETIC_SECRET\"}}}}",
+        &INIT[..INIT.len() - 1]
+    );
+    response(&peer, 1, &init);
+    let frame = take_frame(&mut d, &mut s);
+    assert!(matches!(
+        c.consume(&mut s, &mut d, frame).unwrap(),
+        CodecEvent::Initialized(_)
+    ));
+    c.initialized(&mut s, &mut d).unwrap();
+    written(&mut d, &mut s, Method::Initialized);
+    c.queue(&mut s, &mut d, Method::AccountRead).unwrap();
+    written(&mut d, &mut s, Method::AccountRead);
+    response(
+        &peer,
+        2,
+        r#"{"requiresOpenaiAuth":true,"account":{"type":"chatgpt","email":null,"planType":"plus","futureAccount":true},"futureResult":true}"#,
+    );
+    let frame = take_frame(&mut d, &mut s);
+    assert!(matches!(
+        c.consume(&mut s, &mut d, frame).unwrap(),
+        CodecEvent::Account(_)
+    ));
+
+    let (mut s, mut d, peer, c, _cancel) = bind();
+    c.queue(&mut s, &mut d, Method::Initialize).unwrap();
+    written(&mut d, &mut s, Method::Initialize);
+    let init = format!(
+        "{},\"future\":true,\"future\":false}}",
+        &INIT[..INIT.len() - 1]
+    );
+    response(&peer, 1, &init);
+    assert!(d.next(&mut s).is_err());
+}
 fn bind() -> (
     ProtocolSession,
     TransportDriver,
@@ -175,7 +362,7 @@ fn codec_account_schema_and_mode_refusals_close_the_actual_driver() {
 }
 
 #[test]
-fn codec_envelopes_reject_unknown_ids_methods_requests_and_remote_errors() {
+fn codec_envelopes_reject_unknown_ids_requests_and_remote_errors() {
     for raw in [
         r#"{"id":99,"result":{}}"#,
         r#"{"id":"1","result":{}}"#,
@@ -184,7 +371,6 @@ fn codec_envelopes_reject_unknown_ids_methods_requests_and_remote_errors() {
         r#"{"id":1.0,"result":{}}"#,
         r#"{"id":true,"result":{}}"#,
         r#"{"id":1,"method":"command/exec","params":{"SYNTHETIC":"SECRET"}}"#,
-        r#"{"method":"future/notification","params":{}}"#,
         r#"{"id":1,"result":{},"error":{"code":1,"message":"SYNTHETIC"}}"#,
         r#"{"id":1,"error":{"code":1,"message":"SYNTHETIC"}}"#,
         r#"{"id":1,"error":"SYNTHETIC"}"#,
@@ -205,16 +391,28 @@ fn codec_envelopes_reject_unknown_ids_methods_requests_and_remote_errors() {
 }
 
 #[test]
-fn codec_notifications_and_server_requests_have_distinct_fixed_refusals() {
-    for (raw, expected) in [
-        (
-            r#"{"method":"future/notification","params":{}}"#,
-            SessionError::MethodUnavailable,
-        ),
-        (
-            r#"{"id":1,"method":"command/exec","params":{}}"#,
-            SessionError::UnexpectedServerRequest,
-        ),
+fn codec_ignored_notifications_are_bounded_and_never_complete_requests() {
+    let (mut s, mut d, peer, c, _cancel) = bind();
+    c.queue(&mut s, &mut d, Method::Initialize).unwrap();
+    written(&mut d, &mut s, Method::Initialize);
+    for index in 0..33 {
+        assert!(peer
+            .output
+            .try_write(b"{\"method\":\"future/notification\",\"params\":{}}\n")
+            .unwrap());
+        let frame = take_frame(&mut d, &mut s);
+        let event = c.consume(&mut s, &mut d, frame);
+        if index < 32 {
+            assert!(matches!(event.unwrap(), CodecEvent::IgnoredNotification));
+            assert_eq!(s.pending_requests(), 1);
+            assert_eq!(s.notifications, 0);
+        } else {
+            assert_eq!(event.unwrap_err().primary, SessionError::NotificationLimit);
+        }
+    }
+    for raw in [
+        r#"{"id":1,"method":"command/exec","params":{}}"#,
+        r#"{"id":1,"method":"future/notification","params":{}}"#,
     ] {
         let (mut s, mut d, peer, c, _cancel) = bind();
         c.queue(&mut s, &mut d, Method::Initialize).unwrap();
@@ -226,7 +424,7 @@ fn codec_notifications_and_server_requests_have_distinct_fixed_refusals() {
         let frame = take_frame(&mut d, &mut s);
         assert_eq!(
             c.consume(&mut s, &mut d, frame).unwrap_err().primary,
-            expected
+            SessionError::UnexpectedServerRequest
         );
     }
 }

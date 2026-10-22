@@ -3,6 +3,12 @@
 use crate::Method;
 #[path = "session_login.rs"]
 mod login;
+pub use login::{
+    AccountPresence, AllowedLoginMethods, ChatGptEndpoint, ConfigObservation, ConfigSettings,
+    CredentialStore, LoginMethod, ObjectSummary, Observed, PipeCancellation, PipeEvent,
+    PipeSession, PipeSessionError, PolicySettings, Provider, RateLimitSummary, RateLimitWindow,
+    RequirementsObservation, RuntimeText, StringOverride, WorkspaceRestriction,
+};
 pub use login::{CancellationState, LoginCompletion, LoginId};
 use std::{
     fmt,
@@ -116,8 +122,8 @@ struct Pending {
 }
 
 /// Bounded session state machine with a separately selected sealed login lane.
-/// Production construction is deliberately absent
-/// until the version-bound decoder/driver, policy and native lifecycle are reviewed.
+/// Production construction is private to PipeSession, whose backend owns the
+/// actual nonblocking endpoints and native lifecycle.
 /// Tests execute these exact transitions without inventing an official wire schema.
 ///
 /// ```compile_fail
@@ -149,8 +155,7 @@ impl fmt::Debug for ProtocolSession {
 impl ProtocolSession {
     pub const INITIALIZATION_BUDGET: Duration = Duration::from_secs(10);
     pub const TOTAL_BUDGET: Duration = Duration::from_secs(30);
-    #[cfg(test)]
-    fn for_test(start: Instant) -> Result<Self, SessionError> {
+    fn new(start: Instant) -> Result<Self, SessionError> {
         Ok(Self {
             owner: Arc::new(()),
             phase: SessionPhase::AwaitInitialize,
@@ -167,6 +172,10 @@ impl ProtocolSession {
             notifications: 0,
             login: None,
         })
+    }
+    #[cfg(test)]
+    fn for_test(start: Instant) -> Result<Self, SessionError> {
+        Self::new(start)
     }
     /// Snapshot only, not a current deadline check or permission to run operations.
     pub fn phase(&self) -> SessionPhase {
@@ -257,7 +266,10 @@ impl ProtocolSession {
             (SessionPhase::AwaitInitialize, Method::Initialize)
                 | (
                     SessionPhase::Ready,
-                    Method::AccountRead | Method::RateLimitsRead
+                    Method::AccountRead
+                        | Method::RateLimitsRead
+                        | Method::ConfigRead
+                        | Method::ConfigRequirementsRead
                 )
         ) {
             return self.stop(SessionError::Sequence);

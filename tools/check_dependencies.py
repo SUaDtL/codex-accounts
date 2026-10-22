@@ -8,7 +8,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 REVIEW = 'docs/ca-02b-dependencies.json'
-REVIEW_SHA256 = 'bccbfe779b29b99d5dfe0f4df3a6d45585c1580e656d35c08ecfbee8b31edc60'
+REVIEW_SHA256 = 'c87f0dec8db21a6a736a406b0b0b91f7df00cc94263689440521f949cff41299'
 HISTORICAL_REVIEW_SHA256 = {
     'docs/ca-02-dependencies.json': 'ceaffa36b058d90fef01df21634610938aa47755edd8b6a15f7adc7257f6cc5f',
     'docs/ca-03b-dependencies.json': '0071f27fcdd6dd9aba04aee06e9cb75b2177be7fae7999980f05a19c31563c7d',

@@ -9,7 +9,7 @@ mod strict_json;
 
 pub use generations::{GenerationId, GenerationIndex, Identity, ProfileId};
 pub use resources::{CredentialSet, Resource, ResourceId, ResourceShape};
-pub use strict_json::validate_json_object;
+pub use strict_json::{validate_json_object, validate_json_object_with_limit};
 
 pub const MAX_RESOURCE_BYTES: usize = 1024 * 1024;
 pub const MAX_SET_BYTES: usize = 4 * 1024 * 1024;

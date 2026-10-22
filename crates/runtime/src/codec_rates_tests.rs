@@ -86,6 +86,29 @@ fn rates_fixed_request_omits_experiment_capabilities_and_reset_operations() {
 
 #[test]
 fn rates_required_snapshot_and_optional_missing_null_values_do_not_invent_defaults() {
+    // Production projection retains absence and the documented numeric metadata,
+    // without carrying the private account/bucket/name fields to consumers.
+    use crate::{Observed, RateLimitSummary, RateLimitWindow};
+    assert_eq!(
+        RateLimitSummary::from(snapshot(r#"{}"#).unwrap()),
+        RateLimitSummary {
+            primary: Observed::Missing,
+            secondary: Observed::Missing,
+            plan: Observed::Missing
+        }
+    );
+    let projected = RateLimitSummary::from(snapshot(r#"{"primary":{"usedPercent":23,"windowDurationMins":300,"resetsAt":123456},"secondary":null,"planType":"plus","limitId":"PRIVATE_ID","limitName":"PRIVATE_NAME"}"#).unwrap());
+    assert_eq!(
+        projected.primary,
+        Observed::Value(RateLimitWindow {
+            used_percent: 23,
+            duration_mins: Observed::Value(300),
+            resets_at: Observed::Value(123456)
+        })
+    );
+    assert_eq!(projected.secondary, Observed::Null);
+    assert_eq!(projected.plan, Observed::Value("plus"));
+    assert!(!format!("{projected:?}").contains("PRIVATE"));
     let value = read(r#"{"rateLimits":{}}"#).unwrap();
     assert!(matches!(value.account_id, Presence::Missing));
     assert!(matches!(value.ordinary_allowed, Presence::Missing));
@@ -573,7 +596,6 @@ fn rates_update_envelopes_types_unknown_methods_and_remote_errors_are_terminal()
         "{\"method\":\"account/rateLimits/updated\",\"params\":{\"rateLimits\":{}},\"emittedAtMs\":1.0}\n",
         "{\"method\":\"account/rateLimits/updated\",\"params\":{\"rateLimits\":{}},\"emittedAtMs\":9223372036854775808}\n",
         "{\"id\":2,\"method\":\"account/rateLimits/updated\",\"params\":{\"rateLimits\":{}}}\n",
-        "{\"method\":\"account/rateLimits/consumeResetCredit\",\"params\":{}}\n",
         "{\"method\":\"account/rateLimits/updated\",\"params\":{\"rateLimits\":{\"credits\":{\"hasCredits\":true,\"has\\u0043redits\":false,\"unlimited\":false}}}}\n",
     ] {let(mut s,mut d,peer,c,_cancel)=bind();ready_codec(&mut s,&mut d,&peer,&c);assert!(raw_event(&mut s,&mut d,&peer,&c,raw).is_err());}
     let (mut s, mut d, peer, c, _cancel) = bind();

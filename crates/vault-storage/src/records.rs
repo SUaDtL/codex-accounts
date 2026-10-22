@@ -350,7 +350,7 @@ impl State {
     }
     pub fn validate(&self) -> Result<(), StorageError> {
         use std::collections::BTreeSet;
-        if self.writes.len() > MAX_BLOBS || self.garbage.len() > MAX_BLOBS || self.inline.len() > 2
+        if self.writes.len() > MAX_BLOBS || self.garbage.len() > MAX_BLOBS || self.inline.len() > 3
         {
             return Err(StorageError::InputLimit);
         }

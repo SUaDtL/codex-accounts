@@ -10,7 +10,11 @@ use std::collections::BTreeSet;
 type EncryptedWrites = Vec<(Blob, Vec<u8>)>;
 #[path = "control_repair.rs"]
 mod control_repair;
-// No production effect adapter is exposed. Only tests drive this private engine.
+#[path = "current.rs"]
+mod current;
+#[path = "diagnostics.rs"]
+mod diagnostics;
+// The native operation adapter and synthetic tests drive this private engine.
 #[allow(dead_code)]
 #[path = "coordinator.rs"]
 pub(crate) mod coordinator;
@@ -652,6 +656,30 @@ impl<D: Files> Storage<D> {
             .latest;
         Ok(GenerationId::from_bytes(id)?)
     }
+    pub fn profiles(&self) -> Result<Vec<crate::ProfileSummary>, StorageError> {
+        self.ready()?;
+        self.registry
+            .profiles
+            .iter()
+            .map(|profile| {
+                let generation = self
+                    .registry
+                    .generations
+                    .iter()
+                    .find(|generation| {
+                        generation.id == profile.latest && generation.profile == profile.id
+                    })
+                    .ok_or(StorageError::Corrupt)?;
+                Ok(crate::ProfileSummary {
+                    id: ProfileId::from_bytes(profile.id)?,
+                    label: profile.label.0.to_string(),
+                    domain: profile.domain.0.to_string(),
+                    generation: GenerationId::from_bytes(profile.latest)?,
+                    captured_at: generation.captured,
+                })
+            })
+            .collect()
+    }
     pub fn read_latest(
         &self,
         root: &RootKey,
@@ -732,6 +760,14 @@ impl<D: Files> Storage<D> {
             .collect();
         let previous_blobs = self.registry.blobs();
         next.generations.retain(|g| keep.contains(&g.id));
+        // Opening a clean vault with nothing eligible to retire does not need
+        // another registry generation or storage transaction.
+        if expired.is_empty()
+            && next.generations.len() == self.registry.generations.len()
+            && self.state.garbage.is_empty()
+        {
+            return Ok(());
+        }
         let reachable: BTreeSet<_> = next.blobs().iter().map(|b| b.key).collect();
         let retire = previous_blobs
             .into_iter()

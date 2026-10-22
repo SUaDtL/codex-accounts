@@ -31,6 +31,7 @@ pub enum SwitchPhase {
     Restored,
     Cancelled,
     Conflict,
+    NeedsLogin,
 }
 impl SwitchPhase {
     pub(crate) fn parse(n: u8) -> Result<Self, StorageError> {
@@ -55,6 +56,7 @@ impl SwitchPhase {
             Restored,
             Cancelled,
             Conflict,
+            NeedsLogin,
         ]
         .get(n as usize)
         .copied()
@@ -131,6 +133,7 @@ pub struct OperationStatus {
     pub observations: ObservationStatus,
     pub primary_error: Option<&'static str>,
     pub restoration_error: Option<&'static str>,
+    pub can_restore: bool,
 }
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) struct GenerationRef {
@@ -208,6 +211,9 @@ pub(crate) struct Journal {
     pub evidence: Vec<Evidence>,
 }
 impl Journal {
+    pub fn reauthentication(&self) -> bool {
+        self.source.profile == self.target.profile
+    }
     pub fn terminal(&self) -> bool {
         matches!(
             self.phase,
@@ -215,6 +221,7 @@ impl Journal {
                 | SwitchPhase::Finished
                 | SwitchPhase::Restored
                 | SwitchPhase::Cancelled
+                | SwitchPhase::NeedsLogin
         )
     }
     pub fn references(&self) -> Vec<Id> {
@@ -260,6 +267,7 @@ impl Journal {
             observations,
             primary_error: self.failure.map(Failure::code),
             restoration_error: self.restoration_failure.map(Failure::code),
+            can_restore: !self.committed && !self.reauthentication(),
         }
     }
     pub fn validate(&self, r: &Registry) -> Result<(), StorageError> {
@@ -267,7 +275,10 @@ impl Journal {
         if self.id == [0; 16]
             || self.binding == [0; 32]
             || self.created > self.updated
-            || self.source.profile == self.target.profile
+            || (self.reauthentication()
+                && (self.source.generation == self.target.generation
+                    || self.source.generation == self.original_target.generation
+                    || self.restore_intent != 0))
             || self.target.profile != self.original_target.profile
             || self.evidence.len() > MAX_EVIDENCE
         {
@@ -306,6 +317,16 @@ impl Journal {
             }
         }
         let mask = self.mask();
+        if self.phase == NeedsLogin
+            && (!self.reauthentication()
+                || self.committed
+                || self.write_done != mask
+                || self.helper != Helper::Reaped
+                || self.acceptance != CredentialAcceptance::Rejected
+                || self.launch != DesktopLaunch::NotRequested)
+        {
+            return Err(StorageError::Corrupt);
+        }
         let prefix = |bits: u16| {
             let mut gap = false;
             for mark in &self.source_marks {

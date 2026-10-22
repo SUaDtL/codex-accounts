@@ -94,7 +94,14 @@ impl<'de> Visitor<'de> for Check<'_> {
 /// the retained bytes. The caller still needs a reviewed auth-mode/schema adapter.
 /// Depth counts object/array containers, including the root object.
 pub fn validate_json_object(bytes: &[u8]) -> Result<(), DataError> {
-    if bytes.len() > MAX_RESOURCE_BYTES {
+    validate_json_object_with_limit(bytes, MAX_RESOURCE_BYTES)
+}
+
+/// Structural validation for non-credential documents with their own byte cap.
+/// Credential Resource construction continues to enforce MAX_RESOURCE_BYTES.
+/// Duplicate-key, depth, UTF-8 and trailing-data checks are identical.
+pub fn validate_json_object_with_limit(bytes: &[u8], max_bytes: usize) -> Result<(), DataError> {
+    if bytes.len() > max_bytes {
         return Err(DataError::InputLimit);
     }
     if std::str::from_utf8(bytes).is_err()
