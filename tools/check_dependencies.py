@@ -120,7 +120,21 @@ def check(root: Path = ROOT) -> dict[str, int | str]:
     if set(review['manifest_sha256']) != manifests:
         raise ValueError('Workspace manifest review set changed')
     for path, digest in review['manifest_sha256'].items():
-        if hashlib.sha256((root / path).read_bytes()).hexdigest() != digest:
+        raw_manifest = (root / path).read_bytes()
+        manifest = tomllib.loads(raw_manifest.decode('utf-8'))
+        # Owner-selected 2026-10-22 metadata amendment. Removing exactly this one
+        # license declaration must reproduce the reviewed manifest byte-for-byte.
+        # Dependency pins, features, workspace membership and all other bytes stay bound.
+        if path == 'Cargo.toml':
+            license_line = b'license = "AGPL-3.0-only"\n'
+            declared_license = manifest['workspace']['package'].get('license')
+            expected_license = 'AGPL-3.0-only'
+        else:
+            license_line = b'license.workspace = true\n'
+            declared_license = manifest['package'].get('license')
+            expected_license = {'workspace': True}
+        if (declared_license != expected_license or raw_manifest.count(license_line) != 1
+                or hashlib.sha256(raw_manifest.replace(license_line, b'', 1)).hexdigest() != digest):
             raise ValueError('Reviewed dependency manifest changed')
     return {'reviewed_packages': len(expected), 'lock_review': 'passed'}
 

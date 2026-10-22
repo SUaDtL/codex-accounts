@@ -5,6 +5,12 @@ Windows-only Tauri/WebView2 desktop integration and native WinHTTP usage observa
 `python tools/check_dependencies.py` verifies reviewed Cargo inputs before acquisition.
 Use `cargo fetch --locked`, then `--locked --offline` for compilation and checks.
 
+On 2026-10-22 the owner selected AGPL-3.0-only for this project. Cargo manifests add
+only that workspace license and its inheritance declarations. The dependency checker
+requires those declarations, removes exactly their lines and verifies the remaining
+bytes against the unchanged prior review hashes. All 407 external packages, versions,
+features and Cargo.lock bytes remain unchanged. Dependency licenses remain their own.
+
 CI additionally uses Playwright 1.64.1 from package-lock.json for synthetic browser
 checks, Trivy 0.76.1 and OpenGrep 1.31.0. These are development tools and are not bundled
 into the executable. Their licenses, pins and verification are documented in
