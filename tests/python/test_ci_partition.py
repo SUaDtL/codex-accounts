@@ -83,6 +83,19 @@ class PartitionTests(unittest.TestCase):
             with self.assertRaises(ValueError):workspace.selectors()
 
 class IndependentNativeTests(unittest.TestCase):
+    def test_restoration_batch_has_its_own_bounded_budget_without_retry(self):
+        name = 'ca04c_process_restart_restoration_boundaries'
+        prefix = native.TARGET_PREFIX
+        def execute(command, **kwargs):
+            self.assertEqual(kwargs['timeout'], 300)
+            kwargs['stdout'].write((f'test {prefix}{name} ... ok\n'
+                'test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; '
+                '0 filtered out; finished in 200.00s\n').encode())
+            return subprocess.CompletedProcess(command, 0)
+        with patch.object(native.windows_process, 'run', side_effect=execute) as run:
+            self.assertEqual(native.run_case('debug', prefix, name)['result'], 'passed')
+            self.assertEqual(run.call_count, 1)
+
     def test_internally_parallel_restart_cases_do_not_overlap_other_cases(self):
         lock = threading.Lock()
         active = []

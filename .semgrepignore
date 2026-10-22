@@ -1,0 +1,3 @@
+# Override implicit exclusions: first-party tests under crates/ are scanned too.
+# These are generated Tauri schema files, not application source.
+crates/desktop-app/gen/
