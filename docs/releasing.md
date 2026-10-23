@@ -1,9 +1,7 @@
 # Releasing Codex Accounts
 
-Codex Accounts has two delivery channels:
-
-- **Preview** is a rolling prerelease updated from the newest successful `main` build.
-- **Versioned releases** are immutable tags such as `v1.0.0-rc.1`.
+Codex Accounts publishes immutable versioned releases such as `v1.0.0-rc.1`.
+Release candidates are GitHub prereleases.
 
 The versioned publisher reuses the Windows package produced by the exact successful
 `Repository checks` run. It does not compile a second binary. It verifies the Actions
@@ -24,8 +22,8 @@ Use a pull request to update all version sources together:
 Cargo refreshes only the workspace package versions in `Cargo.lock`. External dependency
 versions and checksums remain governed by the dependency review.
 
-Merge only after `CI gate` passes. Wait for the successful `main` run and its Preview
-publisher to finish so the exact Windows artifact remains available.
+Merge only after `CI gate` passes. Wait for the successful `main` run and artifact
+retention workflow so the exact Windows artifact remains available.
 
 ## Publish
 

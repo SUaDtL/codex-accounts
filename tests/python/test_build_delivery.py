@@ -8,7 +8,7 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "tools"))
-from retain_latest_build import PREFIX, deletion_ids
+from retain_latest_build import PREFIX, deletion_ids, owner_main_build
 from package_windows import package, sha, sbom
 
 
@@ -46,6 +46,14 @@ class DeliveryTests(unittest.TestCase):
         run["owner_build"] = False
         self.assertEqual(self.select(fixture(1, 1), (artifact, (key, run))), [2])
         self.assertEqual(self.select((artifact, (key, run))), [2])
+
+    def test_only_owner_main_push_or_manual_runs_can_be_retained(self):
+        run = {"head_repository": {"full_name": "owner/repo"}, "head_branch": "main", "event": "push"}
+        self.assertTrue(owner_main_build(run, "owner/repo"))
+        self.assertTrue(owner_main_build(dict(run, event="workflow_dispatch"), "owner/repo"))
+        self.assertFalse(owner_main_build(dict(run, event="pull_request"), "owner/repo"))
+        self.assertFalse(owner_main_build(dict(run, head_branch="feature"), "owner/repo"))
+        self.assertFalse(owner_main_build(dict(run, head_repository={"full_name": "fork/repo"}), "owner/repo"))
 
     def test_expired_or_mismatched_artifact_is_not_replacement(self):
         artifact, entry = fixture(2, 2)

@@ -10,6 +10,12 @@ import urllib.request
 PREFIX = "codex-accounts-windows-x64-"
 
 
+def owner_main_build(run: dict, repository: str) -> bool:
+    return (run.get("head_repository", {}).get("full_name") == repository
+            and run.get("head_branch") == "main"
+            and run.get("event") in {"push", "workflow_dispatch"})
+
+
 def artifact_key(artifact: dict) -> tuple[int, int] | None:
     match = re.fullmatch(PREFIX + r"([0-9]+)-([0-9]+)", artifact.get("name", ""))
     run_id = artifact.get("workflow_run", {}).get("id")
@@ -59,8 +65,8 @@ def main(apply: bool = False) -> None:
     runs = {}
     for identifier, attempt in keys:
         run = request(f"/actions/runs/{identifier}/attempts/{attempt}")
-        # Fork builds remain review artifacts and cannot replace the owner's last good build.
-        run["owner_build"] = run.get("head_repository", {}).get("full_name") == repository
+        # PR, branch and fork builds cannot replace the owner's last good main build.
+        run["owner_build"] = owner_main_build(run, repository)
         runs[(identifier, attempt)] = run
     candidates = deletion_ids(artifacts, runs, workflow_id)
     print(json.dumps({"mode": "apply" if apply else "preview", "obsolete_build_artifacts": candidates}))

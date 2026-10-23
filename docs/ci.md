@@ -70,32 +70,7 @@ A successful Windows release shard uploads `codex-accounts-windows-x64-RUN-ATTEM
 Only choose an artifact from a **fully successful Repository checks run**. Upload can
 finish before other jobs, so its presence alone is not a passing CI result.
 
-`Publish Preview and retain latest build` runs after CI completes, or manually. Both jobs
-use trusted default-branch code with checkout credentials disabled. The Preview job
-selects the newest successful owner-repository `main` push/manual run of `ci.yml`,
-checks its artifact digest, file list, checksums, PE architecture and source/run identity,
-then signs the EXE and checksum manifest with pinned Cosign and publishes one prerelease.
-Both signatures must verify with the exact publishing workflow identity and GitHub OIDC
-issuer. Their bundles are included in the ZIP; no Authenticode signing is performed.
-PR and fork artifacts cannot be published.
-Artifact files are read as data and never extracted or executed by the publisher.
-The GitHub token is not forwarded to the signed artifact-storage URL.
-
-The README download button uses a fixed `preview` tag and asset name. The tag anchors
-the channel's first publication and is not moved; release notes and `BUILD.json` identify
-the actual binary revision, and the ZIP includes that revision's source archive. GitHub's
-automatically generated tag-source links refer to the anchor, so use the bundled source
-or the explicit source link in the release notes for the current binary.
-
-The publisher uploads and verifies a candidate before renaming the old download and
-promoting the candidate. GitHub does not offer an atomic asset-name swap, so the fixed URL
-can briefly be unavailable during those two renames. An ordinary promotion failure restores
-the old name; an interruption preserves both assets for retry. No old bytes are deleted
-until the replacement is published. Repeated and late runs cannot roll the channel backward.
-It uses the public Sigstore service with ephemeral GitHub OIDC credentials and no paid
-subscription. The workflow does not change Windows publisher trust.
-
-`Publish versioned release` is a separate manual workflow on `main`. It accepts an exact
+`Publish versioned release` is a manual workflow on `main`. It accepts an exact
 committed semantic version, selects the successful `Repository checks` artifact for that
 same commit, repeats the complete package verification, and signs with the distinct
 `release.yml@refs/heads/main` identity. It uploads the signed archive to a managed draft,
@@ -103,25 +78,29 @@ creates an annotated version tag, publishes the Release, and verifies the final 
 asset by reading them back. Release candidates remain prereleases and do not take the
 Latest badge. Published version assets are never replaced.
 
-Retention runs only after publication succeeds or finds no eligible candidate, so a failed
-publication keeps its input artifact available for retry. Its separate token has `actions:write`
-but no repository-content write permission. The metadata-only retention tool preserves
-the newest successful owner-repository run/attempt and deletes older build artifacts and
-failed completed candidates. A failed rerun cannot discard the preceding successful
-attempt. Running/unknown runs are untouched. Fork candidates are removed after completion
-and cannot replace the owner's last good build. Reports expire after two days; committed
-source evidence after seven. The retained binary has GitHub's 90-day expiry if no newer
-successful build arrives. The rolling release asset does not inherit Actions artifact expiry.
+The publisher uses the public Sigstore service with ephemeral GitHub OIDC credentials and
+no paid subscription. PR and fork artifacts cannot be published. Artifact files are read
+as data and never executed. The GitHub token is not forwarded to signed artifact-storage
+URLs. No Authenticode signing is performed, so Windows publisher trust is unchanged.
 
-The publishing/cleanup workflow activates only after it exists on the default branch. Its
-manual dispatch retries publication and cleanup; `python tools/retain_latest_build.py` defaults
-to a read-only preview with `GITHUB_REPOSITORY` and `GH_TOKEN` supplied locally.
+`Retain latest successful build` runs after CI completes, or manually. Its token has
+`actions:write` but no repository-content write permission. The metadata-only tool keeps
+the newest successful owner-repository `main` run/attempt and deletes older build artifacts
+and failed completed candidates. A failed rerun cannot discard the preceding successful
+attempt. Running and unknown runs are untouched. PR, branch and fork candidates are removed
+after completion and cannot replace the last good `main` build. Reports expire after two
+days; committed source evidence after seven. The retained binary has GitHub's 90-day expiry
+if no newer successful build arrives.
+
+The retention workflow activates only after it exists on the default branch. Its manual
+dispatch retries cleanup; `python tools/retain_latest_build.py` defaults to a read-only
+preview with `GITHUB_REPOSITORY` and `GH_TOKEN` supplied locally.
 
 ## Merge and release boundaries
 
 `main` requires the `CI gate`, blocks force pushes and deletion, enforces administrator
 rules, and requires resolved review conversations. Version tags use a repository ruleset
 that blocks updates and deletion while allowing new tags. The owner selected
-AGPL-3.0-only and authorized automatic Preview delivery plus manually dispatched,
-versioned releases from successful main CI. Authenticode signing and Store distribution
-are not configured.
+AGPL-3.0-only and authorized manually dispatched, versioned releases from successful main
+CI. Repository-wide immutable releases intentionally rule out a mutable rolling Preview.
+Authenticode signing and Store distribution are not configured.

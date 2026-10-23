@@ -22,7 +22,7 @@ Requirements:
 - The Microsoft Store version of Codex Desktop
 - Microsoft Edge WebView2
 
-Versioned releases are immutable and keep their corresponding source and verification material. The separate [Preview channel](https://github.com/SUaDtL/codex-accounts/releases/tag/preview) continues to follow the latest successful build from `main`.
+Versioned releases are immutable and keep their corresponding source and verification material. GitHub Actions retains only the newest successful Windows build artifact from `main` for release recovery.
 
 ## Use it
 

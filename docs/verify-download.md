@@ -30,7 +30,7 @@ cosign verify-blob --bundle codex-accounts-desktop.exe.sigstore.json --certifica
 The identity and issuer must match
 exactly; do not replace them with permissive regular expressions or disable
 transparency-log/certificate verification. A missing signature bundle is not a
-verified download. Older CI artifacts created before Preview publication may lack it.
+verified download.
 
 To verify the source, metadata and dependency inventory individually, first verify
 their checksum manifest with the same identity:
@@ -48,10 +48,7 @@ Get-Content -LiteralPath SHA256SUMS | ForEach-Object {
 ```
 
 `BUILD.json` names the source revision. `source.tar.gz` contains that committed
-source and build instructions. A versioned tag points to that same revision. If you
-download from the rolling Preview channel instead, use the
-`artifact-retention.yml@refs/heads/main` certificate identity and the explicit source
-revision in its release notes.
+source and build instructions. A versioned tag points to that same revision.
 
 Cosign's public transparency log records the signing identity and artifact digest.
 No application credentials or account data participate in signing. A valid signature
