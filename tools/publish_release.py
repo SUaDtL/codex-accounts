@@ -303,5 +303,6 @@ def main() -> None:
 if __name__ == '__main__':
     try:
         main()
-    except (OSError, ValueError, KeyError, TypeError, zipfile.BadZipFile, subprocess.SubprocessError):
-        raise SystemExit('Versioned release publication failed; inspect the workflow step and draft release') from None
+    except (OSError, ValueError, KeyError, TypeError, zipfile.BadZipFile,
+            subprocess.SubprocessError) as error:
+        raise SystemExit(f'Versioned release publication failed: {error}') from None
