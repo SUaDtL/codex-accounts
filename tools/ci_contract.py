@@ -155,6 +155,8 @@ def check_contract(text: str) -> None:
     for required in ["npm ci --ignore-scripts --no-audit --no-fund", "node node_modules/playwright/cli.js install --with-deps chromium", "npm run test:ui"]:
         if "        run: " + required + "\n" not in jobs["desktop-ui"]:
             raise ValueError("Browser behavior checks are mandatory")
+    if "    timeout-minutes: 15\n" not in jobs["desktop-ui"]:
+        raise ValueError("Browser behavior timeout must cover a cold Chromium install")
     if "uses: actions/cache@" in jobs["isolated-build"]:
         raise ValueError("The isolated build must use a fresh target")
     for action in re.findall(r"uses: ([^ #\n]+)", text):
