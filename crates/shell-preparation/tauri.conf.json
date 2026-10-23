@@ -1,15 +1,33 @@
 {
   "productName": "Codex Accounts Static Preview - Unqualified",
-  "version": "0.1.0",
+  "version": "1.0.0-rc.1",
   "identifier": "invalid.codexaccounts.staticpreview",
-  "build": { "frontendDist": "staged-assets" },
+  "build": {
+    "frontendDist": "staged-assets"
+  },
   "app": {
     "windows": [],
     "withGlobalTauri": false,
     "security": {
-      "capabilities": [{ "identifier": "static-preview", "windows": ["main"], "platforms": ["windows"], "permissions": [] }],
+      "capabilities": [
+        {
+          "identifier": "static-preview",
+          "windows": [
+            "main"
+          ],
+          "platforms": [
+            "windows"
+          ],
+          "permissions": []
+        }
+      ],
       "csp": "default-src 'none'; script-src 'none'; style-src 'self'; img-src 'none'; font-src 'none'; connect-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'"
     }
   },
-  "bundle": { "active": false, "icon": ["icons/dev-preview.ico"] }
+  "bundle": {
+    "active": false,
+    "icon": [
+      "icons/dev-preview.ico"
+    ]
+  }
 }

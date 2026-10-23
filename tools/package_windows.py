@@ -1,4 +1,4 @@
-"""Package the built pre-1.0 application with a lockfile-bound dependency inventory."""
+"""Package the built application with a lockfile-bound dependency inventory."""
 from __future__ import annotations
 
 import argparse
@@ -10,6 +10,8 @@ from pathlib import Path
 import shutil
 import subprocess
 import tomllib
+
+from release_version import parse_semver
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -43,8 +45,7 @@ def package(executable: Path, destination: Path) -> None:
         if stream.read(2) != b"MZ":
             raise ValueError("A built Windows executable is required")
     version = tomllib.loads((ROOT / "Cargo.toml").read_text(encoding="utf-8"))["workspace"]["package"]["version"]
-    if not version.startswith("0."):
-        raise ValueError("This package lane is for pre-1.0 versions")
+    parse_semver(version)
     destination.mkdir(parents=True, exist_ok=False)
     payload = destination / "codex-accounts-desktop.exe"
     shutil.copy2(executable, payload)
@@ -59,14 +60,14 @@ def package(executable: Path, destination: Path) -> None:
                 "kind": "unsigned-ci-artifact", "source_commit": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip(),
                 "built_at": datetime.now(timezone.utc).isoformat(), "payload_sha256": sha(payload),
                 "lock_sha256": sha(ROOT / "Cargo.lock"), "workflow_run": os.environ.get("GITHUB_RUN_ID"),
-                "publication": "not-a-release"}
+                "publication": "ci-candidate"}
     (destination / "BUILD.json").write_text(json.dumps(metadata, indent=2) + "\n", encoding="utf-8")
     (destination / "README.txt").write_text(
-        "Codex Accounts " + version + " (pre-1.0)\n\n"
+        "Codex Accounts " + version + "\n\n"
         "Windows x64, official Codex Desktop and WebView2 required.\n"
         "Close the older Accounts window before launching this executable.\n"
         "Existing saved accounts carry over. Keep Codex closed for account changes.\n"
-        "This is an unsigned preview candidate, not a signed installer.\n"
+        "The Windows executable is not Authenticode-signed. Release archives include Cosign verification bundles.\n"
         "Windows may show an unknown-publisher or SmartScreen warning.\n"
         "Licensed under AGPL-3.0-only; see LICENSE. Dependencies retain their licenses.\n"
         "The exact committed source is included in source.tar.gz.\n"

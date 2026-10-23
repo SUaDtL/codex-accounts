@@ -7,6 +7,7 @@ from pathlib import Path
 import stat
 import struct
 import sys
+import re
 
 ROOT = Path(__file__).resolve().parents[1]
 NAMES = ('accounts.html', 'status.html', 'recovery.html', 'preview.css')
@@ -161,8 +162,12 @@ def check(root=ROOT):
             out[k] = v
         return out
     config = json.loads(read(root / SHELL / 'tauri.conf.json'), object_pairs_hook=pairs)
+    version = config.get('version')
+    require(isinstance(version, str) and re.fullmatch(
+        r'(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:-[0-9A-Za-z.-]+)?', version
+    ) is not None, 'preview_config_authority')
     require(config == {
-        'productName': 'Codex Accounts Static Preview - Unqualified', 'version': '0.1.0',
+        'productName': 'Codex Accounts Static Preview - Unqualified', 'version': version,
         'identifier': 'invalid.codexaccounts.staticpreview',
         'build': {'frontendDist': 'staged-assets'},
         'app': {'windows': [], 'withGlobalTauri': False,

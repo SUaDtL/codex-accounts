@@ -381,11 +381,11 @@ checksum = "0c9ea0ac24bc397ab3c98583a3c9ba74fa56b09a4449bbe172b9b1ddb016027a"
 
 [[package]]
 name = "codex-accounts-core"
-version = "0.1.0"
+version = "1.0.0-rc.1"
 
 [[package]]
 name = "codex-accounts-desktop"
-version = "0.1.0"
+version = "1.0.0-rc.1"
 dependencies = [
  "codex-accounts-core",
  "codex-accounts-discovery",
@@ -400,7 +400,7 @@ dependencies = [
 
 [[package]]
 name = "codex-accounts-discovery"
-version = "0.1.0"
+version = "1.0.0-rc.1"
 dependencies = [
  "codex-accounts-core",
  "codex-accounts-platform",
@@ -412,11 +412,11 @@ dependencies = [
 
 [[package]]
 name = "codex-accounts-platform"
-version = "0.1.0"
+version = "1.0.0-rc.1"
 
 [[package]]
 name = "codex-accounts-runtime"
-version = "0.1.0"
+version = "1.0.0-rc.1"
 dependencies = [
  "codex-accounts-vault",
  "serde",
@@ -426,7 +426,7 @@ dependencies = [
 
 [[package]]
 name = "codex-accounts-shell-preparation"
-version = "0.1.0"
+version = "1.0.0-rc.1"
 dependencies = [
  "tauri",
  "tauri-build",
@@ -434,7 +434,7 @@ dependencies = [
 
 [[package]]
 name = "codex-accounts-vault"
-version = "0.1.0"
+version = "1.0.0-rc.1"
 dependencies = [
  "serde",
  "serde_json",
@@ -443,7 +443,7 @@ dependencies = [
 
 [[package]]
 name = "codex-accounts-vault-crypto"
-version = "0.1.0"
+version = "1.0.0-rc.1"
 dependencies = [
  "argon2",
  "chacha20poly1305",
@@ -456,7 +456,7 @@ dependencies = [
 
 [[package]]
 name = "codex-accounts-vault-storage"
-version = "0.1.0"
+version = "1.0.0-rc.1"
 dependencies = [
  "codex-accounts-core",
  "codex-accounts-discovery",

@@ -30,12 +30,14 @@ class SpecificationTests(unittest.TestCase):
 
     def test_safe_crates_keep_exact_dependency_and_native_boundaries(self):
         import tomllib
+        workspace = tomllib.loads((ROOT / "Cargo.toml").read_text())
+        version = workspace["workspace"]["package"]["version"]
         for name in ["core", "platform", "runtime"]:
             path = ROOT / "crates" / name / "Cargo.toml"
             parsed = tomllib.loads(path.read_text())
             if name == "runtime":
                 self.assertEqual(parsed["dependencies"], {
-                    "codex-accounts-vault": {"path": "../vault", "version": "=0.1.0"},
+                    "codex-accounts-vault": {"path": "../vault", "version": "=" + version},
                     "zeroize": {"version": "=1.8.2", "default-features": False, "features": ["alloc"]},
                     "serde": "=1.0.229",
                     "serde_json": "=1.0.145",
@@ -43,7 +45,6 @@ class SpecificationTests(unittest.TestCase):
             else:
                 self.assertNotIn("dependencies", parsed)
             self.assertIs(parsed["package"]["publish"]["workspace"], True)
-        workspace = tomllib.loads((ROOT / "Cargo.toml").read_text())
         self.assertFalse(workspace["workspace"]["package"]["publish"])
         self.assertEqual(workspace["workspace"]["lints"]["rust"]["unsafe_code"], "forbid")
 

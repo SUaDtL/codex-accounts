@@ -4,7 +4,7 @@ This document summarizes existing normative requirements and implemented reviewe
 primitives, not a newly invented approval or compliance claim. Authority remains the
 owner's request, docs/local-codex-switcher-spec.html (especially S-003 through S-012),
 its dated amendments, and the dependency reviews in docs/ca-03b-dependencies.json.
-The Windows app is pre-1.0 and complete release acceptance remains open.
+The Windows app is preparing its first 1.0 release candidate. Stable 1.0 acceptance remains open.
 
 ## Credential stores and access
 
@@ -19,18 +19,20 @@ No environment variable, plaintext application database, renderer storage or cre
 export is an approved product credential source/sink.
 
 CI has a separate short-lived GitHub-issued token. The metadata-only retention job
-receives actions:write through GH_TOKEN. The Preview publisher receives contents:write
-and actions:read to publish verified successful owner/main artifacts. Both execute only
+receives actions:write through GH_TOKEN. The Preview and versioned-release publishers
+receive contents:write, actions:read and id-token:write to publish verified successful
+owner/main artifacts. All publisher jobs execute only
 default-branch code. Downloaded artifacts are bounded, parsed as data and never executed;
 the GitHub token is never forwarded to artifact storage. Publication precedes retention,
 and a failed replacement preserves the old release bytes. This is CI API authorization,
 not a product credential. No long-lived PAT or signing subscription is required.
-The Preview job alone has id-token:write. Pinned Cosign uses the ambient GitHub Actions
+Pinned Cosign uses the ambient GitHub Actions
 OIDC provider directly; identity tokens are not passed through command arguments,
 saved by repository code, or logged. Its subprocess receives no GH_TOKEN/GITHUB_TOKEN.
 Public Sigstore/Fulcio/Rekor services receive the intended CI signing identity and
 artifact digest, never app account material. Signatures must verify against the exact
-artifact-retention.yml@refs/heads/main identity and GitHub OIDC issuer before promotion.
+`artifact-retention.yml@refs/heads/main` or `release.yml@refs/heads/main` publisher
+identity and GitHub OIDC issuer before promotion.
 This supplies consumer integrity verification, not Windows publisher trust.
 
 ## Cryptography
@@ -64,5 +66,5 @@ preserve interrupted state; no automated expiry of unresolved journals.
 
 Run blocking Trivy and OpenGrep checks plus review of changed secret/TLS paths. Passing
 scanners do not establish whole-product security. No account material is uploaded in CI.
-The artifact has no Windows Authenticode signature and remains pre-1.0;
-Cosign adds explicit verification. Source-controlled checks are not branch protection.
+The artifact has no Windows Authenticode signature. Cosign adds explicit verification.
+The repository separately enforces the `CI gate` on `main`.

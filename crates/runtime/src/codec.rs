@@ -478,7 +478,7 @@ impl Codec {
             .map_err(|_| driver.fail(session, DriverFault::Session))?;
         let id = request.id.sequence;
         let body = match method {
-            Method::Initialize => format!("{{\"id\":{id},\"method\":\"initialize\",\"params\":{{\"clientInfo\":{{\"name\":\"local_codex_switcher\",\"version\":\"0.1.0\"}}}}}}\n"),
+            Method::Initialize => format!("{{\"id\":{id},\"method\":\"initialize\",\"params\":{{\"clientInfo\":{{\"name\":\"local_codex_switcher\",\"version\":\"{}\"}}}}}}\n", env!("CARGO_PKG_VERSION")),
             Method::AccountRead => format!("{{\"id\":{id},\"method\":\"account/read\",\"params\":{{\"refreshToken\":false}}}}\n"),
             Method::RateLimitsRead => format!("{{\"id\":{id},\"method\":\"account/rateLimits/read\",\"params\":{{\"excludeResetCreditDetails\":true}}}}\n"),
             Method::ConfigRead => format!("{{\"id\":{id},\"method\":\"config/read\",\"params\":{{\"includeLayers\":false}}}}\n"),

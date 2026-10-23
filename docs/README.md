@@ -10,6 +10,7 @@
 | [Contributing](../CONTRIBUTING.md) | Local setup, checks, and pull requests |
 | [Architecture](architecture.md) | Native components and credential boundaries |
 | [CI and releases](ci.md) | Build jobs, security scans, artifacts, and retention |
+| [Maintainer release guide](releasing.md) | Version preparation, publishing, and recovery rules |
 | [Dependency policy](dependency-policy.md) | Dependency and acquisition rules |
 
 ## Engineering archive

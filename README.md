@@ -2,9 +2,9 @@
 
 Codex Accounts is a small Windows app for saving and switching the ChatGPT accounts used by Codex Desktop.
 
-**Preview 0.1.0 | Windows x64 | AGPL-3.0-only**
+**1.0.0-rc.1 | Windows x64 | AGPL-3.0-only**
 
-[![Download for Windows](https://img.shields.io/badge/Download-Windows_x64-2c9b80?style=for-the-badge)](https://github.com/SUaDtL/codex-accounts/releases/download/preview/codex-accounts-windows-x64.zip)
+[![Download for Windows](https://img.shields.io/badge/Download-Windows_x64-2c9b80?style=for-the-badge)](https://github.com/SUaDtL/codex-accounts/releases/download/v1.0.0-rc.1/codex-accounts-windows-x64.zip)
 
 ![Accounts with synthetic Personal and Work profiles](docs/images/accounts.png)
 
@@ -12,9 +12,9 @@ The app keeps account credentials in an encrypted local vault, shows the usage w
 
 ## Download
 
-Download the latest [Windows Preview](https://github.com/SUaDtL/codex-accounts/releases/download/preview/codex-accounts-windows-x64.zip), extract the archive, and run `codex-accounts-desktop.exe`.
+Download [1.0.0-rc.1 for Windows](https://github.com/SUaDtL/codex-accounts/releases/download/v1.0.0-rc.1/codex-accounts-windows-x64.zip), extract the archive, and run `codex-accounts-desktop.exe`.
 
-Windows may show an unknown publisher or SmartScreen warning because the executable does not have a commercial Windows code-signing certificate. The release includes checksums, a software bill of materials, source code, and Cosign verification bundles. See [Verify a download](docs/verify-download.md) if you want to check the artifact before running it.
+Windows may show an unknown publisher or SmartScreen warning because the executable does not have a commercial Windows code-signing certificate. The immutable release includes a Cosign-signed archive, checksums, a software bill of materials, and source code. See [Verify a download](docs/verify-download.md) if you want to check the artifact before running it.
 
 Requirements:
 
@@ -22,7 +22,7 @@ Requirements:
 - The Microsoft Store version of Codex Desktop
 - Microsoft Edge WebView2
 
-The [Preview release](https://github.com/SUaDtL/codex-accounts/releases/tag/preview) always points to the latest successful build from `main`. A failed build leaves the previous download in place.
+Versioned releases are immutable and keep their corresponding source and verification material. The separate [Preview channel](https://github.com/SUaDtL/codex-accounts/releases/tag/preview) continues to follow the latest successful build from `main`.
 
 ## Use it
 
@@ -68,6 +68,8 @@ The executable will be at `target/release/codex-accounts-desktop.exe`. The inter
 - [Contributing](CONTRIBUTING.md)
 - [Architecture](docs/architecture.md)
 - [CI and releases](docs/ci.md)
+- [Maintainer release guide](docs/releasing.md)
+- [Changelog](CHANGELOG.md)
 - [Security](SECURITY.md)
 - [Security model](docs/security-model.md)
 - [Documentation index](docs/README.md)
