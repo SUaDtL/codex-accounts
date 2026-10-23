@@ -14,6 +14,7 @@ pub enum VaultState {
 pub struct ProfileList {
     pub state: VaultState,
     pub vault_exists: Option<bool>,
+    pub protection: Option<&'static str>,
     pub last_known_active_profile: Option<String>,
     pub profiles: Vec<Profile>,
     pub operations: Vec<Operation>,
@@ -73,6 +74,7 @@ pub fn unopened_profiles(vault_exists: Option<bool>) -> ProfileList {
     ProfileList {
         state: VaultState::Unopened,
         vault_exists,
+        protection: None,
         last_known_active_profile: None,
         profiles: Vec::new(),
         operations: Vec::new(),

@@ -10,7 +10,7 @@ mod keys;
 mod random;
 
 pub use envelope::{Envelope, EnvelopeContext, Purpose, MAX_ENVELOPE_BYTES, MAX_PLAINTEXT_BYTES};
-pub use keys::{Fingerprint, ProtectedRootKey, RootKey, SecretBytes};
+pub use keys::{Fingerprint, ProtectedRootKey, RootKey, RootProtection, SecretBytes};
 
 /// Fixed categories only: never include a library, OS, path or caller error body.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

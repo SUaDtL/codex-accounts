@@ -20,7 +20,8 @@ HISTORICAL = {
 }
 BASE_COMMIT = '727eb6154db1d7c4ac5db10a7868b6271cd55293'
 ENGINE = 'crates/vault-storage/src/engine.rs'
-CHANGED = (ENGINE, 'crates/vault-storage/src/coordinator.rs',
+CHANGED = ('crates/vault-crypto/src/keys.rs', ENGINE,
+           'crates/vault-storage/src/coordinator.rs',
            'crates/vault-storage/src/journal.rs')
 SOURCES = (
     'crates/core/src/lib.rs',

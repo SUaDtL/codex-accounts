@@ -1,6 +1,7 @@
 //! Native account confirmation uses labels resolved from the authenticated vault.
 //! No renderer-supplied consent flag or preview label grants mutation authority.
 use crate::journal::Failure;
+use crate::StorageError;
 use windows_sys::Win32::UI::WindowsAndMessaging::{
     MessageBoxW, IDYES, MB_DEFBUTTON2, MB_ICONQUESTION, MB_SETFOREGROUND, MB_TASKMODAL, MB_YESNO,
 };
@@ -34,6 +35,21 @@ pub(super) fn switch(source: &str, target: &str) -> Result<(), Failure> {
          and conversation history stay on this computer. Accounts does not send \
          prompts or resume work.\n\nContinue?"
     ))
+}
+
+pub(super) fn capture(label: &str) -> Result<(), Failure> {
+    confirm(format!(
+        "Save the current Codex account as “{label}”?\n\nIts sign-in credentials will be copied into the protected account vault. The account installed in Codex will not change.\n\nContinue?"
+    ))
+}
+
+pub(super) fn vault_hardening(enable: bool) -> Result<(), StorageError> {
+    let message = if enable {
+        "Add passphrase protection to this vault?\n\nYou will need the passphrase each time you open it. Losing the passphrase permanently locks the saved accounts.\n\nContinue?"
+    } else {
+        "Remove passphrase protection from this vault?\n\nThe vault will remain encrypted and protected for your Windows user. It will open without a passphrase.\n\nContinue?"
+    };
+    confirm(message.to_owned()).map_err(|_| StorageError::Cancelled)
 }
 
 pub(super) fn recover(source: &str, target: &str, finish: bool) -> Result<(), Failure> {

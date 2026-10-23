@@ -1,72 +1,58 @@
 # Codex Accounts
 
-A compact Windows app for switching between saved ChatGPT accounts in Codex Desktop.
+Codex Accounts is a small Windows app for saving and switching the ChatGPT accounts used by Codex Desktop.
 
-**0.1.0 · Pre-1.0 · Windows x64**
+**Preview 0.1.0 | Windows x64 | AGPL-3.0-only**
 
 [![Download for Windows](https://img.shields.io/badge/Download-Windows_x64-2c9b80?style=for-the-badge)](https://github.com/SUaDtL/codex-accounts/releases/download/preview/codex-accounts-windows-x64.zip)
 
-Save the account you already use, add another through the official browser sign-in,
-and switch when you need to. See each account's remaining usage and reset countdowns
-without closing Codex. Credentials stay on your computer.
-
 ![Accounts with synthetic Personal and Work profiles](docs/images/accounts.png)
 
-*Preview uses synthetic accounts and usage values.*
+The app keeps account credentials in an encrypted local vault, shows the usage windows reported for each account, and uses Codex's official browser sign-in when you add or repair an account. It does not combine plans, rotate accounts automatically, or expose account access as an API.
 
-## Get a build
+## Download
 
-Download the [Windows Preview](https://github.com/SUaDtL/codex-accounts/releases/download/preview/codex-accounts-windows-x64.zip),
-extract the archive and run `codex-accounts-desktop.exe`. No GitHub sign-in is required.
-**No Windows signature:** Windows may show an unknown-publisher or SmartScreen warning.
-Cosign verification is available for the executable and checksum manifest;
-[verify your download](docs/verify-download.md). This does not change Windows trust.
+Download the latest [Windows Preview](https://github.com/SUaDtL/codex-accounts/releases/download/preview/codex-accounts-windows-x64.zip), extract the archive, and run `codex-accounts-desktop.exe`.
 
-The archive includes `SHA256SUMS`, `BUILD.json`, `Cargo.lock`, `SBOM.cdx.json`,
-`LICENSE`, Cosign verification bundles and the exact corresponding source in `source.tar.gz`.
-One rolling [Preview release](https://github.com/SUaDtL/codex-accounts/releases/tag/preview)
-holds the latest successfully published main build. Failed checks leave the previous
-download available. The release notes identify the exact source revision.
+Windows may show an unknown publisher or SmartScreen warning because the executable does not have a commercial Windows code-signing certificate. The release includes checksums, a software bill of materials, source code, and Cosign verification bundles. See [Verify a download](docs/verify-download.md) if you want to check the artifact before running it.
 
-The first Preview becomes available after this workflow reaches `main` and its CI passes.
-Until then, developers can download the Windows artifact from a successful
-[Repository checks](https://github.com/SUaDtL/codex-accounts/actions/workflows/ci.yml)
-run; Actions artifact downloads require GitHub sign-in and expire after 90 days.
+Requirements:
 
-Requirements: Windows x64, the official Microsoft Store Codex Desktop installation,
-and Microsoft Edge WebView2. No Node installation or frontend server is needed.
+- Windows x64
+- The Microsoft Store version of Codex Desktop
+- Microsoft Edge WebView2
+
+The [Preview release](https://github.com/SUaDtL/codex-accounts/releases/tag/preview) always points to the latest successful build from `main`. A failed build leaves the previous download in place.
 
 ## Use it
 
-1. Create your vault on first use, or open the existing one.
-2. Use **+** to save the current account or sign in to another. Give it any label.
-3. Quit Codex clients normally before saving, signing in or switching.
-4. Select **Switch** beside an account. Codex opens after the switch succeeds.
+1. Create a vault on first use, or open the vault already on the computer.
+2. Select **+** to save the current account or sign in to another account.
+3. Give the account a label that makes sense to you.
+4. Quit Codex clients before saving, signing in, or switching.
+5. Select **Switch** beside the account you want to use.
 
-The lit indicator marks the last known active account. **Open Codex** reopens it.
-The header refresh button reloads accounts and usage; the cog opens Settings.
-Account menus provide rename, removal and **Sign in again**.
+The lit indicator marks the last known active account. Usage refreshes once per minute while the account window is visible. Codex can remain open while usage is monitored. Expired credentials remove live usage values until the account is authenticated again.
 
-Usage refreshes once per minute while this window is visible and the vault is open.
-Codex can stay open during monitoring. Expired credentials clear usage instead of
-showing stale balances. Only reported quota windows appear. Available banked resets
-appear when the service reports them; the app never consumes resets.
+Closing the window keeps Codex Accounts in the system tray. Select the tray icon to
+reopen it. The tray menu lists saved accounts for quick switching and also provides
+Open and Quit.
 
-Accounts share this computer's Codex projects and conversation history. Switching
-changes the sign-in, not the history. Vault encryption uses your Windows account;
-it does not protect against software already running as you or an administrator.
+Vaults are encrypted and protected for your Windows user. An optional strong passphrase
+can be added in Settings for another layer of protection. A passphrase-protected vault
+locks when you close the account window to the tray.
 
-## Compatibility
+Accounts use the same Codex projects and conversation history on this computer. Switching changes the installed sign-in. It does not move or isolate that history.
 
-Normal Codex updates do not need a version allowlist. Operations check the actual
-installation, runtime, storage, policy and running clients. Unsupported configurations
-are refused without changing credentials. This build supports native Windows
-file-backed ChatGPT sign-ins. WSL, API-key accounts, custom runtimes/providers and
-macOS account switching are not supported.
+## Supported setup
+
+Codex Accounts checks the installed runtime, credential storage, policy, and running clients when an operation begins. Regular Codex updates do not require an app update or version allowlist.
+
+The current preview supports native Windows file-backed ChatGPT sign-ins. It does not support WSL, API-key accounts, custom providers, macOS account switching, automatic account rotation, or concurrent use of saved accounts.
 
 ## Build from source
 
-Install Rust 1.90.0 and Visual Studio C++ Build Tools with the Windows SDK, then:
+Install Rust 1.90.0 and Visual Studio C++ Build Tools with the Windows SDK, then run:
 
 ```console
 python tools/check_dependencies.py
@@ -74,23 +60,18 @@ cargo fetch --locked
 cargo build -p codex-accounts-desktop --release --locked --offline
 ```
 
-Run `target/release/codex-accounts-desktop.exe`. Close any older Accounts window first.
-The UI is embedded in the executable.
+The executable will be at `target/release/codex-accounts-desktop.exe`. The interface is embedded, so Node is not required to build or run the desktop app.
 
 ## Documentation
 
-- [User guide](docs/user-guide.md): account management, usage and recovery.
-- [Development](CONTRIBUTING.md): setup, focused checks and contribution workflow.
-- [Architecture](docs/architecture.md): crate responsibilities and credential boundaries.
-- [CI and build delivery](docs/ci.md): parallel jobs, security scans and artifact retention.
-- [Security](SECURITY.md): protection limits and safe reporting.
-- [Documentation index](docs/README.md): specification, roadmap and historical evidence.
+- [User guide](docs/user-guide.md)
+- [Contributing](CONTRIBUTING.md)
+- [Architecture](docs/architecture.md)
+- [CI and releases](docs/ci.md)
+- [Security](SECURITY.md)
+- [Security model](docs/security-model.md)
+- [Documentation index](docs/README.md)
 
 ## License
 
-Codex Accounts is licensed under [GNU AGPL version 3 only](LICENSE)
-(`AGPL-3.0-only`). Third-party dependencies retain their own licenses.
-
-The owner has confirmed a real account round trip and accepted the current UI.
-Preview builds remain unsigned and pre-1.0; a passing pipeline is not a complete
-independent security audit.
+Codex Accounts is licensed under [GNU AGPL version 3 only](LICENSE). Third-party dependencies retain their own licenses.

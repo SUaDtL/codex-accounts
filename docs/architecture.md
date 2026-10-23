@@ -27,7 +27,10 @@ runtime validation. Recovery retains enough state to resolve interrupted mutatio
 No arbitrary command, path or credential-export API is exposed to the renderer.
 
 The active Codex file credential remains in the format Codex expects. Inactive profiles
-are encrypted using a key protected for the current Windows user by DPAPI. Storage
+are encrypted using a key protected for the current Windows user by DPAPI. Optional
+hardened mode wraps that DPAPI blob with XChaCha20-Poly1305 using an Argon2id-derived
+key. Its fixed parameters use 64 MiB, three passes and a random salt. Argon2 working
+memory and derived keys are cleared after use. Storage
 validation permits the specifically verified Codex-managed permissions documented in
 [the permission amendment](spec-amendments/managed-parent-permissions-2026-10-21.md).
 The app does not rewrite Windows permissions to force a configuration to pass.

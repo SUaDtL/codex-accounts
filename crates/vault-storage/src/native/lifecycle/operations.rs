@@ -270,6 +270,7 @@ impl Vault {
     /// Repeated captures of one account update the same encrypted profile.
     pub fn capture_current(&mut self, label: ProfileText) -> Result<ProfileId, OperationError> {
         self.storage.ensure_operation_idle()?;
+        super::consent::capture(label.0.as_str())?;
         let mut effects = NativeEffects::open()?;
         let capture = effects.capture()?;
         let profile = self

@@ -507,7 +507,8 @@ input {
 .sr-only { position:absolute; width:1px; height:1px; padding:0; overflow:hidden; clip-path:inset(50%); white-space:nowrap; }
 
 #action-dialog { padding:18px; max-height:calc(100dvh - 24px); overflow:hidden; }
-#action-form { display:flex; flex-direction:column; max-height:calc(100dvh - 62px); }
+#passphrase-dialog { padding:18px; max-width:460px; overflow:hidden; }
+#action-form,#passphrase-form { display:flex; flex-direction:column; max-height:calc(100dvh - 62px); }
 #action-form h2 { flex-shrink:0; margin-bottom:12px; }
 .dialog-body { overflow:auto; min-height:0; scrollbar-width:thin; padding:6px; margin:-6px; }
 #action-form .dialog-actions { flex-shrink:0; margin-top:14px; }

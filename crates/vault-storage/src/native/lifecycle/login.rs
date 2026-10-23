@@ -349,12 +349,159 @@ fn protocol(
 fn approved_url(url: &str) -> bool {
     // Official codex-rs/login/src/server.rs DEFAULT_ISSUER and authorize path.
     // No shell command line or caller-supplied authority is constructed.
-    url.len() <= 16384
-        && url.starts_with("https://auth.openai.com/oauth/authorize?")
-        && url.len() > "https://auth.openai.com/oauth/authorize?".len()
-        && url
+    const PREFIX: &str = "https://auth.openai.com/oauth/authorize?";
+    if url.len() > 16384
+        || !url.starts_with(PREFIX)
+        || url.len() == PREFIX.len()
+        || !url
             .bytes()
             .all(|byte| byte.is_ascii_graphic() && !matches!(byte, b'\\' | b'"' | b'\'' | b'#'))
+    {
+        return false;
+    }
+    let mut names = std::collections::BTreeSet::new();
+    let mut response_type = false;
+    let mut client_id = false;
+    let mut redirect = false;
+    let mut challenge_method = false;
+    let mut challenge = false;
+    let mut state = false;
+    let mut scope = false;
+    let mut organizations = false;
+    let mut simplified = false;
+    let mut originator = false;
+    for pair in url[PREFIX.len()..].split('&') {
+        let Some((raw_name, raw_value)) = pair.split_once('=') else {
+            return false;
+        };
+        let Some(name) = decode_query(raw_name) else {
+            return false;
+        };
+        let Some(value) = decode_query(raw_value) else {
+            return false;
+        };
+        if !safe_query_name(&name) || !safe_query_value(&value) || !names.insert(name.clone()) {
+            return false;
+        }
+        match name.as_str() {
+            "response_type" => response_type = value == "code",
+            // This is the public client registration used by the official
+            // packaged runtime. A changed registration is a protocol change,
+            // not a Desktop version change, and must fail closed for review.
+            "client_id" => client_id = value == "app_EMoamEEZ73f0CkXaXp7hrann",
+            "redirect_uri" => redirect = approved_redirect_value(&value),
+            "code_challenge_method" => challenge_method = value == "S256",
+            "code_challenge" => challenge = bounded_base64url(&value, 43, 128),
+            "state" => state = bounded_base64url(&value, 32, 128),
+            "scope" => scope = approved_scope(&value),
+            "id_token_add_organizations" => organizations = value == "true",
+            "codex_cli_simplified_flow" => simplified = value == "true",
+            "originator" => originator = bounded_token(&value, 1, 128),
+            "allowed_workspace_id" => {
+                if !approved_workspace_ids(&value) {
+                    return false;
+                }
+            }
+            _ => return false,
+        }
+    }
+    response_type
+        && client_id
+        && redirect
+        && challenge_method
+        && challenge
+        && state
+        && scope
+        && organizations
+        && simplified
+        && originator
+}
+
+fn safe_query_name(value: &str) -> bool {
+    (1..=64).contains(&value.len())
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-' | b'.'))
+}
+
+fn safe_query_value(value: &str) -> bool {
+    value.len() <= 4096
+        && value.bytes().all(|byte| {
+            byte.is_ascii() && !byte.is_ascii_control() && !matches!(byte, b'\\' | b'"' | b'\'')
+        })
+}
+
+fn bounded_token(value: &str, minimum: usize, maximum: usize) -> bool {
+    (minimum..=maximum).contains(&value.len())
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.' | b'~'))
+}
+
+fn bounded_base64url(value: &str, minimum: usize, maximum: usize) -> bool {
+    (minimum..=maximum).contains(&value.len())
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_'))
+}
+
+fn approved_scope(value: &str) -> bool {
+    const EXPECTED: [&str; 6] = [
+        "api.connectors.invoke",
+        "api.connectors.read",
+        "email",
+        "offline_access",
+        "openid",
+        "profile",
+    ];
+    let mut observed = value.split(' ').collect::<Vec<_>>();
+    observed.sort_unstable();
+    observed == EXPECTED
+}
+
+fn approved_workspace_ids(value: &str) -> bool {
+    value.len() <= 1024 && value.split(',').all(|part| bounded_token(part, 1, 128))
+}
+
+fn decode_query(value: &str) -> Option<String> {
+    let bytes = value.as_bytes();
+    let mut decoded = Vec::with_capacity(bytes.len());
+    let mut index = 0;
+    while index < bytes.len() {
+        if bytes[index] == b'%' {
+            let high = char::from(bytes.get(index + 1).copied()?).to_digit(16)?;
+            let low = char::from(bytes.get(index + 2).copied()?).to_digit(16)?;
+            decoded.push((high << 4 | low) as u8);
+            index += 3;
+        } else {
+            decoded.push(if bytes[index] == b'+' {
+                b' '
+            } else {
+                bytes[index]
+            });
+            index += 1;
+        }
+    }
+    String::from_utf8(decoded).ok()
+}
+
+fn approved_redirect_value(value: &str) -> bool {
+    let Some(rest) = value.strip_prefix("http://") else {
+        return false;
+    };
+    let Some((authority, path)) = rest.split_once('/') else {
+        return false;
+    };
+    if path != "auth/callback" {
+        return false;
+    }
+    let Some((host, port)) = authority.rsplit_once(':') else {
+        return false;
+    };
+    matches!(host, "127.0.0.1" | "localhost")
+        && !port.is_empty()
+        && port.bytes().all(|byte| byte.is_ascii_digit())
+        && port.parse::<u16>().is_ok_and(|port| port != 0)
 }
 fn open_browser(url: &str) -> Result<(), OperationError> {
     if !approved_url(url) {
@@ -785,7 +932,11 @@ mod tests {
         let mut disk = Disk::at(&sandbox.0, true).unwrap();
         let root = bootstrap(&mut disk, true).unwrap();
         let storage = Storage::create(disk, &root).unwrap();
-        let mut vault = Vault { root, storage };
+        let mut vault = Vault {
+            root,
+            storage,
+            protection: crate::VaultProtection::WindowsUser,
+        };
         let capture = |subject: &str, value: &[u8]| {
             let slot = codex_accounts_vault::ResourceId::new(0).unwrap();
             crate::Capture::new(
@@ -844,16 +995,51 @@ mod tests {
     }
     #[test]
     fn browser_authority_is_fixed_and_never_accepts_shell_or_redirect_schemes() {
-        assert!(approved_url("https://auth.openai.com/oauth/authorize?state=SYNTHETIC&redirect_uri=http%3A%2F%2Flocalhost%3A1455"));
+        let valid = "https://auth.openai.com/oauth/authorize?response_type=code&client_id=app_EMoamEEZ73f0CkXaXp7hrann&redirect_uri=http%3A%2F%2F127.0.0.1%3A1455%2Fauth%2Fcallback&code_challenge_method=S256&code_challenge=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA&state=0123456789abcdef0123456789abcdef&scope=openid+profile+email+offline_access+api.connectors.read+api.connectors.invoke&id_token_add_organizations=true&codex_cli_simplified_flow=true&originator=codex_desktop";
+        assert!(approved_url(valid));
+        assert!(approved_url(&valid.replace("127.0.0.1", "localhost")));
+        let (prefix, query) = valid.split_once('?').unwrap();
+        let reversed = query.split('&').rev().collect::<Vec<_>>().join("&");
+        assert!(approved_url(&format!("{prefix}?{reversed}")));
+        assert!(approved_url(&format!(
+            "{valid}&allowed_workspace_id=workspace-1,workspace-2"
+        )));
         for url in [
-            "http://auth.openai.com/oauth/authorize?x=1",
-            "https://auth.openai.com.evil.invalid/oauth/authorize?x=1",
-            "https://auth.openai.com@evil.invalid/oauth/authorize?x=1",
-            "file:///C:/example",
-            "https://auth.openai.com/oauth/authorize?x=1\n",
-            "https://auth.openai.com/oauth/authorize?x=1#fragment",
+            "http://auth.openai.com/oauth/authorize?x=1".to_owned(),
+            "https://auth.openai.com.evil.invalid/oauth/authorize?x=1".to_owned(),
+            "https://auth.openai.com@evil.invalid/oauth/authorize?x=1".to_owned(),
+            "file:///C:/example".to_owned(),
+            "https://auth.openai.com/oauth/authorize?x=1\n".to_owned(),
+            "https://auth.openai.com/oauth/authorize?x=1#fragment".to_owned(),
+            valid.replace("response_type=code&", ""),
+            valid.replace("response_type=code", "response_type=token"),
+            valid.replace("client_id=app_EMoamEEZ73f0CkXaXp7hrann&", ""),
+            valid.replace("app_EMoamEEZ73f0CkXaXp7hrann", "app_unreviewed"),
+            valid.replace("code_challenge_method=S256&", ""),
+            valid.replace("code_challenge_method=S256", "code_challenge_method=plain"),
+            valid.replace(
+                "code_challenge=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA&",
+                "",
+            ),
+            valid.replace("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", "too-short"),
+            valid.replace("state=0123456789abcdef0123456789abcdef&", ""),
+            valid.replace("scope=openid+profile+email+offline_access+api.connectors.read+api.connectors.invoke&", ""),
+            valid.replace("offline_access+", ""),
+            valid.replace("id_token_add_organizations=true", "id_token_add_organizations=false"),
+            valid.replace("codex_cli_simplified_flow=true", "codex_cli_simplified_flow=false"),
+            valid.replace("originator=codex_desktop", "originator="),
+            valid.replace(
+                "redirect_uri=http%3A%2F%2F127.0.0.1%3A1455%2Fauth%2Fcallback",
+                "redirect_uri=https%3A%2F%2Fattacker.invalid%2Fcb",
+            ),
+            valid.replace("%2Fauth%2Fcallback", "%2Fother"),
+            format!("{valid}&redirect_uri=https%3A%2F%2Fattacker.invalid%2Fcb"),
+            format!("{valid}&scope=duplicate"),
+            format!("{valid}&bad%0Aname=value"),
+            format!("{valid}&future_parameter=value"),
+            format!("{valid}&allowed_workspace_id=workspace-1,,workspace-2"),
         ] {
-            assert!(!approved_url(url));
+            assert!(!approved_url(&url), "unexpectedly accepted {url}");
         }
         assert!(generated_name("login-0123456789abcdef0123456789abcdef"));
         assert!(!generated_name("login-../auth.json"));
@@ -892,10 +1078,10 @@ mod tests {
         };
         runtime_context::compatible(config.config, policy.requirements).unwrap();
         session.start_login().unwrap();
-        assert!(matches!(
-            next(session).unwrap(),
-            PipeEvent::LoginStarted { .. }
-        ));
+        let PipeEvent::LoginStarted { auth_url } = next(session).unwrap() else {
+            panic!("login URL missing")
+        };
+        assert!(approved_url(auth_url.as_str()));
         connection.cancellation.request();
         loop {
             match next(session).unwrap() {

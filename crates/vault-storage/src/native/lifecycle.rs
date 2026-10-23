@@ -23,6 +23,10 @@ mod target;
 #[cfg(test)]
 mod target_tests;
 
+pub(super) fn confirm_vault_hardening(enable: bool) -> Result<(), crate::StorageError> {
+    consent::vault_hardening(enable)
+}
+
 // Compare the helper's reported home with the already-retained native target.
 // This is protocol spelling normalization, never filesystem identity validation.
 fn same_path(a: &std::path::Path, b: &std::path::Path) -> bool {

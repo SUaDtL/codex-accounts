@@ -435,6 +435,14 @@ fn layout_open(paths: &[PathBuf; 2], create: bool) -> Result<Vault, StorageError
         Ok(paths.clone())
     })
 }
+fn layout_open_with_passphrase(
+    paths: &[PathBuf; 2],
+    passphrase: Option<&[u8]>,
+) -> Result<Vault, StorageError> {
+    open_vault_dispatch_with_passphrase(false, passphrase, &known_location_namespace(paths), || {
+        Ok(paths.clone())
+    })
+}
 
 #[test]
 fn native_layout_namespace_precedes_known_folder_resolution() {
@@ -952,13 +960,15 @@ fn native_layout_unrecognized_initialization_and_key_matrix_are_preserved() {
         .unwrap();
     committed.sync_all().unwrap();
     drop(committed);
+    let before = layout_snapshot(&paths[1]);
     assert!(
         matches!(
             layout_open(&paths, false),
-            Err(StorageError::ExternalChange)
+            Err(StorageError::RecoveryRequired)
         ),
-        "committed plus staged key never selects either"
+        "matching committed and staged keys do not create an unauthenticated store"
     );
+    assert_eq!(layout_snapshot(&paths[1]), before);
     std::fs::remove_file(paths[1].join("key.cakp.stage")).unwrap();
     std::fs::write(paths[1].join("key.cakp"), b"SYNTHETIC_MALFORMED_KEY").unwrap();
     assert!(matches!(
@@ -2309,6 +2319,210 @@ fn native_create_bootstrap_reopen_and_ciphertext_only() {
         let b = s.disk.read(&n).unwrap().unwrap();
         assert!(!b.windows(9).any(|v| v == b"SYNTHETIC"));
     }
+}
+#[test]
+fn native_hardened_root_requires_its_passphrase_and_windows_user() {
+    let dir = Sandbox::new();
+    let mut disk = Disk::at(&dir.0, true).unwrap();
+    let (root, protection) =
+        bootstrap_protected(&mut disk, true, Some(b"correct horse battery staple")).unwrap();
+    let identifier = root.identifier();
+    assert_eq!(protection, crate::VaultProtection::Passphrase);
+    drop(root);
+    drop(disk);
+
+    let mut disk = Disk::at(&dir.0, false).unwrap();
+    assert!(matches!(
+        bootstrap_protected(&mut disk, false, None),
+        Err(StorageError::PassphraseRequired)
+    ));
+    assert!(matches!(
+        bootstrap_protected(&mut disk, false, Some(b"wrong passphrase but long enough")),
+        Err(StorageError::InvalidPassphrase)
+    ));
+    let (root, protection) =
+        bootstrap_protected(&mut disk, false, Some(b"correct horse battery staple")).unwrap();
+    assert_eq!(root.identifier(), identifier);
+    assert_eq!(protection, crate::VaultProtection::Passphrase);
+}
+#[test]
+fn native_known_location_reopens_hardened_root_and_finishes_both_rewrap_directions() {
+    let (_fixture, paths) = layout_fixture();
+    let mut vault = layout_open(&paths, true).unwrap();
+    let identifier = vault.root.identifier();
+    let hardened = vault
+        .root
+        .protect_with_passphrase(b"correct horse battery staple")
+        .unwrap();
+    vault
+        .storage
+        .disk
+        .stage("key.cakp", hardened.as_bytes())
+        .unwrap();
+    drop(vault);
+
+    assert!(matches!(
+        layout_open_with_passphrase(&paths, None),
+        Err(StorageError::PassphraseRequired)
+    ));
+    let mut vault =
+        layout_open_with_passphrase(&paths, Some(b"correct horse battery staple")).unwrap();
+    assert_eq!(vault.root.identifier(), identifier);
+    assert_eq!(vault.protection, crate::VaultProtection::Passphrase);
+    assert!(vault.storage.disk.read("key.cakp.stage").unwrap().is_none());
+    let ordinary = vault.root.protect().unwrap();
+    vault
+        .storage
+        .disk
+        .stage("key.cakp", ordinary.as_bytes())
+        .unwrap();
+    drop(vault);
+
+    let vault = layout_open_with_passphrase(&paths, Some(b"correct horse battery staple")).unwrap();
+    assert_eq!(vault.root.identifier(), identifier);
+    assert_eq!(vault.protection, crate::VaultProtection::WindowsUser);
+    assert!(vault.storage.disk.read("key.cakp.stage").unwrap().is_none());
+}
+
+#[test]
+fn native_key_rewrap_successfully_enables_and_removes_passphrase_protection() {
+    let (_fixture, paths) = layout_fixture();
+    let mut vault = layout_open(&paths, true).unwrap();
+    let identifier = vault.root.identifier();
+    replace_vault_protection(
+        &mut vault,
+        Some(b"correct horse battery staple"),
+        crate::VaultProtection::Passphrase,
+    )
+    .unwrap();
+    assert_eq!(vault.protection, crate::VaultProtection::Passphrase);
+    drop(vault);
+
+    let mut vault =
+        layout_open_with_passphrase(&paths, Some(b"correct horse battery staple")).unwrap();
+    assert_eq!(vault.root.identifier(), identifier);
+    replace_vault_protection(&mut vault, None, crate::VaultProtection::WindowsUser).unwrap();
+    assert_eq!(vault.protection, crate::VaultProtection::WindowsUser);
+    assert!(vault.storage.disk.read("key.cakp.stage").unwrap().is_none());
+    drop(vault);
+
+    let vault = layout_open_with_passphrase(&paths, None).unwrap();
+    assert_eq!(vault.root.identifier(), identifier);
+    assert_eq!(vault.protection, crate::VaultProtection::WindowsUser);
+}
+
+#[test]
+fn native_key_rewrap_cleans_a_failed_pre_rename_stage() {
+    let (_fixture, paths) = layout_fixture();
+    let mut vault = layout_open(&paths, true).unwrap();
+    let fault = CreationFault::arm(7);
+    let result = replace_vault_protection(
+        &mut vault,
+        Some(b"correct horse battery staple"),
+        crate::VaultProtection::Passphrase,
+    );
+    drop(fault);
+    assert_eq!(result, Err(StorageError::Io));
+    assert_eq!(vault.protection, crate::VaultProtection::WindowsUser);
+    assert!(vault.storage.disk.read("key.cakp.stage").unwrap().is_none());
+    drop(vault);
+    assert!(layout_open_with_passphrase(&paths, None).is_ok());
+}
+
+#[test]
+fn native_key_rewrap_reports_a_post_rename_failure_as_uncertain() {
+    let (_fixture, paths) = layout_fixture();
+    let mut vault = layout_open(&paths, true).unwrap();
+    let fault = CreationFault::arm(6);
+    let result = replace_vault_protection(
+        &mut vault,
+        Some(b"correct horse battery staple"),
+        crate::VaultProtection::Passphrase,
+    );
+    drop(fault);
+    assert_eq!(result, Err(StorageError::ProtectionChangeUncertain));
+    assert_eq!(vault.protection, crate::VaultProtection::Passphrase);
+    assert!(vault.storage.disk.read("key.cakp.stage").unwrap().is_none());
+    drop(vault);
+    assert!(layout_open_with_passphrase(&paths, Some(b"correct horse battery staple")).is_ok());
+}
+#[test]
+fn native_torn_hardening_rewrap_finishes_only_with_the_same_root_and_passphrase() {
+    let dir = Sandbox::new();
+    let mut disk = Disk::at(&dir.0, true).unwrap();
+    let root = bootstrap(&mut disk, true).unwrap();
+    let identifier = root.identifier();
+    let hardened = root
+        .protect_with_passphrase(b"correct horse battery staple")
+        .unwrap();
+    disk.stage("key.cakp", hardened.as_bytes()).unwrap();
+    let current_before = std::fs::read(dir.0.join("key.cakp")).unwrap();
+    let staged_before = std::fs::read(dir.0.join("key.cakp.stage")).unwrap();
+    drop(disk);
+
+    let mut disk = Disk::at(&dir.0, false).unwrap();
+    assert!(matches!(
+        bootstrap_protected(&mut disk, false, None),
+        Err(StorageError::PassphraseRequired)
+    ));
+    assert!(matches!(
+        bootstrap_protected(&mut disk, false, Some(b"wrong passphrase but long enough")),
+        Err(StorageError::InvalidPassphrase)
+    ));
+    assert_eq!(
+        std::fs::read(dir.0.join("key.cakp")).unwrap(),
+        current_before
+    );
+    assert_eq!(
+        std::fs::read(dir.0.join("key.cakp.stage")).unwrap(),
+        staged_before
+    );
+    let (root, protection) =
+        bootstrap_protected(&mut disk, false, Some(b"correct horse battery staple")).unwrap();
+    assert_eq!(root.identifier(), identifier);
+    assert_eq!(protection, crate::VaultProtection::Passphrase);
+    assert!(disk.read("key.cakp.stage").unwrap().is_none());
+
+    let ordinary = root.protect().unwrap();
+    disk.stage("key.cakp", ordinary.as_bytes()).unwrap();
+    drop(disk);
+    let mut disk = Disk::at(&dir.0, false).unwrap();
+    let (root, protection) =
+        bootstrap_protected(&mut disk, false, Some(b"correct horse battery staple")).unwrap();
+    assert_eq!(root.identifier(), identifier);
+    assert_eq!(protection, crate::VaultProtection::WindowsUser);
+}
+
+#[test]
+fn native_torn_hardening_refuses_a_foreign_root_without_changing_either_wrapper() {
+    let (_fixture, paths) = layout_fixture();
+    let mut vault = layout_open(&paths, true).unwrap();
+    let foreign = RootKey::generate()
+        .unwrap()
+        .protect_with_passphrase(b"correct horse battery staple")
+        .unwrap();
+    vault
+        .storage
+        .disk
+        .stage("key.cakp", foreign.as_bytes())
+        .unwrap();
+    let root = &paths[1];
+    let current_before = std::fs::read(root.join("key.cakp")).unwrap();
+    let staged_before = std::fs::read(root.join("key.cakp.stage")).unwrap();
+    drop(vault);
+
+    assert!(matches!(
+        layout_open_with_passphrase(&paths, Some(b"correct horse battery staple")),
+        Err(StorageError::ExternalChange)
+    ));
+    assert_eq!(
+        std::fs::read(root.join("key.cakp")).unwrap(),
+        current_before
+    );
+    assert_eq!(
+        std::fs::read(root.join("key.cakp.stage")).unwrap(),
+        staged_before
+    );
 }
 #[test]
 fn native_kernel_lock_and_parent_replacement_refuse() {

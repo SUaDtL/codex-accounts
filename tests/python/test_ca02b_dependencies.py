@@ -1,4 +1,4 @@
-"""CA02B adds only two SDK binding flags, never packages or product authority."""
+"""Current dependency review plus immutable CA02B history."""
 import copy
 import json
 from pathlib import Path
@@ -9,7 +9,7 @@ import unittest
 from tools import check_dependencies as checker
 
 ROOT = Path(__file__).resolve().parents[2]
-REVIEW = 'docs/ca-02b-dependencies.json'
+REVIEW = 'docs/ca-08-dependencies.json'
 
 
 class Ca02bDependencies(unittest.TestCase):
@@ -24,11 +24,11 @@ class Ca02bDependencies(unittest.TestCase):
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(ROOT / relative, target)
 
-    def test_current_zero_new_407_retained_and_eight_predecessors_pass(self):
-        self.assertEqual(checker.check(self.root)['reviewed_packages'], 407)
-        self.assertEqual(self.review['packages'], [])
-        self.assertEqual(len(self.review['retained_package_identity']), 407)
-        self.assertEqual(len(self.review['predecessor_sha256']), 8)
+    def test_current_ten_new_421_total_and_ten_predecessors_pass(self):
+        self.assertEqual(checker.check(self.root)['reviewed_packages'], 421)
+        self.assertEqual(len(self.review['packages']), 10)
+        self.assertEqual(self.review['external_counts']['retained'], 411)
+        self.assertEqual(len(self.review['predecessor_sha256']), 10)
 
     def test_license_amendment_does_not_allow_other_manifest_changes(self):
         path = self.root / 'Cargo.toml'
@@ -61,11 +61,9 @@ class Ca02bDependencies(unittest.TestCase):
     def test_current_contributions_retention_and_feature_claims_cannot_change(self):
         for mutate in [
             lambda r: r.update(status='pending'),
-            lambda r: r['packages'].append(copy.deepcopy(r['retained_package_identity'][0])),
-            lambda r: r['retained_package_identity'].pop(),
-            lambda r: r['retained_package_identity'].append(copy.deepcopy(r['retained_package_identity'][0])),
-            lambda r: r['feature_scope']['exact_helpers'].append('unreviewed'),
-            lambda r: r.update(product_qualification=True),
+            lambda r: r['packages'].append(copy.deepcopy(r['packages'][0])),
+            lambda r: r['packages'].pop(),
+            lambda r: r['feature_scope'].update(feature='unreviewed'),
             lambda r: r['manifest_sha256'].update({'Cargo.toml': '0' * 64}),
             lambda r: r['predecessor_sha256'].pop('docs/ca-06b-dependencies.json'),
         ]:
@@ -80,7 +78,7 @@ class Ca02bDependencies(unittest.TestCase):
         historical = json.loads(path.read_text())
         self.assertEqual(len(historical['packages']), 349)
         self.assertEqual(len(historical['retained_package_identity']), 58)
-        self.assertEqual(checker.check(self.root)['reviewed_packages'], 407)
+        self.assertEqual(checker.check(self.root)['reviewed_packages'], 421)
         historical['packages'] += historical['retained_package_identity']
         path.write_text(json.dumps(historical))
         with self.assertRaisesRegex(ValueError, 'Prior review bytes'):

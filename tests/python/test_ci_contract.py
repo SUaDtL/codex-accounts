@@ -82,6 +82,10 @@ class DependencyAcquisitionContractTests(unittest.TestCase):
         self.reject("ubuntu-24.04, windows-latest, macos-latest", "ubuntu-24.04, macos-latest")
         self.reject("fail-fast: false", "fail-fast: true")
 
+    def test_desktop_ui_timeout_covers_a_cold_browser_install(self) -> None:
+        self.reject("  desktop-ui:\n    name: Desktop UI behavior\n    runs-on: ubuntu-24.04\n    timeout-minutes: 15\n",
+                    "  desktop-ui:\n    name: Desktop UI behavior\n    runs-on: ubuntu-24.04\n    timeout-minutes: 10\n")
+
     def test_native_evidence_cannot_be_omitted_or_changed_to_literal_success(self) -> None:
         self.reject("run: python tools/check_windows_process.py", "run: echo success")
         self.reject(" && steps.supervisor_tests.outcome == 'success'", "")
