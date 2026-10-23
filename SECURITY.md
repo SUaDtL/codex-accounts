@@ -12,7 +12,9 @@ compromised operating system.
 - Account mutations require supported official installation, runtime, policy, storage
   protection and client-state checks. The app never force-closes Codex clients.
 - Browser authentication uses the official runtime in an isolated temporary home.
-  The app does not implement its own OAuth refresh flow or export credentials.
+  The authorize request must match the reviewed Codex client, PKCE, scopes and loopback
+  callback contract. The app does not implement its own OAuth refresh flow or export
+  credentials.
 - The renderer receives display metadata, not tokens or vault keys. Bundled assets are
   local; no frontend development server is required.
 - Usage monitoring sends read-only HTTPS requests with existing tokens to the fixed

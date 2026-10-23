@@ -12,6 +12,7 @@ struct Image {
     path: PathBuf,
     handle: ReadHandle,
     sha256: String,
+    signer: Vec<u8>,
 }
 
 /// Backend-only installation binding. Paths never enter serialized reports or
@@ -23,6 +24,7 @@ pub struct OfficialInstallation {
     manifest: ReadHandle,
     desktop: Image,
     runtime: Image,
+    signer_sha256: String,
     archive: ReadHandle,
     contained_core: bool,
     provisioning: Option<ReadHandle>,
@@ -71,11 +73,15 @@ fn desktop_relative(executables: &[String]) -> Result<&'static str, ReadError> {
     selected.ok_or(ReadError::InvalidMetadata)
 }
 
-fn official_signature(observation: crate::native::CachedSignature) -> bool {
-    matches!(
-        observation,
-        crate::native::CachedSignature::AcceptedLeaf(bytes) if !bytes.is_empty()
-    )
+fn official_signer(observation: crate::native::CachedSignature) -> Option<Vec<u8>> {
+    match observation {
+        crate::native::CachedSignature::AcceptedLeaf(bytes) if !bytes.is_empty() => Some(bytes),
+        _ => None,
+    }
+}
+
+fn matching_signers(left: &[u8], right: &[u8]) -> bool {
+    !left.is_empty() && left == right
 }
 
 fn image(root: &RegisteredRoot, package: &Path, relative: &str) -> Result<Image, ReadError> {
@@ -83,9 +89,7 @@ fn image(root: &RegisteredRoot, package: &Path, relative: &str) -> Result<Image,
     if handle.current_user_can_replace_or_modify()? {
         return Err(ReadError::UnsafePath);
     }
-    if !official_signature(handle.cached_signature()) {
-        return Err(ReadError::InvalidMetadata);
-    }
+    let signer = official_signer(handle.cached_signature()).ok_or(ReadError::InvalidMetadata)?;
     let path = package.join(relative);
     let identity = binary_identity(&mut handle)?;
     if identity.machine != 0x8664 {
@@ -95,6 +99,7 @@ fn image(root: &RegisteredRoot, package: &Path, relative: &str) -> Result<Image,
         path,
         handle,
         sha256: identity.sha256,
+        signer,
     })
 }
 
@@ -121,6 +126,10 @@ impl OfficialInstallation {
         let executables = parse_manifest(&manifest.bytes(MAX_CONFIG_BYTES)?, Some(&candidate))?;
         let desktop = image(&root, &candidate.root, desktop_relative(&executables)?)?;
         let runtime = image(&root, &candidate.root, RUNTIME)?;
+        if !matching_signers(&desktop.signer, &runtime.signer) {
+            return Err(ReadError::InvalidMetadata);
+        }
+        let signer_sha256 = hash_bytes(&desktop.signer)?;
         let mut archive = root.open_relative("app/resources/app.asar")?;
         if archive.current_user_can_replace_or_modify()? {
             return Err(ReadError::UnsafePath);
@@ -133,6 +142,7 @@ impl OfficialInstallation {
             manifest,
             desktop,
             runtime,
+            signer_sha256,
             archive,
             contained_core,
             provisioning,
@@ -168,6 +178,11 @@ impl OfficialInstallation {
     }
     pub fn runtime_sha256(&self) -> &str {
         &self.runtime.sha256
+    }
+    /// Hash of the shared Authenticode leaf for the Desktop and runtime images.
+    /// It is observation metadata, never an exact-version or certificate allowlist.
+    pub fn signer_sha256(&self) -> &str {
+        &self.signer_sha256
     }
 
     pub fn revalidate(&self) -> Result<(), ReadError> {
@@ -286,12 +301,19 @@ mod tests {
     #[test]
     fn lifecycle_images_require_cached_authenticode_with_a_signer() {
         use crate::native::CachedSignature;
-        assert!(official_signature(CachedSignature::AcceptedLeaf(vec![1])));
-        assert!(!official_signature(CachedSignature::NotEstablished));
-        assert!(!official_signature(
-            CachedSignature::AcceptedSignerUnavailable
-        ));
-        assert!(!official_signature(CachedSignature::CleanupFailed));
+        assert_eq!(
+            official_signer(CachedSignature::AcceptedLeaf(vec![1])),
+            Some(vec![1])
+        );
+        assert_eq!(official_signer(CachedSignature::NotEstablished), None);
+        assert_eq!(
+            official_signer(CachedSignature::AcceptedSignerUnavailable),
+            None
+        );
+        assert_eq!(official_signer(CachedSignature::CleanupFailed), None);
+        assert!(matching_signers(&[1], &[1]));
+        assert!(!matching_signers(&[1], &[2]));
+        assert!(!matching_signers(&[], &[]));
     }
 
     #[test]
@@ -396,6 +418,7 @@ mod tests {
         );
         assert_eq!(installation.desktop_sha256().len(), 64);
         assert_eq!(installation.runtime_sha256().len(), 64);
+        assert_eq!(installation.signer_sha256().len(), 64);
         assert!(DESKTOP_NAMES
             .iter()
             .any(|relative| installation.desktop_path()

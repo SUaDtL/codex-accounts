@@ -15,7 +15,10 @@ The app delegates sign-in and credential acceptance to the installed official Co
 runtime. It does not implement OAuth token refresh and does not expose credentials
 through a command line, API or plugin surface. The app validates the official Store
 package, publisher registration, Authenticode signature, executable architecture and
-file protections before it lets that runtime participate in an account operation.
+file protections before it lets that runtime participate in an account operation. The
+Desktop and bundled runtime must present the same Windows-validated signing certificate.
+The browser authorize request must also match the reviewed Codex client, PKCE, scope and
+loopback callback contract before the app opens it.
 
 Switching is journaled because several files and processes must agree on one account.
 If power loss or a crash interrupts the change, the journal lets the app finish or
