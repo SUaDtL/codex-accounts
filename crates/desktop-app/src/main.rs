@@ -315,6 +315,7 @@ mod desktop {
     }
 
     fn show_main(app: &AppHandle) {
+        app.state::<vault::Worker>().cancel_hide();
         if let Some(window) = app.get_webview_window("main") {
             let _ = window.unminimize();
             let _ = window.show();
@@ -325,7 +326,11 @@ mod desktop {
     fn hide_main(app: &AppHandle) {
         if let Some(window) = app.get_webview_window("main") {
             let _ = window.emit("window-hiding", ());
-            let _ = window.hide();
+            if window.hide().is_err() {
+                app.state::<vault::Worker>().cancel_hide();
+            }
+        } else {
+            app.state::<vault::Worker>().cancel_hide();
         }
     }
 
@@ -413,8 +418,8 @@ mod desktop {
                 TrayAction::Open => show_main(app),
                 TrayAction::Quit => request_quit(app),
                 TrayAction::Profile(profile) => {
-                    let _ = app.emit_to("main", "tray-switch-profile", profile);
                     show_main(app);
+                    let _ = app.emit_to("main", "tray-switch-profile", profile);
                 }
                 TrayAction::Ignore => {}
             })
@@ -453,7 +458,7 @@ mod desktop {
             .on_window_event(|window, event| {
                 if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                     api.prevent_close();
-                    if window.state::<vault::Worker>().locks_on_hide() {
+                    if window.state::<vault::Worker>().begin_hide() {
                         let app = window.app_handle().clone();
                         tauri::async_runtime::spawn(async move {
                             match app
@@ -467,6 +472,7 @@ mod desktop {
                                     hide_main(&app);
                                 }
                                 Err(error) => {
+                                    app.state::<vault::Worker>().cancel_hide();
                                     let _ = app.emit_to("main", "vault-lock-failed", error);
                                 }
                             }

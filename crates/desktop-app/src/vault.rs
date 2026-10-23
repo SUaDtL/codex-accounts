@@ -47,6 +47,7 @@ pub struct Worker {
     busy: Arc<AtomicBool>,
     active: Arc<Mutex<Option<ActiveControl>>>,
     close_requested: AtomicBool,
+    hide_requested: AtomicBool,
     hardened: Arc<AtomicBool>,
 }
 
@@ -106,18 +107,22 @@ impl Worker {
             busy: Arc::default(),
             active: Arc::default(),
             close_requested: AtomicBool::new(false),
+            hide_requested: AtomicBool::new(false),
             hardened,
         })
     }
 
     pub async fn request(&self, intent: Intent) -> Reply {
+        if self.hide_requested.load(Ordering::SeqCst) && !matches!(&intent, Intent::Close) {
+            return Err("vault_closing");
+        }
         if self.close_requested.load(Ordering::Acquire)
-            && !matches!(intent, Intent::List | Intent::Close)
+            && !matches!(&intent, Intent::List | Intent::Close)
         {
             return Err("vault_closing");
         }
         self.busy
-            .compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed)
+            .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
             .map_err(|_| "vault_busy")?;
         let guard = RequestGuard {
             busy: self.busy.clone(),
@@ -135,8 +140,9 @@ impl Worker {
         }
         // A close event may race with admission before the control is installed.
         // Refuse before queueing any new effects, rather than losing that cancel.
-        if self.close_requested.load(Ordering::Acquire)
-            && !matches!(intent, Intent::List | Intent::Close)
+        if (self.hide_requested.load(Ordering::SeqCst) && !matches!(&intent, Intent::Close))
+            || (self.close_requested.load(Ordering::Acquire)
+                && !matches!(&intent, Intent::List | Intent::Close))
         {
             return Err("vault_closing");
         }
@@ -207,7 +213,19 @@ impl Worker {
     }
 
     pub fn locks_on_hide(&self) -> bool {
-        self.hardened.load(Ordering::Acquire)
+        self.busy.load(Ordering::SeqCst) || self.hardened.load(Ordering::Acquire)
+    }
+
+    pub fn begin_hide(&self) -> bool {
+        // This store, the busy load, request admission and its second hide
+        // check share one total order. Either hiding sees the admitted request
+        // or that request sees hiding and stops before reaching the worker.
+        self.hide_requested.store(true, Ordering::SeqCst);
+        self.locks_on_hide()
+    }
+
+    pub fn cancel_hide(&self) {
+        self.hide_requested.store(false, Ordering::SeqCst);
     }
 
     /// Keep the UI alive while the owned operation is reaped and its files are
@@ -246,6 +264,9 @@ fn execute(
     health: &mut Option<metadata::Health>,
     intent: Intent,
 ) -> Reply {
+    if !valid_new_passphrase(&intent) {
+        return Err("vault_invalid_passphrase");
+    }
     let mut reauthentication = None;
     let mut diagnostics_exported = None;
     if !matches!(
@@ -424,6 +445,10 @@ fn parse_id(value: &str) -> Result<[u8; 16], &'static str> {
 
 fn profile_id(value: &str) -> Result<ProfileId, &'static str> {
     ProfileId::from_bytes(parse_id(value)?).map_err(|_| "invalid_selection")
+}
+
+fn valid_new_passphrase(intent: &Intent) -> bool {
+    !matches!(intent, Intent::Harden(value) if !(12..=256).contains(&value.chars().count()))
 }
 
 #[cfg(target_arch = "x86_64")]
@@ -625,8 +650,14 @@ mod tests {
                 busy: Arc::new(AtomicBool::new(true)),
                 active: Arc::new(Mutex::new(Some(control))),
                 close_requested: AtomicBool::new(false),
+                hide_requested: AtomicBool::new(false),
                 hardened: Arc::new(AtomicBool::new(false)),
             };
+            assert!(
+                worker.begin_hide(),
+                "an admitted vault operation must keep the window visible until cleanup finishes"
+            );
+            worker.cancel_hide();
             assert!(worker.cancel_for_close());
             assert_eq!(worker.action_status(), Ok("closing"));
             // Requesting cancellation alone is not evidence of cleanup completion.
@@ -634,7 +665,36 @@ mod tests {
             *worker.active.lock().unwrap() = None;
             worker.busy.store(false, Ordering::Release);
             assert!(!worker.cancel_for_close());
+            assert!(!worker.locks_on_hide());
         }
+    }
+
+    #[test]
+    fn hidden_window_blocks_admission_until_reopened_and_completed_hardening_still_locks() {
+        let worker = Worker {
+            sender: None,
+            thread: None,
+            busy: Arc::new(AtomicBool::new(false)),
+            active: Arc::new(Mutex::new(None)),
+            close_requested: AtomicBool::new(false),
+            hide_requested: AtomicBool::new(false),
+            hardened: Arc::new(AtomicBool::new(false)),
+        };
+
+        assert!(!worker.begin_hide());
+        assert!(matches!(
+            tauri::async_runtime::block_on(worker.request(Intent::List)),
+            Err("vault_closing")
+        ));
+        worker.cancel_hide();
+        assert!(matches!(
+            tauri::async_runtime::block_on(worker.request(Intent::List)),
+            Err("vault_unavailable")
+        ));
+
+        worker.hardened.store(true, Ordering::Release);
+        assert!(!worker.busy.load(Ordering::Acquire));
+        assert!(worker.begin_hide());
     }
 
     #[test]
@@ -644,6 +704,25 @@ mod tests {
             assert_eq!(parse_id(&input), Err("invalid_selection"));
         }
         assert!(profile_id(&"00".repeat(16)).is_err());
+    }
+
+    #[test]
+    fn passphrase_length_uses_unicode_characters() {
+        assert!(!valid_new_passphrase(&Intent::Harden(
+            zeroize::Zeroizing::new("🔐".repeat(11))
+        )));
+        assert!(valid_new_passphrase(&Intent::Harden(
+            zeroize::Zeroizing::new("🔐".repeat(12))
+        )));
+        assert!(valid_new_passphrase(&Intent::Harden(
+            zeroize::Zeroizing::new("界".repeat(256))
+        )));
+        assert!(!valid_new_passphrase(&Intent::Harden(
+            zeroize::Zeroizing::new("界".repeat(257))
+        )));
+        assert!(valid_new_passphrase(&Intent::Unlock(
+            zeroize::Zeroizing::new("🔐".repeat(6))
+        )));
     }
 
     #[test]

@@ -705,8 +705,8 @@ byId("passphrase-form").addEventListener("submit", async (event) => {
   event.preventDefault();
   if (!passphraseMode || vaultBusy) return;
   let passphrase = byId("vault-passphrase").value;
-  const bytes = new TextEncoder().encode(passphrase).length;
-  if (bytes < 12 || bytes > 1024) {
+  const characters = [...passphrase].length;
+  if (passphraseMode === "harden" && (characters < 12 || characters > 256)) {
     byId("passphrase-error").textContent = "Use 12 to 256 characters.";
     return;
   }

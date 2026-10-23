@@ -2456,6 +2456,8 @@ fn native_torn_hardening_rewrap_finishes_only_with_the_same_root_and_passphrase(
         .protect_with_passphrase(b"correct horse battery staple")
         .unwrap();
     disk.stage("key.cakp", hardened.as_bytes()).unwrap();
+    let current_before = std::fs::read(dir.0.join("key.cakp")).unwrap();
+    let staged_before = std::fs::read(dir.0.join("key.cakp.stage")).unwrap();
     drop(disk);
 
     let mut disk = Disk::at(&dir.0, false).unwrap();
@@ -2463,6 +2465,18 @@ fn native_torn_hardening_rewrap_finishes_only_with_the_same_root_and_passphrase(
         bootstrap_protected(&mut disk, false, None),
         Err(StorageError::PassphraseRequired)
     ));
+    assert!(matches!(
+        bootstrap_protected(&mut disk, false, Some(b"wrong passphrase but long enough")),
+        Err(StorageError::InvalidPassphrase)
+    ));
+    assert_eq!(
+        std::fs::read(dir.0.join("key.cakp")).unwrap(),
+        current_before
+    );
+    assert_eq!(
+        std::fs::read(dir.0.join("key.cakp.stage")).unwrap(),
+        staged_before
+    );
     let (root, protection) =
         bootstrap_protected(&mut disk, false, Some(b"correct horse battery staple")).unwrap();
     assert_eq!(root.identifier(), identifier);
@@ -2477,6 +2491,38 @@ fn native_torn_hardening_rewrap_finishes_only_with_the_same_root_and_passphrase(
         bootstrap_protected(&mut disk, false, Some(b"correct horse battery staple")).unwrap();
     assert_eq!(root.identifier(), identifier);
     assert_eq!(protection, crate::VaultProtection::WindowsUser);
+}
+
+#[test]
+fn native_torn_hardening_refuses_a_foreign_root_without_changing_either_wrapper() {
+    let (_fixture, paths) = layout_fixture();
+    let mut vault = layout_open(&paths, true).unwrap();
+    let foreign = RootKey::generate()
+        .unwrap()
+        .protect_with_passphrase(b"correct horse battery staple")
+        .unwrap();
+    vault
+        .storage
+        .disk
+        .stage("key.cakp", foreign.as_bytes())
+        .unwrap();
+    let root = &paths[1];
+    let current_before = std::fs::read(root.join("key.cakp")).unwrap();
+    let staged_before = std::fs::read(root.join("key.cakp.stage")).unwrap();
+    drop(vault);
+
+    assert!(matches!(
+        layout_open_with_passphrase(&paths, Some(b"correct horse battery staple")),
+        Err(StorageError::ExternalChange)
+    ));
+    assert_eq!(
+        std::fs::read(root.join("key.cakp")).unwrap(),
+        current_before
+    );
+    assert_eq!(
+        std::fs::read(root.join("key.cakp.stage")).unwrap(),
+        staged_before
+    );
 }
 #[test]
 fn native_kernel_lock_and_parent_replacement_refuse() {
