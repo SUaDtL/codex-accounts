@@ -35,6 +35,45 @@ concurrency:
   group: checks-${{ github.workflow }}-${{ github.event_name }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}"""
 
+RELEASE_WORKFLOW = """name: Publish versioned release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Exact committed version, for example 1.0.0-rc.1
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ inputs.version }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Publish verified Windows release
+    if: ${{ github.repository == 'SUaDtL/codex-accounts' && github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      actions: read
+      contents: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Publish exact successful main artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_VERSION: ${{ inputs.version }}
+        run: python3 tools/publish_release.py
+"""
+
 
 def check_contract(text: str) -> None:
     if text.count("\njobs:\n") != 1 or text.split("\njobs:\n")[0].strip() != HEADER:
@@ -208,12 +247,14 @@ def check_contract(text: str) -> None:
 
 def check(root: Path = ROOT) -> None:
     workflows = root / ".github/workflows"
-    if sorted(p.name for p in workflows.iterdir() if p.suffix in {".yml", ".yaml"}) != ["artifact-retention.yml", "ci.yml", "security-scheduled.yml"]:
+    if sorted(p.name for p in workflows.iterdir() if p.suffix in {".yml", ".yaml"}) != ["artifact-retention.yml", "ci.yml", "release.yml", "security-scheduled.yml"]:
         raise ValueError("Unreviewed workflow or temporary preparation workflow")
     toolchain = tomllib.loads((root / "rust-toolchain.toml").read_text(encoding="utf-8"))
     if toolchain != {"toolchain": {"channel": "1.90.0", "profile": "minimal", "components": ["rustfmt", "clippy"]}}:
         raise ValueError("Toolchain and workflow contract must change together")
     check_contract((workflows / "ci.yml").read_text(encoding="utf-8"))
+    if (workflows / "release.yml").read_text(encoding="utf-8") != RELEASE_WORKFLOW:
+        raise ValueError("Versioned release workflow contract changed")
 
 
 if __name__ == "__main__":

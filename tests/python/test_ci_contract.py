@@ -9,6 +9,7 @@ sys.path.insert(0, str(ROOT / "tools"))
 from ci_contract import check, check_contract
 
 WORKFLOW = ROOT / ".github/workflows/ci.yml"
+RELEASE = ROOT / ".github/workflows/release.yml"
 
 
 class DependencyAcquisitionContractTests(unittest.TestCase):
@@ -113,7 +114,7 @@ class DependencyAcquisitionContractTests(unittest.TestCase):
             workflows = root / ".github/workflows"
             workflows.mkdir(parents=True)
             (workflows / "ci.yml").write_text(self.text, encoding="utf-8")
-            for name in ("artifact-retention.yml", "security-scheduled.yml"):
+            for name in ("artifact-retention.yml", "release.yml", "security-scheduled.yml"):
                 (workflows / name).write_text((WORKFLOW.parent / name).read_text(encoding="utf-8"), encoding="utf-8")
             pin = (ROOT / "rust-toolchain.toml").read_text(encoding="utf-8")
             (root / "rust-toolchain.toml").write_text(pin, encoding="utf-8")
@@ -125,6 +126,31 @@ class DependencyAcquisitionContractTests(unittest.TestCase):
             (root / "rust-toolchain.toml").write_text(pin.replace("1.90.0", "stable"), encoding="utf-8")
             with self.assertRaises(ValueError):
                 check(root)
+
+    def test_release_workflow_is_manual_exact_main_and_least_privilege(self) -> None:
+        release = RELEASE.read_text(encoding="utf-8")
+        self.assertIn("workflow_dispatch:\n", release)
+        self.assertNotIn("push:\n", release)
+        for old, new in [
+            ("contents: write", "contents: read"),
+            ("id-token: write", "id-token: none"),
+            ("ref: ${{ github.sha }}", "ref: main"),
+            ("persist-credentials: false", "persist-credentials: true"),
+            ("python3 tools/publish_release.py", "echo published"),
+        ]:
+            with self.subTest(old=old):
+                changed = release.replace(old, new)
+                self.assertNotEqual(changed, release)
+                with tempfile.TemporaryDirectory() as folder:
+                    root = Path(folder)
+                    workflows = root / ".github/workflows"
+                    workflows.mkdir(parents=True)
+                    for name in ("artifact-retention.yml", "ci.yml", "release.yml", "security-scheduled.yml"):
+                        source = (WORKFLOW.parent / name).read_text(encoding="utf-8")
+                        (workflows / name).write_text(changed if name == "release.yml" else source, encoding="utf-8")
+                    (root / "rust-toolchain.toml").write_text((ROOT / "rust-toolchain.toml").read_text(encoding="utf-8"), encoding="utf-8")
+                    with self.assertRaises(ValueError):
+                        check(root)
 
 
 if __name__ == "__main__":

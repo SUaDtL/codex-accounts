@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import tomllib
 from pathlib import Path
 
@@ -34,7 +35,7 @@ def review_json(raw: bytes) -> dict:
     return json.loads(raw, object_pairs_hook=pairs)
 
 
-def direct_boundaries(root: Path) -> None:
+def direct_boundaries(root: Path, workspace_version: str) -> None:
     for name in ['core', 'platform']:
         value = tomllib.loads((root / f'crates/{name}/Cargo.toml').read_text(encoding='utf-8'))
         if any(key in value for key in ('dependencies', 'build-dependencies', 'dev-dependencies', 'target')):
@@ -42,7 +43,7 @@ def direct_boundaries(root: Path) -> None:
     runtime = tomllib.loads((root / 'crates/runtime/Cargo.toml').read_text(encoding='utf-8'))
     if (any(key in runtime for key in ('build-dependencies', 'dev-dependencies', 'target', 'features'))
             or runtime.get('dependencies') != {
-                'codex-accounts-vault': {'path': '../vault', 'version': '=0.1.0'},
+                'codex-accounts-vault': {'path': '../vault', 'version': '=' + workspace_version},
                 'zeroize': {'version': '=1.8.2', 'default-features': False, 'features': ['alloc']},
                 'serde': '=1.0.229', 'serde_json': '=1.0.145',
             }):
@@ -80,8 +81,21 @@ def package_map(items: list) -> dict:
     return result
 
 
+def normalized_lock(raw: bytes, workspace_version: str) -> bytes:
+    pattern = re.compile(
+        rb'(?m)(^name = "codex-accounts-[^"]+"\r?\nversion = ")'
+        + re.escape(workspace_version.encode()) + rb'("$)'
+    )
+    normalized, count = pattern.subn(rb'\g<1>0.1.0\2', raw)
+    if count != 9:
+        raise ValueError('Workspace package versions are incomplete in Cargo.lock')
+    return normalized
+
+
 def check(root: Path = ROOT) -> dict[str, int | str]:
-    direct_boundaries(root)
+    workspace = tomllib.loads((root / 'Cargo.toml').read_text(encoding='utf-8'))
+    workspace_version = workspace['workspace']['package']['version']
+    direct_boundaries(root, workspace_version)
     lock_bytes = (root / 'Cargo.lock').read_bytes()
     lock = tomllib.loads(lock_bytes.decode('utf-8'))
     prior_packages = []
@@ -115,9 +129,8 @@ def check(root: Path = ROOT) -> dict[str, int | str]:
             or len(review['packages']) != 10 or len(expected) != 421
             or actual != expected):
         raise ValueError('Dependency graph changed; update the scoped review')
-    if hashlib.sha256(lock_bytes).hexdigest() != review['lock_sha256']:
+    if hashlib.sha256(normalized_lock(lock_bytes, workspace_version)).hexdigest() != review['lock_sha256']:
         raise ValueError('Reviewed lock bytes changed')
-    workspace = tomllib.loads((root / 'Cargo.toml').read_text(encoding='utf-8'))
     manifests = {'Cargo.toml'} | {f'{p}/Cargo.toml' for p in workspace['workspace']['members']}
     if set(review['manifest_sha256']) != manifests:
         raise ValueError('Workspace manifest review set changed')
@@ -135,8 +148,15 @@ def check(root: Path = ROOT) -> dict[str, int | str]:
             license_line = b'license.workspace = true\n'
             declared_license = manifest['package'].get('license')
             expected_license = {'workspace': True}
+        normalized_manifest = raw_manifest
+        if path == 'Cargo.toml':
+            version_line = f'version = "{workspace_version}"\n'.encode()
+            normalized_manifest = normalized_manifest.replace(version_line, b'version = "0.1.0"\n', 1)
+        elif path == 'crates/runtime/Cargo.toml':
+            version_pin = f'version = "={workspace_version}"'.encode()
+            normalized_manifest = normalized_manifest.replace(version_pin, b'version = "=0.1.0"', 1)
         if (declared_license != expected_license or raw_manifest.count(license_line) != 1
-                or hashlib.sha256(raw_manifest.replace(license_line, b'', 1)).hexdigest() != digest):
+                or hashlib.sha256(normalized_manifest.replace(license_line, b'', 1)).hexdigest() != digest):
             raise ValueError('Reviewed dependency manifest changed')
     return {'reviewed_packages': len(expected), 'lock_review': 'passed'}
 

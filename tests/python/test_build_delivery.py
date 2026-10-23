@@ -3,6 +3,7 @@ import json
 from pathlib import Path
 import sys
 import tempfile
+import tomllib
 import unittest
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -61,8 +62,8 @@ class DeliveryTests(unittest.TestCase):
             output = root / "package"
             package(executable, output)
             metadata = json.loads((output / "BUILD.json").read_text())
-            self.assertTrue(metadata["version"].startswith("0."))
-            self.assertEqual(metadata["publication"], "not-a-release")
+            self.assertEqual(metadata["version"], tomllib.loads((ROOT / "Cargo.toml").read_text(encoding="utf-8"))["workspace"]["package"]["version"])
+            self.assertEqual(metadata["publication"], "ci-candidate")
             self.assertEqual(metadata["payload_sha256"], sha(executable))
             for line in (output / "SHA256SUMS").read_text().splitlines():
                 digest, name = line.split("  ")

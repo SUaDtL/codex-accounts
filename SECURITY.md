@@ -25,8 +25,9 @@ compromised operating system.
   readers/writers and unexpected links are refused; the app does not alter ACLs to pass.
 
 Account switching does not isolate Codex projects or conversation history. Unsupported
-setups remain unsupported even when a UI or library test passes. The current distribution
-is unsigned and pre-1.0; no complete independent security audit or signed release is claimed.
+setups remain unsupported even when a UI or library test passes. The Windows executable
+is not Authenticode-signed. Release archives carry keyless Cosign signatures, but no
+complete independent security audit or Microsoft publisher trust is claimed.
 
 ## Reporting
 

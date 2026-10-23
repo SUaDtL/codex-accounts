@@ -61,7 +61,7 @@ lookups, without rebuilding the app. See [tooling policy](../security/README.md)
 
 A successful Windows release shard uploads `codex-accounts-windows-x64-RUN-ATTEMPT`:
 
-- `codex-accounts-desktop.exe`: unsigned pre-1.0 Windows executable.
+- `codex-accounts-desktop.exe`: Windows executable without an Authenticode signature.
 - `BUILD.json`: source revision, version, payload and lock hashes, run identity.
 - `Cargo.lock` and `SBOM.cdx.json`: exact dependency inventory.
 - `SHA256SUMS` and `README.txt`: verification and usage notes.
@@ -93,7 +93,15 @@ can briefly be unavailable during those two renames. An ordinary promotion failu
 the old name; an interruption preserves both assets for retry. No old bytes are deleted
 until the replacement is published. Repeated and late runs cannot roll the channel backward.
 It uses the public Sigstore service with ephemeral GitHub OIDC credentials and no paid
-subscription. The workflow does not publish a 1.0 release or change Windows trust.
+subscription. The workflow does not change Windows publisher trust.
+
+`Publish versioned release` is a separate manual workflow on `main`. It accepts an exact
+committed semantic version, selects the successful `Repository checks` artifact for that
+same commit, repeats the complete package verification, and signs with the distinct
+`release.yml@refs/heads/main` identity. It uploads the signed archive to a managed draft,
+creates an annotated version tag, publishes the Release, and verifies the final tag and
+asset by reading them back. Release candidates remain prereleases and do not take the
+Latest badge. Published version assets are never replaced.
 
 Retention runs only after publication succeeds or finds no eligible candidate, so a failed
 publication keeps its input artifact available for retry. Its separate token has `actions:write`
@@ -111,9 +119,9 @@ to a read-only preview with `GITHUB_REPOSITORY` and `GH_TOKEN` supplied locally.
 
 ## Merge and release boundaries
 
-At inspection on 2026-10-22, main had no branch protection or rulesets. The workflow
-provides a stable CI gate but does not itself enforce merge policy. A maintainer can
-configure that check as required separately. This work does not change repository
-protections or merge PRs. The owner selected AGPL-3.0-only and authorized automatic unsigned
-Preview delivery from successful main CI, with Cosign verification added at the owner's
-request. Authenticode signing and Store distribution are not configured.
+`main` requires the `CI gate`, blocks force pushes and deletion, enforces administrator
+rules, and requires resolved review conversations. Version tags use a repository ruleset
+that blocks updates and deletion while allowing new tags. The owner selected
+AGPL-3.0-only and authorized automatic Preview delivery plus manually dispatched,
+versioned releases from successful main CI. Authenticode signing and Store distribution
+are not configured.

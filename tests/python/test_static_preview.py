@@ -111,8 +111,9 @@ class StaticPreviewTests(unittest.TestCase):
 
     def test_duplicate_config_keys_and_discovered_capability_files_refuse(self):
         original = self.config.read_bytes()
-        self.config.write_bytes(original.replace(b'"version": "0.1.0"',
-                                                b'"version":"9", "version":"0.1.0"'))
+        version = json.loads(original)['version'].encode()
+        self.config.write_bytes(original.replace(b'"version": "' + version + b'"',
+                                                b'"version":"9", "version":"' + version + b'"'))
         with self.assertRaisesRegex(preview.PreviewError, 'duplicate_config_key'):
             preview.check(self.root)
         self.config.write_bytes(original)

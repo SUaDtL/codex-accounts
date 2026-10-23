@@ -16,6 +16,7 @@ import urllib.parse
 import urllib.request
 import zipfile
 
+from release_version import parse_semver
 from security_tools import install
 
 ASSET = 'codex-accounts-windows-x64.zip'
@@ -33,29 +34,36 @@ def eligible(run: dict, repository: str, workflow: int) -> bool:
             and re.fullmatch(r'[0-9a-f]{40}', run.get('head_sha', '')) is not None)
 
 
-def verify_bundle(raw: bytes, run: dict, artifact: dict) -> dict:
-    if artifact.get('expired', True) or artifact.get('name') != f"codex-accounts-windows-x64-{run['run_number']}-{run['run_attempt']}":
-        raise ValueError('Unexpected build artifact')
-    if len(raw) > MAX_BYTES or artifact.get('digest') != 'sha256:' + hashlib.sha256(raw).hexdigest():
-        raise ValueError('Artifact digest mismatch')
+def read_package(raw: bytes, names: set[str]) -> dict[str, bytes]:
+    if len(raw) > MAX_BYTES:
+        raise ValueError('Package exceeded size bound')
     with zipfile.ZipFile(io.BytesIO(raw)) as archive:
         entries = archive.infolist()
-        if len(entries) != len(FILES) or {e.filename for e in entries} != FILES:
+        if len(entries) != len(names) or {e.filename for e in entries} != names:
             raise ValueError('Unexpected package contents')
         if sum(e.file_size for e in entries) > MAX_BYTES or any(stat.S_ISLNK(e.external_attr >> 16) for e in entries):
             raise ValueError('Unsupported package size or links')
-        files = {name: archive.read(name) for name in FILES}
+        return {name: archive.read(name) for name in names}
+
+
+def verify_package_files(files: dict[str, bytes], commit: str, workflow_run: int | None = None) -> dict:
     sums = files['SHA256SUMS'].decode('utf-8').splitlines()
     expected = {name: hashlib.sha256(value).hexdigest() for name, value in files.items() if name != 'SHA256SUMS'}
+    expected.pop('codex-accounts-desktop.exe.sigstore.json', None)
+    expected.pop('SHA256SUMS.sigstore.json', None)
     if len(sums) != len(expected) or dict(reversed(line.split('  ', 1)) for line in sums) != expected:
         raise ValueError('Package checksum mismatch')
     meta = json.loads(files['BUILD.json'])
-    if (meta.get('source_commit') != run['head_sha'] or meta.get('workflow_run') != str(run['id'])
-            or not re.fullmatch(r'0\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?', meta.get('version', ''))
+    recorded_run = meta.get('workflow_run')
+    if (meta.get('source_commit') != commit
+            or (workflow_run is not None and recorded_run != str(workflow_run))
+            or (workflow_run is None and re.fullmatch(r'[1-9]\d*', recorded_run or '') is None)
+            or not isinstance(meta.get('version'), str)
             or meta.get('platform') != 'windows-x86_64'
             or meta.get('payload_sha256') != expected['codex-accounts-desktop.exe']
             or meta.get('lock_sha256') != expected['Cargo.lock']):
         raise ValueError('Build identity mismatch')
+    parse_semver(meta['version'])
     exe = files['codex-accounts-desktop.exe']
     if len(exe) < 64 or exe[:2] != b'MZ':
         raise ValueError('Missing Windows executable')
@@ -65,6 +73,14 @@ def verify_bundle(raw: bytes, run: dict, artifact: dict) -> dict:
     return meta
 
 
+def verify_bundle(raw: bytes, run: dict, artifact: dict) -> dict:
+    if artifact.get('expired', True) or artifact.get('name') != f"codex-accounts-windows-x64-{run['run_number']}-{run['run_attempt']}":
+        raise ValueError('Unexpected build artifact')
+    if artifact.get('digest') != 'sha256:' + hashlib.sha256(raw).hexdigest():
+        raise ValueError('Artifact digest mismatch')
+    return verify_package_files(read_package(raw, FILES), run['head_sha'], run['id'])
+
+
 def rank(asset: dict) -> tuple[int, int, str, str]:
     match = re.fullmatch(r'(\d+):(\d+):([0-9a-f]{40}):([0-9a-f]{64})', asset.get('label') or '')
     if not match:
@@ -72,47 +88,78 @@ def rank(asset: dict) -> tuple[int, int, str, str]:
     return int(match[1]), int(match[2]), match[3], match[4]
 
 
-def workflow_identity(repository: str) -> str:
-    return f'https://github.com/{repository}/.github/workflows/artifact-retention.yml@refs/heads/main'
+def workflow_identity(repository: str, workflow: str = 'artifact-retention.yml') -> str:
+    if re.fullmatch(r'[A-Za-z0-9_.-]+\.yml', workflow) is None:
+        raise ValueError('Invalid workflow identity')
+    return f'https://github.com/{repository}/.github/workflows/{workflow}@refs/heads/main'
 
 
-def sign_package(raw: bytes, repository: str) -> bytes:
-    """Sign the executable and checksum manifest; keep both bundles inside one ZIP."""
+def signing_environment(repository: str, workflow: str) -> dict[str, str]:
     if (os.environ.get('GITHUB_ACTIONS') != 'true' or os.environ.get('GITHUB_REF') != 'refs/heads/main'
-            or os.environ.get('GITHUB_WORKFLOW_REF') != workflow_identity(repository).removeprefix('https://github.com/')
+            or os.environ.get('GITHUB_WORKFLOW_REF') != workflow_identity(repository, workflow).removeprefix('https://github.com/')
             or not os.environ.get('ACTIONS_ID_TOKEN_REQUEST_URL')
             or not os.environ.get('ACTIONS_ID_TOKEN_REQUEST_TOKEN')):
         raise ValueError('Keyless publication requires the main GitHub workflow identity')
+    environment = os.environ.copy()
+    environment.pop('GH_TOKEN', None)
+    environment.pop('GITHUB_TOKEN', None)
+    return environment
+
+
+def verify_blob(raw: bytes, bundle: bytes, name: str, repository: str,
+                workflow: str = 'artifact-retention.yml') -> None:
     cosign = str(install('cosign'))
-    with tempfile.TemporaryDirectory(prefix='codex-preview-') as folder:
+    with tempfile.TemporaryDirectory(prefix='codex-publish-') as folder:
         directory = Path(folder)
         environment = os.environ.copy()
         environment.pop('GH_TOKEN', None)
         environment.pop('GITHUB_TOKEN', None)
         environment['XDG_CACHE_HOME'] = str(directory / 'cache')
-        with zipfile.ZipFile(io.BytesIO(raw)) as archive:
-            files = {name: archive.read(name) for name in FILES}
-        for name in ('codex-accounts-desktop.exe', 'SHA256SUMS'):
-            payload = directory / name
-            payload.write_bytes(files[name])
-            bundle = directory / (name + '.sigstore.json')
-            commands = [
-                [cosign, 'sign-blob', '--yes', '--oidc-provider=github-actions', '--bundle', str(bundle), str(payload)],
-                [cosign, 'verify-blob', '--bundle', str(bundle), '--certificate-identity', workflow_identity(repository),
-                 '--certificate-oidc-issuer', 'https://token.actions.githubusercontent.com', str(payload)],
-            ]
-            for command in commands:
-                result = subprocess.run(command, env=environment, capture_output=True, timeout=180, check=False)
-                if result.returncode:
-                    raise ValueError('Cosign signing or identity verification failed')
-            if not bundle.is_file() or not 0 < bundle.stat().st_size <= 1024 * 1024:
-                raise ValueError('Invalid Cosign verification bundle')
-            files[bundle.name] = bundle.read_bytes()
-        output = io.BytesIO()
-        with zipfile.ZipFile(output, 'w', compression=zipfile.ZIP_DEFLATED) as archive:
-            for name, data in sorted(files.items()):
-                archive.writestr(name, data)
-        return output.getvalue()
+        payload = directory / name
+        payload.write_bytes(raw)
+        bundle_path = directory / (name + '.sigstore.json')
+        bundle_path.write_bytes(bundle)
+        result = subprocess.run(
+            [cosign, 'verify-blob', '--bundle', str(bundle_path), '--certificate-identity',
+             workflow_identity(repository, workflow), '--certificate-oidc-issuer',
+             'https://token.actions.githubusercontent.com', str(payload)],
+            env=environment, capture_output=True, timeout=180, check=False)
+        if result.returncode:
+            raise ValueError('Cosign signing or identity verification failed')
+
+
+def sign_blob(raw: bytes, name: str, repository: str,
+              workflow: str = 'artifact-retention.yml') -> bytes:
+    environment = signing_environment(repository, workflow)
+    cosign = str(install('cosign'))
+    with tempfile.TemporaryDirectory(prefix='codex-publish-') as folder:
+        directory = Path(folder)
+        environment['XDG_CACHE_HOME'] = str(directory / 'cache')
+        payload = directory / name
+        payload.write_bytes(raw)
+        bundle_path = directory / (name + '.sigstore.json')
+        result = subprocess.run(
+            [cosign, 'sign-blob', '--yes', '--oidc-provider=github-actions', '--bundle',
+             str(bundle_path), str(payload)], env=environment, capture_output=True,
+            timeout=180, check=False)
+        if result.returncode or not bundle_path.is_file() or not 0 < bundle_path.stat().st_size <= 1024 * 1024:
+            raise ValueError('Cosign signing or identity verification failed')
+        bundle = bundle_path.read_bytes()
+        verify_blob(raw, bundle, name, repository, workflow)
+        return bundle
+
+
+def sign_package(raw: bytes, repository: str, workflow: str = 'artifact-retention.yml') -> bytes:
+    """Sign the executable and checksum manifest; keep both bundles inside one ZIP."""
+    signing_environment(repository, workflow)
+    files = read_package(raw, FILES)
+    for name in ('codex-accounts-desktop.exe', 'SHA256SUMS'):
+        files[name + '.sigstore.json'] = sign_blob(files[name], name, repository, workflow)
+    output = io.BytesIO()
+    with zipfile.ZipFile(output, 'w', compression=zipfile.ZIP_DEFLATED) as archive:
+        for name, data in sorted(files.items()):
+            archive.writestr(name, data)
+    return output.getvalue()
 
 
 def find_release(api) -> dict | None:
@@ -219,8 +266,9 @@ class GitHub:
         self.base = 'https://api.github.com/repos/' + self.repository
         self.opener = urllib.request.build_opener(NoRedirect())
 
-    def request(self, url, method='GET', data=None, content_type='application/json', authenticated=True):
-        headers = {'Accept': 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28',
+    def request(self, url, method='GET', data=None, content_type='application/json', authenticated=True,
+                accept='application/vnd.github+json'):
+        headers = {'Accept': accept, 'X-GitHub-Api-Version': '2026-03-10',
                    'Content-Type': content_type}
         if authenticated:
             headers['Authorization'] = 'Bearer ' + os.environ['GH_TOKEN']
@@ -240,9 +288,17 @@ class GitHub:
                 return None
             raise
 
-    def download(self, identifier):
+    def optional_json(self, path):
         try:
-            return self.request(f'{self.base}/actions/artifacts/{int(identifier)}/zip')
+            return self.json(path)
+        except urllib.error.HTTPError as error:
+            if error.code == 404:
+                return None
+            raise
+
+    def _download(self, path):
+        try:
+            return self.request(self.base + path, accept='application/octet-stream')
         except urllib.error.HTTPError as error:
             if error.code != 302:
                 raise
@@ -253,6 +309,12 @@ class GitHub:
                 raise ValueError('Unexpected artifact download host') from None
             # The signed storage URL receives no GitHub token, and cannot redirect again.
             return self.request(location, authenticated=False)
+
+    def download(self, identifier):
+        return self._download(f'/actions/artifacts/{int(identifier)}/zip')
+
+    def download_release_asset(self, identifier):
+        return self._download(f'/releases/assets/{int(identifier)}')
 
     def upload(self, release_id, name, raw, label):
         query = urllib.parse.urlencode({'name': name, 'label': label})

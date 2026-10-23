@@ -240,7 +240,10 @@ fn codec_actual_handshake_and_account_shapes_use_exact_wire_bytes_and_receipts()
     let ReadStep::Data(chunk) = peer.input.try_read().unwrap() else {
         panic!("missing fixed request")
     };
-    assert_eq!(chunk.bytes.as_slice(), b"{\"id\":1,\"method\":\"initialize\",\"params\":{\"clientInfo\":{\"name\":\"local_codex_switcher\",\"version\":\"0.1.0\"}}}\n");
+    assert_eq!(
+        chunk.bytes.as_slice(),
+        format!("{{\"id\":1,\"method\":\"initialize\",\"params\":{{\"clientInfo\":{{\"name\":\"local_codex_switcher\",\"version\":\"{}\"}}}}}}\n", env!("CARGO_PKG_VERSION")).as_bytes()
+    );
     response(&peer, 1, INIT);
     let frame = take_frame(&mut d, &mut s);
     let result = c.consume(&mut s, &mut d, frame).unwrap();
