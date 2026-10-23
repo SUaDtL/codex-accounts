@@ -10,6 +10,7 @@ from ci_contract import check, check_contract
 
 WORKFLOW = ROOT / ".github/workflows/ci.yml"
 RELEASE = ROOT / ".github/workflows/release.yml"
+RETENTION = ROOT / ".github/workflows/artifact-retention.yml"
 
 
 class DependencyAcquisitionContractTests(unittest.TestCase):
@@ -151,6 +152,18 @@ class DependencyAcquisitionContractTests(unittest.TestCase):
                     (root / "rust-toolchain.toml").write_text((ROOT / "rust-toolchain.toml").read_text(encoding="utf-8"), encoding="utf-8")
                     with self.assertRaises(ValueError):
                         check(root)
+
+    def test_immutable_repository_uses_retention_without_mutable_preview_publication(self) -> None:
+        retention = RETENTION.read_text(encoding="utf-8")
+        release = RELEASE.read_text(encoding="utf-8")
+        self.assertNotIn("publish_preview.py", retention)
+        self.assertNotIn("contents: write", retention)
+        self.assertNotIn("id-token: write", retention)
+        self.assertIn("actions: write", retention)
+        self.assertIn("python3 tools/retain_latest_build.py --apply", retention)
+        for workflow in (retention, release):
+            self.assertIn("group: release-artifact-lifecycle", workflow)
+            self.assertIn("cancel-in-progress: false", workflow)
 
 
 if __name__ == "__main__":

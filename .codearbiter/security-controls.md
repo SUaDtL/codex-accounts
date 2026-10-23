@@ -19,20 +19,18 @@ No environment variable, plaintext application database, renderer storage or cre
 export is an approved product credential source/sink.
 
 CI has a separate short-lived GitHub-issued token. The metadata-only retention job
-receives actions:write through GH_TOKEN. The Preview and versioned-release publishers
-receive contents:write, actions:read and id-token:write to publish verified successful
-owner/main artifacts. All publisher jobs execute only
-default-branch code. Downloaded artifacts are bounded, parsed as data and never executed;
-the GitHub token is never forwarded to artifact storage. Publication precedes retention,
-and a failed replacement preserves the old release bytes. This is CI API authorization,
-not a product credential. No long-lived PAT or signing subscription is required.
+receives actions:write through GH_TOKEN. The versioned-release publisher receives
+contents:write, actions:read and id-token:write to publish a verified successful
+owner/main artifact. Publisher and retention jobs execute only default-branch code.
+Downloaded artifacts are bounded, parsed as data and never executed; the GitHub token
+is never forwarded to artifact storage. This is CI API authorization, not a product
+credential. No long-lived PAT or signing subscription is required.
 Pinned Cosign uses the ambient GitHub Actions
 OIDC provider directly; identity tokens are not passed through command arguments,
 saved by repository code, or logged. Its subprocess receives no GH_TOKEN/GITHUB_TOKEN.
 Public Sigstore/Fulcio/Rekor services receive the intended CI signing identity and
 artifact digest, never app account material. Signatures must verify against the exact
-`artifact-retention.yml@refs/heads/main` or `release.yml@refs/heads/main` publisher
-identity and GitHub OIDC issuer before promotion.
+`release.yml@refs/heads/main` publisher identity and GitHub OIDC issuer before publication.
 This supplies consumer integrity verification, not Windows publisher trust.
 
 ## Cryptography

@@ -49,7 +49,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: release-${{ inputs.version }}
+  group: release-artifact-lifecycle
   cancel-in-progress: false
 
 jobs:

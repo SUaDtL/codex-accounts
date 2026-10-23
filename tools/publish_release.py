@@ -11,7 +11,7 @@ import tomllib
 import urllib.parse
 import zipfile
 
-from publish_preview import (
+from release_support import (
     FILES, GitHub, eligible, read_package, sign_blob, sign_package, verify_blob,
     verify_bundle, verify_package_files,
 )
