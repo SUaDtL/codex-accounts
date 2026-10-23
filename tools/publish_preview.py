@@ -296,9 +296,9 @@ class GitHub:
                 return None
             raise
 
-    def _download(self, path):
+    def _download(self, path, accept):
         try:
-            return self.request(self.base + path, accept='application/octet-stream')
+            return self.request(self.base + path, accept=accept)
         except urllib.error.HTTPError as error:
             if error.code != 302:
                 raise
@@ -311,10 +311,16 @@ class GitHub:
             return self.request(location, authenticated=False)
 
     def download(self, identifier):
-        return self._download(f'/actions/artifacts/{int(identifier)}/zip')
+        return self._download(
+            f'/actions/artifacts/{int(identifier)}/zip',
+            'application/vnd.github+json',
+        )
 
     def download_release_asset(self, identifier):
-        return self._download(f'/releases/assets/{int(identifier)}')
+        return self._download(
+            f'/releases/assets/{int(identifier)}',
+            'application/octet-stream',
+        )
 
     def upload(self, release_id, name, raw, label):
         query = urllib.parse.urlencode({'name': name, 'label': label})

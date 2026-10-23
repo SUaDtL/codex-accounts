@@ -177,6 +177,24 @@ class PreviewTests(unittest.TestCase):
         self.assertEqual(self.api.created, 1)
 
 
+class GitHubDownloadTests(unittest.TestCase):
+    def test_artifact_and_release_asset_use_endpoint_specific_media_types(self):
+        api = preview.GitHub.__new__(preview.GitHub)
+        api.repository = 'owner/repo'
+        api.base = 'https://api.github.com/repos/owner/repo'
+        calls = []
+
+        def request(url, **kwargs):
+            calls.append((url, kwargs))
+            return b'payload'
+
+        api.request = request
+        self.assertEqual(api.download(42), b'payload')
+        self.assertEqual(api.download_release_asset(43), b'payload')
+        self.assertEqual(calls[0][1]['accept'], 'application/vnd.github+json')
+        self.assertEqual(calls[1][1]['accept'], 'application/octet-stream')
+
+
 class SigningTests(unittest.TestCase):
     def test_local_or_nonmain_context_refuses_before_tool_acquisition(self):
         with patch.dict(os.environ, {}, clear=True), patch.object(preview, 'install') as install:
