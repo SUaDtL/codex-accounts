@@ -17,11 +17,19 @@ just to add another account.
 
 ## System tray
 
-Closing the window keeps Codex Accounts running in the notification area so usage
-monitoring can resume quickly. Select the tray icon to show the account window.
-The tray menu lists saved accounts, marks the last known active one, and lets you
-start a switch. The main window opens for the final confirmation. The menu also
-provides **Open** and **Quit**.
+By default, closing the window keeps Codex Accounts running in the notification area
+and briefly confirms that the app is still running.
+Change **Close to tray** in Settings when the close button should quit instead.
+
+Select the tray icon to open the compact account switcher. It shows the last known
+active account, remaining usage and reset timing. Choose **Switch** on an inactive
+account to change accounts. Opening the switcher never changes an account by itself.
+Use its refresh control to request current usage or its open control to show the full
+Accounts window. Right-click the tray icon for **Open** and **Quit**.
+
+A Windows-user-protected vault can reopen after the tray icon is selected. A locked
+passphrase-protected vault keeps its account list hidden and directs you to the main
+window for unlocking. The tray switcher never accepts a passphrase.
 
 Quit waits for an active account operation to cancel and clean up. If cleanup cannot
 finish immediately, the app keeps the window open and shows the recovery state instead

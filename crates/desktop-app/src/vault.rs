@@ -670,7 +670,7 @@ mod tests {
     }
 
     #[test]
-    fn hidden_window_blocks_admission_until_reopened_and_completed_hardening_still_locks() {
+    fn hide_transition_blocks_admission_until_completed_and_hardening_still_locks() {
         let worker = Worker {
             sender: None,
             thread: None,
