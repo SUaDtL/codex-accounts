@@ -69,6 +69,7 @@ fs.mkdirSync(out, { recursive: true });
     });
     await page.goto("http://ui.localhost/tray.html");
     await page.waitForFunction(() => Object.keys(listeners).length === 2);
+    await page.waitForFunction(() => calls.some(call => call.command === "tray_ready"), null, { timeout: 1500 });
     assert.equal(await page.evaluate(() => calls.filter(call => ["list_profiles", "open_vault", "refresh_usage", "switch_profile"].includes(call.command)).length), 0);
     await page.evaluate(() => { holdUsage = true; });
     await page.evaluate(() => listeners["tray-opened"]());

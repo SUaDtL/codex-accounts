@@ -886,21 +886,9 @@ document.addEventListener("visibilitychange", () => {
   else void vaultCommand("list_profiles", {}, true);
 });
 window.addEventListener("blur", closePassphraseDialog);
-async function prepareTrayNotification() {
-  if (!("Notification" in window)) return;
-  if (Notification.permission === "default") await Notification.requestPermission();
-}
-function notifyTrayHide() {
-  if ("Notification" in window && Notification.permission === "granted") {
-    new Notification("Codex Accounts is still running", {body:"Open it from the system tray."});
-  }
-}
 const eventApi = window.__TAURI__?.event;
 if (eventApi?.listen) {
-  void eventApi.listen("window-hiding", () => {
-    clearAccountViewForHide();
-    notifyTrayHide();
-  });
+  void eventApi.listen("window-hiding", clearAccountViewForHide);
   void eventApi.listen("vault-state-changed", ({payload}) => renderProfiles(payload));
   void eventApi.listen("vault-lock-failed", () => {
     const message = "Finish the current account action, then close the window again.";
@@ -912,5 +900,4 @@ setInterval(() => {
   if (!document.hidden) { refreshQuotaDisplays(); updateControls(); checkUsageResets(); }
 }, 30000);
 void refreshInventory();
-void prepareTrayNotification();
 void vaultCommand("list_profiles");

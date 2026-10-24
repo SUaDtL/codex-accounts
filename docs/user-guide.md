@@ -18,7 +18,7 @@ just to add another account.
 ## System tray
 
 By default, closing the window keeps Codex Accounts running in the notification area
-and shows a Windows notification so the hidden app is not mistaken for a full exit.
+and briefly confirms that the app is still running.
 Change **Close to tray** in Settings when the close button should quit instead.
 
 Select the tray icon to open the compact account switcher. It shows the last known

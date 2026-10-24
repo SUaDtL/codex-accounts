@@ -29,6 +29,16 @@
             "windows"
           ],
           "permissions": []
+        },
+        {
+          "identifier": "notice-window",
+          "windows": [
+            "notice"
+          ],
+          "platforms": [
+            "windows"
+          ],
+          "permissions": []
         }
       ],
       "csp": "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; font-src 'none'; connect-src ipc: http://ipc.localhost; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'"

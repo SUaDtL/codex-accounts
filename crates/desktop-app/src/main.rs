@@ -13,18 +13,19 @@ mod desktop {
     use super::{metadata, preferences, vault};
     use serde::Serialize;
     use std::sync::{
-        atomic::{AtomicBool, Ordering},
+        atomic::{AtomicBool, AtomicU64, Ordering},
         Arc,
     };
     use tauri::menu::{Menu, MenuItem};
     use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
-    use tauri::webview::{NewWindowResponse, PermissionKind, PermissionResponse};
+    use tauri::webview::NewWindowResponse;
     use tauri::{
         AppHandle, Emitter, Manager, Url, WebviewUrl, WebviewWindow, WebviewWindowBuilder,
     };
 
     const TRAY_ID: &str = "accounts";
     const MAIN_WINDOW: &str = "main";
+    const NOTICE_WINDOW: &str = "notice";
     const TRAY_OPEN: &str = "tray_open";
     const TRAY_QUIT: &str = "tray_quit";
     const TRAY_WINDOW: &str = "tray";
@@ -32,6 +33,8 @@ mod desktop {
     const TRAY_DEFAULT_HEIGHT: f64 = 270.0;
     const TRAY_MIN_HEIGHT: f64 = 174.0;
     const TRAY_MAX_HEIGHT: f64 = 594.0;
+    const NOTICE_WIDTH: f64 = 320.0;
+    const NOTICE_HEIGHT: f64 = 82.0;
 
     #[derive(Debug, Eq, PartialEq)]
     enum TrayAction {
@@ -48,6 +51,9 @@ mod desktop {
 
     #[derive(Default)]
     struct InventoryState(Arc<AtomicBool>);
+
+    #[derive(Default)]
+    struct NoticeState(Arc<AtomicU64>);
 
     // One inventory at a time, including invocations outside normal UI flow.
     struct InventoryGuard(Arc<AtomicBool>);
@@ -434,6 +440,15 @@ mod desktop {
         ))
     }
 
+    #[tauri::command]
+    fn tray_ready(window: WebviewWindow) -> Result<(), &'static str> {
+        require_tray(&window)?;
+        if window.is_visible().unwrap_or(false) {
+            let _ = window.emit("tray-opened", ());
+        }
+        Ok(())
+    }
+
     fn require_main(window: &WebviewWindow) -> Result<(), &'static str> {
         require_window(window, MAIN_WINDOW)
     }
@@ -503,8 +518,13 @@ mod desktop {
         allowed_origin(url) && url.path() == "/tray.html" && url.fragment().is_none()
     }
 
+    fn allowed_notice(url: &Url) -> bool {
+        allowed_origin(url) && url.path() == "/notice.html" && url.fragment().is_none()
+    }
+
     fn show_main(app: &AppHandle) {
         app.state::<vault::Worker>().cancel_hide();
+        hide_notice(app);
         if let Some(window) = app.get_webview_window(MAIN_WINDOW) {
             let _ = window.unminimize();
             let _ = window.show();
@@ -517,6 +537,57 @@ mod desktop {
             let _ = window.emit("tray-hidden", ());
             let _ = window.hide();
         }
+    }
+
+    fn hide_notice(app: &AppHandle) {
+        if let Some(window) = app.get_webview_window(NOTICE_WINDOW) {
+            let _ = window.hide();
+        }
+    }
+
+    fn notice_origin(
+        work_origin: (i32, i32),
+        work_size: (u32, u32),
+        popup_size: (u32, u32),
+    ) -> (i32, i32) {
+        let margin = 16;
+        (
+            work_origin.0 + work_size.0 as i32 - popup_size.0 as i32 - margin,
+            work_origin.1 + work_size.1 as i32 - popup_size.1 as i32 - margin,
+        )
+    }
+
+    fn show_tray_notice(app: &AppHandle) {
+        let Some(window) = app.get_webview_window(NOTICE_WINDOW) else {
+            return;
+        };
+        let monitor = app
+            .get_webview_window(MAIN_WINDOW)
+            .and_then(|main| main.current_monitor().ok().flatten())
+            .or_else(|| window.primary_monitor().ok().flatten());
+        if let Some(monitor) = monitor {
+            let area = monitor.work_area();
+            let size = window
+                .outer_size()
+                .unwrap_or(tauri::PhysicalSize::new(320, 82));
+            let origin = notice_origin(
+                (area.position.x, area.position.y),
+                (area.size.width, area.size.height),
+                (size.width, size.height),
+            );
+            let _ = window.set_position(tauri::PhysicalPosition::new(origin.0, origin.1));
+        }
+        let generation = app.state::<NoticeState>().0.fetch_add(1, Ordering::AcqRel) + 1;
+        let current = app.state::<NoticeState>().0.clone();
+        let timer_app = app.clone();
+        let _ = window.show();
+        std::thread::spawn(move || {
+            std::thread::sleep(std::time::Duration::from_secs(4));
+            if current.load(Ordering::Acquire) == generation {
+                let ui_app = timer_app.clone();
+                let _ = timer_app.run_on_main_thread(move || hide_notice(&ui_app));
+            }
+        });
     }
 
     fn popup_origin(
@@ -583,6 +654,7 @@ mod desktop {
             hide_tray(app);
             return;
         }
+        hide_notice(app);
         let popup_size = window
             .outer_size()
             .unwrap_or(tauri::PhysicalSize::new(380, 270));
@@ -603,8 +675,8 @@ mod desktop {
             );
             let _ = window.set_position(tauri::PhysicalPosition::new(origin.0, origin.1));
         }
-        let _ = window.emit("tray-opened", ());
         let _ = window.show();
+        let _ = window.emit("tray-opened", ());
         let _ = window.set_focus();
     }
 
@@ -614,7 +686,7 @@ mod desktop {
             let hidden = window.hide().is_ok();
             app.state::<vault::Worker>().cancel_hide();
             if hidden {
-                let _ = window.emit("window-hidden", ());
+                show_tray_notice(app);
             }
         } else {
             app.state::<vault::Worker>().cancel_hide();
@@ -701,6 +773,7 @@ mod desktop {
         tauri::webview_version().map_err(|_| ())?;
         tauri::Builder::default()
             .manage(InventoryState::default())
+            .manage(NoticeState::default())
             .manage(vault::Worker::start().map_err(|_| ())?)
             .on_window_event(|window, event| {
                 if window.label() == TRAY_WINDOW {
@@ -776,15 +849,9 @@ mod desktop {
                 show_main_window,
                 hide_tray_window,
                 resize_tray_window,
-                tray_page_capacity
+                tray_page_capacity,
+                tray_ready
             ])
-            .on_permission_request(|webview, kind| {
-                if webview.label() == "main" && matches!(kind, PermissionKind::Notifications) {
-                    PermissionResponse::Allow
-                } else {
-                    PermissionResponse::Deny
-                }
-            })
             .setup(|app| {
                 app.manage(preferences::ClosePreference::load(app.handle()));
                 WebviewWindowBuilder::new(app, MAIN_WINDOW, WebviewUrl::App("index.html".into()))
@@ -814,6 +881,26 @@ mod desktop {
                     .on_navigation(allowed_tray)
                     .on_new_window(|_, _| NewWindowResponse::Deny)
                     .build()?;
+                WebviewWindowBuilder::new(
+                    app,
+                    NOTICE_WINDOW,
+                    WebviewUrl::App("notice.html".into()),
+                )
+                .title("Codex Accounts")
+                .inner_size(NOTICE_WIDTH, NOTICE_HEIGHT)
+                .resizable(false)
+                .decorations(false)
+                .always_on_top(true)
+                .skip_taskbar(true)
+                .shadow(true)
+                .focusable(false)
+                .visible(false)
+                .theme(Some(tauri::Theme::Dark))
+                .use_https_scheme(false)
+                .devtools(false)
+                .on_navigation(allowed_notice)
+                .on_new_window(|_, _| NewWindowResponse::Deny)
+                .build()?;
                 install_tray(app.handle())?;
                 Ok(())
             })
@@ -851,6 +938,10 @@ mod desktop {
             assert!(!allowed_tray(
                 &Url::parse("http://tauri.localhost/index.html").unwrap()
             ));
+            let notice = Url::parse("http://tauri.localhost/notice.html").unwrap();
+            assert!(allowed_notice(&notice));
+            assert!(!allowed_main(&notice));
+            assert!(!allowed_tray(&notice));
         }
 
         #[test]
@@ -885,6 +976,15 @@ mod desktop {
             assert_eq!(
                 popup_origin((10, 10), (0, 0), (1920, 1040), (380, 300)),
                 (8, 22)
+            );
+        }
+
+        #[test]
+        fn tray_notice_uses_the_work_area_corner() {
+            assert_eq!(notice_origin((0, 0), (1920, 1040), (320, 82)), (1584, 942));
+            assert_eq!(
+                notice_origin((-1280, 0), (1280, 984), (320, 82)),
+                (-336, 886)
             );
         }
 

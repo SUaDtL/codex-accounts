@@ -314,3 +314,4 @@ if (eventApi?.listen) {
   void eventApi.listen("tray-hidden", resetFlyout);
 }
 resetFlyout();
+void invoke("tray_ready").catch(() => {});
