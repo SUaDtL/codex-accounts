@@ -665,6 +665,15 @@ input {
   letter-spacing:-.4px;
 }
 
+.settings-actions {
+  display:flex;
+  align-items:center;
+  gap:10px;
+  color:#95a89b;
+  font-size:12px;
+}
+.settings-actions .toggle { margin-right:2px; }
+
 .settings-row {
   display:flex;
   align-items:center;
@@ -694,6 +703,41 @@ input {
 
 .settings-row>button,.settings-row>.actions {
   flex-shrink:0;
+}
+
+.toggle {
+  position:relative;
+  display:inline-flex;
+  width:40px;
+  height:22px;
+  flex:0 0 auto;
+  cursor:pointer;
+}
+.toggle input { position:absolute; opacity:0; pointer-events:none; }
+.toggle>span[aria-hidden] {
+  width:100%;
+  border:1px solid #4b5b53;
+  border-radius:999px;
+  background:#2a342f;
+  transition:background .15s,border-color .15s;
+}
+.toggle>span[aria-hidden]::after {
+  content:"";
+  position:absolute;
+  width:16px;
+  height:16px;
+  left:3px;
+  top:3px;
+  border-radius:50%;
+  background:#a8b6ae;
+  transition:transform .15s,background .15s;
+}
+.toggle input:checked+span { background:#207d66; border-color:#48b28e; }
+.toggle input:checked+span::after { transform:translateX(18px); background:#effaf5; }
+.toggle input:focus-visible+span { outline:2px solid #69d5ae; outline-offset:2px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .toggle>span[aria-hidden],.toggle>span[aria-hidden]::after { transition:none; }
 }
 
 .advanced-settings {
