@@ -13,9 +13,29 @@ let page = 0;
 let pageSize = MAX_PAGE_SIZE;
 let viewEpoch = 0;
 let pendingSwitch = null;
-let pendingUsageRefresh = null;
+let pendingVaultOperation = null;
 let emptyMessage = "Open Accounts to unlock your saved accounts.";
 let showUnlock = true;
+
+async function invokeVault(command, args = {}) {
+  const work = invoke(command, args);
+  pendingVaultOperation = work;
+  try {
+    return await work;
+  } finally {
+    if (pendingVaultOperation === work) pendingVaultOperation = null;
+  }
+}
+
+async function awaitPendingVaultOperation() {
+  const work = pendingVaultOperation;
+  if (!work) return;
+  try {
+    await work;
+  } catch {
+    // A stale operation's own caller reports its failure. Reopening only waits for release.
+  }
+}
 
 function remaining(window) {
   if (!window || !Number.isFinite(window.used_percent)) return null;
@@ -122,28 +142,20 @@ function resetFlyout() {
 }
 
 async function refreshVisibleUsage(epoch, force = false) {
-  const work = (async () => {
-    const visibleProfiles = profiles.slice(page * pageSize, (page + 1) * pageSize);
-    for (const profile of visibleProfiles) {
+  const visibleProfiles = profiles.slice(page * pageSize, (page + 1) * pageSize);
+  for (const profile of visibleProfiles) {
+    if (epoch !== viewEpoch) return;
+    if (!force && usageRequested.has(profile.id)) continue;
+    usageRequested.add(profile.id);
+    try {
+      const result = await invokeVault("refresh_usage", { profileId: profile.id });
       if (epoch !== viewEpoch) return;
-      if (!force && usageRequested.has(profile.id)) continue;
-      usageRequested.add(profile.id);
-      try {
-        const result = await invoke("refresh_usage", { profileId: profile.id });
-        if (epoch !== viewEpoch) return;
-        if (result.health?.profile === profile.id) usage.set(profile.id, result.health);
-      } catch {
-        usage.delete(profile.id);
-        usageRequested.delete(profile.id);
-      }
-      render();
+      if (result.health?.profile === profile.id) usage.set(profile.id, result.health);
+    } catch {
+      usage.delete(profile.id);
+      usageRequested.delete(profile.id);
     }
-  })();
-  pendingUsageRefresh = work;
-  try {
-    await work;
-  } finally {
-    if (pendingUsageRefresh === work) pendingUsageRefresh = null;
+    render();
   }
 }
 
@@ -177,15 +189,14 @@ async function load() {
   byId("tray-status").textContent = "";
   render();
   try {
-    const staleUsageRefresh = pendingUsageRefresh;
-    if (staleUsageRefresh) await staleUsageRefresh;
+    await awaitPendingVaultOperation();
     if (epoch !== viewEpoch) return;
     const capacity = await invoke("tray_page_capacity");
     if (epoch !== viewEpoch) return;
     pageSize = Number.isSafeInteger(capacity) ? Math.max(1, Math.min(MAX_PAGE_SIZE, capacity)) : MAX_PAGE_SIZE;
-    let result = await invoke("list_profiles");
+    let result = await invokeVault("list_profiles");
     if (epoch !== viewEpoch) return;
-    if (result.state !== "open" && result.vault_exists === true) result = await invoke("open_vault");
+    if (result.state !== "open" && result.vault_exists === true) result = await invokeVault("open_vault");
     if (epoch !== viewEpoch) return;
     if (result.state !== "open") throw new Error("vault_not_open");
     activeProfileId = result.last_known_active_profile;
@@ -230,7 +241,7 @@ async function switchTo(profile, button) {
   button.textContent = "Switching";
   byId("tray-status").textContent = `Switching to ${profile.label}`;
   try {
-    const result = await invoke("switch_profile", { profileId: profile.id });
+    const result = await invokeVault("switch_profile", { profileId: profile.id });
     if (epoch !== viewEpoch) return;
     activeProfileId = result.last_known_active_profile;
     profiles = activeFirst(result.profiles, activeProfileId);

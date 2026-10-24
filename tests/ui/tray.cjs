@@ -53,7 +53,14 @@ fs.mkdirSync(out, { recursive: true });
             vaultBusy = false;
             return response;
           }
-          if (command === "switch_profile") return { ...fixture, last_known_active_profile: args.profileId };
+          if (command === "switch_profile") {
+            const response = { ...fixture, last_known_active_profile: args.profileId };
+            if (window.holdSwitch) {
+              vaultBusy = true;
+              return new Promise(resolve => { window.releaseSwitch = () => { window.holdSwitch = false; vaultBusy = false; resolve(response); }; });
+            }
+            return response;
+          }
           return structuredClone(fixture);
         } },
       };
@@ -79,9 +86,16 @@ fs.mkdirSync(out, { recursive: true });
     assert.equal(await page.evaluate(() => calls.filter(call => call.command === "resize_tray_window").some(call => call.args.rows === 2 && call.args.paged === false)), true);
     assert(await page.evaluate(() => document.documentElement.scrollHeight <= innerHeight && document.documentElement.scrollWidth <= innerWidth));
     await page.screenshot({ path: path.join(out, "tray.png") });
+    await page.evaluate(() => { holdSwitch = true; });
     await page.getByRole("button", { name: "Switch to Brennon", exact: true }).click();
     await page.waitForFunction(() => calls.filter(call => call.command === "switch_profile").length === 1);
     assert.equal(await page.evaluate(() => calls.find(call => call.command === "switch_profile").args.profileId), "b");
+    const listsBeforeSwitchReopen = await page.evaluate(() => calls.filter(call => call.command === "list_profiles").length);
+    await page.evaluate(() => { listeners["tray-hidden"](); listeners["tray-opened"](); });
+    assert.equal(await page.evaluate(() => calls.filter(call => call.command === "list_profiles").length), listsBeforeSwitchReopen);
+    await page.evaluate(() => releaseSwitch());
+    await page.waitForFunction(() => document.querySelectorAll(".tray-account").length === 2 && document.querySelector("#account-list").getAttribute("aria-busy") === "false");
+    assert.equal(await page.locator("#locked-view").isHidden(), true);
 
     await page.setViewportSize({ width: 380, height: 594 });
     await page.evaluate(() => {
