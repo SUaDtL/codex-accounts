@@ -54,6 +54,26 @@ function activeFirst(items, activeId) {
   return [...items].sort((left, right) => Number(right.id === activeId) - Number(left.id === activeId));
 }
 
+function isVaultBusy(error) {
+  return ["vault_busy", "E_BUSY"].includes(error) || ["vault_busy", "E_BUSY"].includes(error?.message);
+}
+
+async function listProfilesAfterContention(epoch) {
+  const retryDelays = [0, 50, 100, 200, 400, 800, 1000];
+  let lastError = "vault_busy";
+  for (const delay of retryDelays) {
+    if (delay > 0) await new Promise(resolve => setTimeout(resolve, delay));
+    if (epoch !== viewEpoch) throw new Error("stale_view");
+    try {
+      return await invokeVault("list_profiles");
+    } catch (error) {
+      if (!isVaultBusy(error)) throw error;
+      lastError = error;
+    }
+  }
+  throw lastError;
+}
+
 function accountRow(profile) {
   const active = profile.id === activeProfileId;
   const health = usage.get(profile.id);
@@ -196,7 +216,7 @@ async function load() {
     const capacity = await invoke("tray_page_capacity");
     if (epoch !== viewEpoch) return;
     pageSize = Number.isSafeInteger(capacity) ? Math.max(1, Math.min(MAX_PAGE_SIZE, capacity)) : MAX_PAGE_SIZE;
-    let result = await invokeVault("list_profiles");
+    let result = await listProfilesAfterContention(epoch);
     if (epoch !== viewEpoch) return;
     if (result.state !== "open" && result.vault_exists === true) result = await invokeVault("open_vault");
     if (epoch !== viewEpoch) return;
@@ -212,7 +232,7 @@ async function load() {
     profiles = [];
     activeProfileId = null;
     usage.clear();
-    const busy = ["vault_busy", "E_BUSY"].includes(error) || ["vault_busy", "E_BUSY"].includes(error?.message);
+    const busy = isVaultBusy(error);
     emptyMessage = busy ? "Accounts are busy. Try again." : "Open Accounts to unlock your saved accounts.";
     showUnlock = !busy;
   } finally {

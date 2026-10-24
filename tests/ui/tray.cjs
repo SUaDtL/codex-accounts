@@ -26,6 +26,7 @@ fs.mkdirSync(out, { recursive: true });
       window.calls = [];
       window.listeners = {};
       window.vaultBusy = false;
+      window.busyListFailures = 0;
       window.fixture = {
         state: "open",
         vault_exists: true,
@@ -43,6 +44,7 @@ fs.mkdirSync(out, { recursive: true });
           calls.push({ command, args });
           if (command === "tray_page_capacity") return 5;
           if (["list_profiles", "open_vault", "refresh_usage", "switch_profile"].includes(command) && vaultBusy) throw "vault_busy";
+          if (command === "list_profiles" && busyListFailures > 0) { busyListFailures -= 1; throw "vault_busy"; }
           if (command === "list_profiles" && window.failList) throw window.failList;
           if (command === "refresh_usage") {
             vaultBusy = true;
@@ -163,6 +165,18 @@ fs.mkdirSync(out, { recursive: true });
     await page.getByRole("button", { name: "Refresh accounts", exact: true }).click();
     await page.waitForFunction(() => document.querySelector("#locked-message").textContent.includes("busy"));
     assert.equal(await page.locator("#unlock-in-main").isVisible(), false);
+    const listsBeforeTransientBusy = await page.evaluate(() => calls.filter(call => call.command === "list_profiles").length);
+    await page.evaluate(() => {
+      failList = null;
+      busyListFailures = 1;
+      fixture = { ...fixture, state: "open", profiles: [
+        { id: "a", label: "Erica", domain: "Personal", captured_at: Math.floor(Date.now() / 1000) },
+        { id: "b", label: "Brennon", domain: "Work", captured_at: Math.floor(Date.now() / 1000) },
+      ] };
+    });
+    await page.getByRole("button", { name: "Refresh accounts", exact: true }).click();
+    await page.waitForFunction(() => document.querySelectorAll(".tray-account").length === 2, null, { timeout: 1500 });
+    assert.equal(await page.evaluate(() => calls.filter(call => call.command === "list_profiles").length), listsBeforeTransientBusy + 2);
     assert.deepEqual(errors, []);
     console.log("PASS compact paged tray flyout, deferred loading, explicit switching and trust warning. Synthetic IPC only.");
   } finally {
