@@ -117,9 +117,11 @@ function render() {
   byId("previous-page").disabled = loading || page === 0;
   byId("next-page").disabled = loading || page + 1 >= pages;
   byId("refresh-accounts").disabled = loading;
+  byId("open-accounts").disabled = loading;
   list.setAttribute("aria-busy", String(loading));
   byId("locked-message").textContent = emptyMessage;
   byId("unlock-in-main").hidden = !showUnlock;
+  byId("unlock-in-main").disabled = loading;
   void invoke("resize_tray_window", { rows: visibleProfiles.length, paged: profiles.length > pageSize }).catch(() => {});
 }
 
@@ -261,7 +263,11 @@ async function switchTo(profile, button) {
   }
 }
 
-function openMain() { resetFlyout(); void invoke("show_main_window"); }
+function openMain() {
+  if (loading) return;
+  resetFlyout();
+  void invoke("show_main_window");
+}
 byId("refresh-accounts").addEventListener("click", () => void load());
 byId("open-accounts").addEventListener("click", openMain);
 byId("unlock-in-main").addEventListener("click", openMain);

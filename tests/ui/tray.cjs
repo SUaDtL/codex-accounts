@@ -72,6 +72,8 @@ fs.mkdirSync(out, { recursive: true });
     await page.evaluate(() => listeners["tray-opened"]());
     await page.waitForFunction(() => document.querySelectorAll(".tray-account").length === 2);
     assert(await page.getByRole("button", { name: "Switch to Brennon", exact: true }).isDisabled());
+    assert(await page.getByRole("button", { name: "Open Accounts", exact: true }).isDisabled());
+    assert.equal(await page.evaluate(() => calls.filter(call => call.command === "show_main_window").length), 0);
     await page.evaluate(() => { listeners["tray-hidden"](); listeners["tray-opened"](); });
     assert.equal(await page.evaluate(() => calls.filter(call => call.command === "list_profiles").length), 1);
     await page.evaluate(() => releaseUsage());
