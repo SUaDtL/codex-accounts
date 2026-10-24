@@ -13,6 +13,7 @@ let page = 0;
 let pageSize = MAX_PAGE_SIZE;
 let viewEpoch = 0;
 let pendingSwitch = null;
+let pendingUsageRefresh = null;
 let emptyMessage = "Open Accounts to unlock your saved accounts.";
 let showUnlock = true;
 
@@ -121,20 +122,28 @@ function resetFlyout() {
 }
 
 async function refreshVisibleUsage(epoch, force = false) {
-  const visibleProfiles = profiles.slice(page * pageSize, (page + 1) * pageSize);
-  for (const profile of visibleProfiles) {
-    if (epoch !== viewEpoch) return;
-    if (!force && usageRequested.has(profile.id)) continue;
-    usageRequested.add(profile.id);
-    try {
-      const result = await invoke("refresh_usage", { profileId: profile.id });
+  const work = (async () => {
+    const visibleProfiles = profiles.slice(page * pageSize, (page + 1) * pageSize);
+    for (const profile of visibleProfiles) {
       if (epoch !== viewEpoch) return;
-      if (result.health?.profile === profile.id) usage.set(profile.id, result.health);
-    } catch {
-      usage.delete(profile.id);
-      usageRequested.delete(profile.id);
+      if (!force && usageRequested.has(profile.id)) continue;
+      usageRequested.add(profile.id);
+      try {
+        const result = await invoke("refresh_usage", { profileId: profile.id });
+        if (epoch !== viewEpoch) return;
+        if (result.health?.profile === profile.id) usage.set(profile.id, result.health);
+      } catch {
+        usage.delete(profile.id);
+        usageRequested.delete(profile.id);
+      }
+      render();
     }
-    render();
+  })();
+  pendingUsageRefresh = work;
+  try {
+    await work;
+  } finally {
+    if (pendingUsageRefresh === work) pendingUsageRefresh = null;
   }
 }
 
@@ -168,6 +177,9 @@ async function load() {
   byId("tray-status").textContent = "";
   render();
   try {
+    const staleUsageRefresh = pendingUsageRefresh;
+    if (staleUsageRefresh) await staleUsageRefresh;
+    if (epoch !== viewEpoch) return;
     const capacity = await invoke("tray_page_capacity");
     if (epoch !== viewEpoch) return;
     pageSize = Number.isSafeInteger(capacity) ? Math.max(1, Math.min(MAX_PAGE_SIZE, capacity)) : MAX_PAGE_SIZE;

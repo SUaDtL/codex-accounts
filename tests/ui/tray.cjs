@@ -25,6 +25,7 @@ fs.mkdirSync(out, { recursive: true });
       const now = Math.floor(Date.now() / 1000);
       window.calls = [];
       window.listeners = {};
+      window.vaultBusy = false;
       window.fixture = {
         state: "open",
         vault_exists: true,
@@ -41,12 +42,15 @@ fs.mkdirSync(out, { recursive: true });
         core: { invoke: async (command, args) => {
           calls.push({ command, args });
           if (command === "tray_page_capacity") return 5;
+          if (["list_profiles", "open_vault", "refresh_usage", "switch_profile"].includes(command) && vaultBusy) throw "vault_busy";
           if (command === "list_profiles" && window.failList) throw window.failList;
           if (command === "refresh_usage") {
+            vaultBusy = true;
             const response = { ...fixture, health: { profile: args.profileId, source: "usage", checked_at: now,
               available_resets: null, primary: { used_percent: args.profileId === "a" ? 18 : 100,
                 duration_mins: 10080, resets_at: now + (args.profileId === "a" ? 604800 : 518400) }, secondary: null } };
-            if (window.holdUsage) return new Promise(resolve => { window.releaseUsage = () => { window.holdUsage = false; resolve(response); }; });
+            if (window.holdUsage) return new Promise(resolve => { window.releaseUsage = () => { window.holdUsage = false; vaultBusy = false; resolve(response); }; });
+            vaultBusy = false;
             return response;
           }
           if (command === "switch_profile") return { ...fixture, last_known_active_profile: args.profileId };
@@ -61,8 +65,11 @@ fs.mkdirSync(out, { recursive: true });
     await page.evaluate(() => listeners["tray-opened"]());
     await page.waitForFunction(() => document.querySelectorAll(".tray-account").length === 2);
     assert(await page.getByRole("button", { name: "Switch to Brennon", exact: true }).isDisabled());
+    await page.evaluate(() => { listeners["tray-hidden"](); listeners["tray-opened"](); });
+    assert.equal(await page.evaluate(() => calls.filter(call => call.command === "list_profiles").length), 1);
     await page.evaluate(() => releaseUsage());
-    await page.waitForFunction(() => !document.querySelector("#account-list").getAttribute("aria-busy").includes("true"));
+    await page.waitForFunction(() => document.querySelectorAll(".tray-account").length === 2 && document.querySelector("#account-list").getAttribute("aria-busy") === "false");
+    assert.equal(await page.locator("#locked-message").textContent(), "Open Accounts to unlock your saved accounts.");
     assert.equal(await page.evaluate(() => calls.filter(call => call.command === "switch_profile").length), 0);
     assert.equal(await page.locator(".tray-account.active .account-name").textContent(), "Erica");
     assert.equal(await page.locator(".tray-account.active").getAttribute("aria-current"), "true");
