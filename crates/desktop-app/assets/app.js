@@ -8,7 +8,6 @@ let vaultBusy = false;
 let vaultState = "unopened";
 let vaultExists = null;
 let vaultProtection = null;
-let traySwitchPending = false;
 let loginPending = false;
 let loginCancelling = false;
 let switchPending = false;
@@ -63,6 +62,20 @@ byId("setup-button").addEventListener("click", () => {
   else if (vaultExists !== null) void vaultCommand(vaultExists ? "open_vault" : "create_vault");
 });
 byId("accounts-nav").addEventListener("click", closeSettings);
+
+const closeToTray = byId("close-to-tray");
+async function loadClosePreference() {
+  const invoke = window.__TAURI__?.core?.invoke;
+  if (!invoke) return;
+  try { closeToTray.checked = await invoke("get_close_to_tray"); }
+  catch { closeToTray.checked = true; }
+}
+closeToTray.addEventListener("change", async () => {
+  const selected = closeToTray.checked;
+  try { await window.__TAURI__.core.invoke("set_close_to_tray", {enabled:selected}); }
+  catch { closeToTray.checked = !selected; }
+});
+void loadClosePreference();
 
 const inventoryErrors = Object.freeze({
   E_PLATFORM_UNSUPPORTED: "Installation discovery is not available on this platform.",
@@ -870,7 +883,7 @@ function clearAccountViewForHide() {
 document.addEventListener("visibilitychange", () => {
   pauseUsagePolling();
   if (document.hidden) clearAccountViewForHide();
-  else if (!traySwitchPending) void vaultCommand("list_profiles", {}, true);
+  else void vaultCommand("list_profiles", {}, true);
 });
 window.addEventListener("blur", closePassphraseDialog);
 const eventApi = window.__TAURI__?.event;
@@ -881,28 +894,6 @@ if (eventApi?.listen) {
     const message = "Finish the current account action, then close the window again.";
     byId("vault-message").textContent = message;
     activity.textContent = message;
-  });
-  void eventApi.listen("tray-switch-profile", async ({payload}) => {
-    traySwitchPending = true;
-    try {
-      const invoke = window.__TAURI__?.core?.invoke;
-      if (!invoke) return;
-      const profiles = await invoke("list_profiles");
-      renderProfiles(profiles);
-      const profile = displayedProfiles.find((candidate) => candidate.id === payload);
-      if (!profile || profile.id === activeProfileId || vaultState !== "open") return;
-      confirmAction(
-        `Switch to ${profile.label}?`,
-        "Close Codex before switching accounts.",
-        "Switch",
-        "switch_profile",
-        {profileId: profile.id}
-      );
-    } catch {
-      byId("vault-message").textContent = "Refresh accounts, then try again.";
-    } finally {
-      traySwitchPending = false;
-    }
   });
 }
 setInterval(() => {
