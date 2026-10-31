@@ -39,6 +39,14 @@ mod desktop_selection;
 mod engine;
 mod health;
 pub use health::AccountHealth;
+/// Non-secret result from an explicitly confirmed banked usage reset.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ResetRedemption {
+    pub profile: ProfileId,
+    pub outcome: &'static str,
+    pub windows_reset: u32,
+}
+
 #[cfg_attr(not(all(windows, target_arch = "x86_64")), allow(dead_code))]
 mod login_control;
 pub use login_control::{LoginCancellation, LoginStage};

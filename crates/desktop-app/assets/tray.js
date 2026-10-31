@@ -13,6 +13,8 @@ let page = 0;
 let pageSize = MAX_PAGE_SIZE;
 let viewEpoch = 0;
 let pendingSwitch = null;
+let pendingReset = null;
+const uncertainResets = new Set();
 let pendingVaultOperation = null;
 let emptyMessage = "Open Accounts to unlock your saved accounts.";
 let showUnlock = true;
@@ -109,6 +111,8 @@ function accountRow(profile) {
   meta.append(track);
   detail.append(meta, reset);
   row.append(led, name, value, detail);
+  const actions = document.createElement("div");
+  actions.className = "tray-actions";
   if (!active) {
     const button = document.createElement("button");
     button.type = "button";
@@ -117,8 +121,19 @@ function accountRow(profile) {
     button.disabled = loading;
     button.setAttribute("aria-label", `Switch to ${profile.label}`);
     button.addEventListener("click", () => requestSwitch(profile, button));
-    row.append(button);
+    actions.append(button);
   }
+  if (Number.isSafeInteger(health?.available_resets) && health.available_resets > 0 && !uncertainResets.has(profile.id)) {
+    const redeem = document.createElement("button");
+    redeem.type = "button";
+    redeem.className = "reset-button";
+    redeem.textContent = "Use reset";
+    redeem.disabled = loading;
+    redeem.setAttribute("aria-label", `Use banked reset for ${profile.label}`);
+    redeem.addEventListener("click", () => requestReset(profile));
+    actions.append(redeem);
+  }
+  if (actions.childElementCount) row.append(actions);
   return row;
 }
 
@@ -154,7 +169,9 @@ function resetFlyout() {
   page = 0;
   pageSize = MAX_PAGE_SIZE;
   pendingSwitch = null;
+  pendingReset = null;
   if (byId("trust-warning").open) byId("trust-warning").close("cancel");
+  if (byId("reset-warning").open) byId("reset-warning").close("cancel");
   usage.clear();
   usageRequested.clear();
   emptyMessage = "Open Accounts to unlock your saved accounts.";
@@ -283,6 +300,47 @@ async function switchTo(profile, button) {
   }
 }
 
+function requestReset(profile) {
+  if (loading || uncertainResets.has(profile.id) || !(usage.get(profile.id)?.available_resets > 0)) return;
+  pendingReset = profile;
+  byId("reset-warning-detail").textContent = `This uses one banked reset for ${profile.label} only if the service reports eligible usage. The action cannot be undone. The installed Codex account will not change.`;
+  byId("reset-warning").showModal();
+}
+
+async function redeemFor(profile) {
+  if (loading || uncertainResets.has(profile.id) || !(usage.get(profile.id)?.available_resets > 0)) return;
+  const epoch = viewEpoch;
+  loading = true;
+  byId("tray-status").textContent = `Redeeming one reset for ${profile.label}`;
+  render();
+  try {
+    const result = await invokeVault("redeem_reset", { profileId: profile.id });
+    if (epoch !== viewEpoch) return;
+    usage.delete(profile.id);
+    usageRequested.delete(profile.id);
+    const outcome = result.redemption?.outcome;
+    byId("tray-status").textContent = outcome === "reset" ? "Reset redeemed"
+      : outcome === "already_redeemed" ? "Reset previously redeemed"
+        : outcome === "nothing_to_reset" ? "No eligible usage window"
+          : outcome === "no_credit" ? "No remaining banked resets"
+            : "Reset outcome unavailable";
+    await refreshVisibleUsage(epoch, true);
+  } catch (error) {
+    if (epoch !== viewEpoch) return;
+    if (error === "E_RESET_OUTCOME_UNKNOWN") uncertainResets.add(profile.id);
+    byId("tray-status").textContent = error === "E_RESET_OUTCOME_UNKNOWN"
+      ? "Outcome uncertain; check Codex usage before retrying"
+      : error === "E_RESET_NO_CREDIT" ? "No banked reset available"
+        : error === "E_RESET_EXPIRED" ? "Sign in again to redeem"
+          : "Unable to redeem reset";
+  } finally {
+    if (epoch === viewEpoch) {
+      loading = false;
+      render();
+    }
+  }
+}
+
 function openMain() {
   if (loading) return;
   resetFlyout();
@@ -302,8 +360,13 @@ byId("trust-warning").addEventListener("close", () => {
     pendingSwitch = null;
   }
 });
+byId("reset-warning").addEventListener("close", () => {
+  const selected = pendingReset;
+  pendingReset = null;
+  if (byId("reset-warning").returnValue === "confirm" && selected) void redeemFor(selected);
+});
 document.addEventListener("keydown", event => {
-  if (event.key === "Escape" && !byId("trust-warning").open) {
+  if (event.key === "Escape" && !byId("trust-warning").open && !byId("reset-warning").open) {
     resetFlyout();
     void invoke("hide_tray_window");
   }
