@@ -347,7 +347,9 @@ mod desktop {
         state: tauri::State<'_, vault::Worker>,
     ) -> Result<metadata::ProfileList, &'static str> {
         require_account_window(&window)?;
-        let result = state.request(vault::Intent::RedeemReset(profile_id)).await?;
+        let result = state
+            .request(vault::Intent::RedeemReset(profile_id))
+            .await?;
         sync_main_from_tray(&window, &app, &result);
         Ok(result)
     }

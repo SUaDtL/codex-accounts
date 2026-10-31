@@ -6,6 +6,32 @@ use codex_accounts_core::CredentialAcceptance;
 use codex_accounts_runtime::{Observed, RateLimitSummary, RateLimitWindow};
 use codex_accounts_vault::{validate_json_object, ResourceId};
 use serde::Deserialize;
+use std::sync::Mutex;
+
+// One native-wide in-process fence for uncertain POST outcomes. The desktop
+// and tray share this guard; a browser refresh cannot clear it. A restart
+// does not make an ambiguous server response safe to retry.
+static UNCERTAIN_REDEMPTIONS: Mutex<Vec<ProfileId>> = Mutex::new(Vec::new());
+
+fn fence_uncertain(profile: ProfileId) -> Result<(), OperationError> {
+    let pending = UNCERTAIN_REDEMPTIONS
+        .lock()
+        .map_err(|_| OperationError("E_RESET_OUTCOME_UNKNOWN"))?;
+    if pending.contains(&profile) {
+        Err(OperationError("E_RESET_OUTCOME_UNKNOWN"))
+    } else {
+        Ok(())
+    }
+}
+
+fn mark_uncertain(profile: ProfileId) {
+    if let Ok(mut pending) = UNCERTAIN_REDEMPTIONS.lock() {
+        if !pending.contains(&profile) {
+            pending.push(profile);
+        }
+    }
+}
+
 
 impl Vault {
     // Bind all outbound requests to the vault's selected profile. An external
@@ -78,9 +104,10 @@ impl Vault {
         &self,
         requested: ProfileId,
     ) -> Result<crate::ResetRedemption, OperationError> {
+        fence_uncertain(requested)?;
         let (token, account_id, profile) = self.usage_credentials_for(Some(requested))?;
-        let details = usage_http::fetch_credits(&token, &account_id)
-            .map_err(|error| match error {
+        let details =
+            usage_http::fetch_credits(&token, &account_id).map_err(|error| match error {
                 "E_USAGE_EXPIRED" => OperationError("E_RESET_EXPIRED"),
                 "E_USAGE_THROTTLED" => OperationError("E_RESET_THROTTLED"),
                 _ => OperationError("E_RESET_UNAVAILABLE"),
@@ -94,13 +121,16 @@ impl Vault {
             "credit_id": credit.id,
         }))
         .map_err(|_| OperationError("E_RESET_UNAVAILABLE"))?;
-        let response = usage_http::consume_credit(&token, &account_id, &body)
-            .map_err(|error| match error {
-                "E_USAGE_EXPIRED" => OperationError("E_RESET_EXPIRED"),
-                _ => OperationError("E_RESET_OUTCOME_UNKNOWN"),
-            })?;
-        let (outcome, windows_reset) = parse_reset_response(&response)
-            .map_err(|_| OperationError("E_RESET_OUTCOME_UNKNOWN"))?;
+        let response = usage_http::consume_credit(&token, &account_id, &body).map_err(|_| {
+            // A failed POST can still have committed remotely. Refuse a second
+            // redemption from either UI surface during this app session.
+            mark_uncertain(profile);
+            OperationError("E_RESET_OUTCOME_UNKNOWN")
+        })?;
+        let (outcome, windows_reset) = parse_reset_response(&response).map_err(|_| {
+            mark_uncertain(profile);
+            OperationError("E_RESET_OUTCOME_UNKNOWN")
+        })?;
         Ok(crate::ResetRedemption {
             profile,
             outcome,
@@ -145,12 +175,14 @@ fn selected_reset_credit(bytes: &[u8]) -> Result<ResetCredit, &'static str> {
                 && credit.id.len() <= 256
                 && credit.id.bytes().all(|byte| byte.is_ascii_graphic())
         })
-        .min_by(|a, b| match (a.expires_at.as_deref(), b.expires_at.as_deref()) {
-            (Some(a), Some(b)) => a.cmp(b),
-            (Some(_), None) => std::cmp::Ordering::Less,
-            (None, Some(_)) => std::cmp::Ordering::Greater,
-            (None, None) => std::cmp::Ordering::Equal,
-        })
+        .min_by(
+            |a, b| match (a.expires_at.as_deref(), b.expires_at.as_deref()) {
+                (Some(a), Some(b)) => a.cmp(b),
+                (Some(_), None) => std::cmp::Ordering::Less,
+                (None, Some(_)) => std::cmp::Ordering::Greater,
+                (None, None) => std::cmp::Ordering::Equal,
+            },
+        )
         .ok_or("E_RESET_UNAVAILABLE")?;
     Ok(credit)
 }
@@ -345,7 +377,13 @@ mod tests {
         assert!(parse_reset_response(br#"{"code":"other"}"#).is_err());
         assert!(parse_reset_response(br#"{"code":"reset","windows_reset":-1}"#).is_err());
         let profile = ProfileId::from_bytes([1; 16]).unwrap();
-        assert_eq!(redemption_key(profile, "credit-a"), redemption_key(profile, "credit-a"));
-        assert_ne!(redemption_key(profile, "credit-a"), redemption_key(profile, "credit-b"));
+        assert_eq!(
+            redemption_key(profile, "credit-a"),
+            redemption_key(profile, "credit-a")
+        );
+        assert_ne!(
+            redemption_key(profile, "credit-a"),
+            redemption_key(profile, "credit-b")
+        );
     }
 }

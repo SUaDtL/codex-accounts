@@ -52,7 +52,11 @@ fn success(value: i32) -> Result<(), &'static str> {
     }
 }
 
-fn headers(access_token: &str, account_id: &str, post: bool) -> Result<Zeroizing<Vec<u16>>, &'static str> {
+fn headers(
+    access_token: &str,
+    account_id: &str,
+    post: bool,
+) -> Result<Zeroizing<Vec<u16>>, &'static str> {
     // Do not permit a captured field to inject headers or an embedded terminator.
     if access_token.is_empty()
         || access_token.len() > 65536
@@ -67,7 +71,11 @@ fn headers(access_token: &str, account_id: &str, post: bool) -> Result<Zeroizing
     {
         return Err(UNAVAILABLE);
     }
-    let content_type = if post { "Content-Type: application/json\r\n" } else { "" };
+    let content_type = if post {
+        "Content-Type: application/json\r\n"
+    } else {
+        ""
+    };
     let text = Zeroizing::new(format!(
         "Authorization: Bearer {access_token}\r\nChatGPT-Account-Id: {account_id}\r\nAccept: application/json\r\n{content_type}"
     ));

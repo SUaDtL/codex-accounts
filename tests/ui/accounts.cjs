@@ -13,7 +13,7 @@ const root=process.cwd(),out=path.join(root,'reports/ui/accounts');fs.mkdirSync(
  await page.screenshot({path:path.join(out,'accounts.png')});
  const work = page.locator('.account-row').filter({hasText:'Work'});
  const personal = page.locator('.account-row').filter({hasText:'Personal'});
- assert(await personal.getByRole('button',{name:'Use banked reset for Personal'}).isDisabled());
+ assert(await personal.locator('button[data-reset-profile="a"]').isDisabled());
  await work.locator('summary').click();
  await work.getByRole('button',{name:'Use banked reset for Work'}).click();
  await page.locator('#action-dialog').waitFor({state:'visible'});
