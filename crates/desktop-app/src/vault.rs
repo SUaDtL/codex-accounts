@@ -420,6 +420,9 @@ fn execute(
                 outcome: result.outcome,
                 windows_reset: result.windows_reset,
             });
+            // The previous observation predates this irreversible remote action.
+            // Do not let the snapshot republish stale quota/reset metadata.
+            *health = None;
         }
         Intent::ExportDiagnostics => {
             diagnostics_exported = Some(
