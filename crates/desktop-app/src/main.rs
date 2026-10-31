@@ -340,6 +340,19 @@ mod desktop {
     }
 
     #[tauri::command]
+    async fn redeem_reset(
+        profile_id: String,
+        window: WebviewWindow,
+        app: AppHandle,
+        state: tauri::State<'_, vault::Worker>,
+    ) -> Result<metadata::ProfileList, &'static str> {
+        require_account_window(&window)?;
+        let result = state.request(vault::Intent::RedeemReset(profile_id)).await?;
+        sync_main_from_tray(&window, &app, &result);
+        Ok(result)
+    }
+
+    #[tauri::command]
     async fn export_sanitized_diagnostics(
         window: WebviewWindow,
         app: AppHandle,
@@ -843,6 +856,7 @@ mod desktop {
                 remove_profile,
                 rename_profile,
                 refresh_usage,
+                redeem_reset,
                 export_sanitized_diagnostics,
                 get_close_to_tray,
                 set_close_to_tray,

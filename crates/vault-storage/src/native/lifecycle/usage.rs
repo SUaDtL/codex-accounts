@@ -8,20 +8,20 @@ use codex_accounts_vault::{validate_json_object, ResourceId};
 use serde::Deserialize;
 
 impl Vault {
-    pub fn refresh_usage(
+    // Bind all outbound requests to the vault's selected profile. An external
+    // Desktop sign-in must not redirect a request for a saved inactive account.
+    // Only the access token is read; neither refresh nor auth file writes occur.
+    fn usage_credentials_for(
         &self,
         requested: Option<ProfileId>,
-    ) -> Result<AccountHealth, OperationError> {
+    ) -> Result<(zeroize::Zeroizing<String>, String, ProfileId), OperationError> {
         self.storage.ensure_operation_idle()?;
         runtime_context::check_environment()?;
         let live = (|| {
-            // Sharing permits Desktop's refresh/atomic replacement. All handles
-            // are dropped before HTTP; no locks are held across network waits.
             let home = runtime_context::selected_home()?;
             let target = Target::open_file_backend(&home)?;
             let bytes = target.read_usage_auth()?;
-            let credentials = auth_capture::usage_credentials(&bytes)?;
-            Ok::<_, OperationError>(credentials)
+            auth_capture::usage_credentials(&bytes).map_err(OperationError::from)
         })();
         let use_live = match (&live, requested) {
             (Ok((_, identity)), Some(profile)) => self
@@ -34,9 +34,6 @@ impl Vault {
         let (token, identity) = if use_live {
             live?
         } else {
-            // An outside sign-in may have changed Desktop's current identity.
-            // A requested saved profile remains observable without overwriting
-            // live credentials or attributing another account's usage to it.
             drop(live);
             let profile = requested.ok_or(OperationError("E_USAGE_UNAVAILABLE"))?;
             let saved = self.storage.read_latest(&self.root, profile)?;
@@ -54,18 +51,145 @@ impl Vault {
         if requested.is_some_and(|expected| expected != profile) {
             return Err(OperationError("E_EXTERNAL_CHANGE"));
         }
-        let account_id = identity.components().2;
-        let bytes = usage_http::fetch(&token, account_id).map_err(OperationError)?;
-        let (quotas, available_resets) = parse_usage(&bytes, account_id).map_err(OperationError)?;
+        Ok((token, identity.components().2.to_owned(), profile))
+    }
+
+    pub fn refresh_usage(
+        &self,
+        requested: Option<ProfileId>,
+    ) -> Result<AccountHealth, OperationError> {
+        let (token, account_id, profile) = self.usage_credentials_for(requested)?;
+        let bytes = usage_http::fetch(&token, &account_id).map_err(OperationError)?;
+        let (quotas, available_resets) =
+            parse_usage(&bytes, &account_id).map_err(OperationError)?;
         Ok(AccountHealth {
             profile,
-            // A usage response is not an official-runtime credential check.
             acceptance: CredentialAcceptance::Unknown,
             quotas: Some(quotas),
             available_resets,
             checked_at: crate::records::now()?,
         })
     }
+
+    /// Explicit, account-bound, single-credit redemption. This intentionally
+    /// leaves the installed Codex home and the encrypted vault unchanged.
+    /// Never retry an uncertain POST automatically.
+    pub fn redeem_rate_limit_reset(
+        &self,
+        requested: ProfileId,
+    ) -> Result<crate::ResetRedemption, OperationError> {
+        let (token, account_id, profile) = self.usage_credentials_for(Some(requested))?;
+        let details = usage_http::fetch_credits(&token, &account_id)
+            .map_err(|error| match error {
+                "E_USAGE_EXPIRED" => OperationError("E_RESET_EXPIRED"),
+                "E_USAGE_THROTTLED" => OperationError("E_RESET_THROTTLED"),
+                _ => OperationError("E_RESET_UNAVAILABLE"),
+            })?;
+        let credit = selected_reset_credit(&details).map_err(OperationError)?;
+        // A stable per-profile/per-credit key makes a retry of the very same
+        // earned reset idempotent across application restarts.
+        let key = redemption_key(profile, &credit.id);
+        let body = serde_json::to_vec(&serde_json::json!({
+            "redeem_request_id": key,
+            "credit_id": credit.id,
+        }))
+        .map_err(|_| OperationError("E_RESET_UNAVAILABLE"))?;
+        let response = usage_http::consume_credit(&token, &account_id, &body)
+            .map_err(|error| match error {
+                "E_USAGE_EXPIRED" => OperationError("E_RESET_EXPIRED"),
+                _ => OperationError("E_RESET_OUTCOME_UNKNOWN"),
+            })?;
+        let (outcome, windows_reset) = parse_reset_response(&response)
+            .map_err(|_| OperationError("E_RESET_OUTCOME_UNKNOWN"))?;
+        Ok(crate::ResetRedemption {
+            profile,
+            outcome,
+            windows_reset,
+        })
+    }
+}
+
+#[derive(Deserialize)]
+struct CreditDetails {
+    available_count: i64,
+    credits: Vec<ResetCredit>,
+}
+
+#[derive(Deserialize)]
+struct ResetCredit {
+    id: String,
+    reset_type: String,
+    status: String,
+    expires_at: Option<String>,
+}
+
+fn selected_reset_credit(bytes: &[u8]) -> Result<ResetCredit, &'static str> {
+    validate_json_object(bytes).map_err(|_| "E_RESET_UNAVAILABLE")?;
+    let details: CreditDetails =
+        serde_json::from_slice(bytes).map_err(|_| "E_RESET_UNAVAILABLE")?;
+    if details.available_count <= 0 {
+        return Err("E_RESET_NO_CREDIT");
+    }
+    if details.available_count > u32::MAX as i64 || details.credits.len() > 128 {
+        return Err("E_RESET_UNAVAILABLE");
+    }
+    // The backend can cap the detailed rows. Never consume an unspecified
+    // credit if we cannot identify a supported available one.
+    let credit = details
+        .credits
+        .into_iter()
+        .filter(|credit| {
+            credit.status == "available"
+                && credit.reset_type == "codex_rate_limits"
+                && !credit.id.is_empty()
+                && credit.id.len() <= 256
+                && credit.id.bytes().all(|byte| byte.is_ascii_graphic())
+        })
+        .min_by(|a, b| match (a.expires_at.as_deref(), b.expires_at.as_deref()) {
+            (Some(a), Some(b)) => a.cmp(b),
+            (Some(_), None) => std::cmp::Ordering::Less,
+            (None, Some(_)) => std::cmp::Ordering::Greater,
+            (None, None) => std::cmp::Ordering::Equal,
+        })
+        .ok_or("E_RESET_UNAVAILABLE")?;
+    Ok(credit)
+}
+
+fn redemption_key(profile: ProfileId, credit_id: &str) -> String {
+    use sha2::{Digest, Sha256};
+    use std::fmt::Write;
+    let mut hash = Sha256::new();
+    hash.update(b"CodexAccounts:rate-limit-reset:v1");
+    hash.update(profile.to_bytes());
+    hash.update(credit_id.as_bytes());
+    let mut key = String::from("ca-");
+    for byte in hash.finalize() {
+        let _ = write!(&mut key, "{byte:02x}");
+    }
+    key
+}
+
+#[derive(Deserialize)]
+struct ResetResponse {
+    code: String,
+    #[serde(default)]
+    windows_reset: i64,
+}
+
+fn parse_reset_response(bytes: &[u8]) -> Result<(&'static str, u32), &'static str> {
+    validate_json_object(bytes).map_err(|_| "E_RESET_OUTCOME_UNKNOWN")?;
+    let response: ResetResponse =
+        serde_json::from_slice(bytes).map_err(|_| "E_RESET_OUTCOME_UNKNOWN")?;
+    let outcome = match response.code.as_str() {
+        "reset" => "reset",
+        "already_redeemed" => "already_redeemed",
+        "nothing_to_reset" => "nothing_to_reset",
+        "no_credit" => "no_credit",
+        _ => return Err("E_RESET_OUTCOME_UNKNOWN"),
+    };
+    let windows_reset =
+        u32::try_from(response.windows_reset).map_err(|_| "E_RESET_OUTCOME_UNKNOWN")?;
+    Ok((outcome, windows_reset))
 }
 
 #[derive(Deserialize)]
@@ -185,5 +309,43 @@ mod tests {
                 expected
             );
         }
+    }
+
+    #[test]
+    fn picks_supported_available_earliest_expiring_credit() {
+        let fixture = br#"{
+            "available_count": 3,
+            "credits": [
+                {"id":"newer","reset_type":"codex_rate_limits","status":"available","expires_at":"2026-12-01T00:00:00Z"},
+                {"id":"used","reset_type":"codex_rate_limits","status":"redeemed","expires_at":null},
+                {"id":"earlier","reset_type":"codex_rate_limits","status":"available","expires_at":"2026-11-01T00:00:00Z"}
+            ]
+        }"#;
+        assert_eq!(selected_reset_credit(fixture).unwrap().id, "earlier");
+        assert_eq!(
+            selected_reset_credit(br#"{"available_count":0,"credits":[]}"#).err(),
+            Some("E_RESET_NO_CREDIT")
+        );
+        assert_eq!(
+            selected_reset_credit(br#"{"available_count":1,"credits":[]}"#).err(),
+            Some("E_RESET_UNAVAILABLE")
+        );
+    }
+
+    #[test]
+    fn reset_result_is_strict_and_idempotency_is_credit_bound() {
+        assert_eq!(
+            parse_reset_response(br#"{"code":"reset","windows_reset":2}"#).unwrap(),
+            ("reset", 2)
+        );
+        assert_eq!(
+            parse_reset_response(br#"{"code":"already_redeemed"}"#).unwrap(),
+            ("already_redeemed", 0)
+        );
+        assert!(parse_reset_response(br#"{"code":"other"}"#).is_err());
+        assert!(parse_reset_response(br#"{"code":"reset","windows_reset":-1}"#).is_err());
+        let profile = ProfileId::from_bytes([1; 16]).unwrap();
+        assert_eq!(redemption_key(profile, "credit-a"), redemption_key(profile, "credit-a"));
+        assert_ne!(redemption_key(profile, "credit-a"), redemption_key(profile, "credit-b"));
     }
 }

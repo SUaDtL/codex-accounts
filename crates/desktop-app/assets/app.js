@@ -18,6 +18,8 @@ let dialogTrigger = null;
 const observedHealth = new Map();
 const usageErrors = new Map();
 const expiredUsage = new Set();
+// Do not offer another credit in this session after an ambiguous POST result.
+const uncertainResets = new Set();
 const refreshedResets = new Map();
 let usageBusy = false;
 let usageRequest = null;
@@ -39,6 +41,13 @@ function updateControls() {
   byId("export-diagnostics").disabled = vaultBusy || !["open", "recovery_required"].includes(vaultState);
   for (const button of document.querySelectorAll("[data-vault-action]")) {
     button.disabled = vaultBusy || (button.dataset.requiresOpen === "true" && vaultState !== "open");
+  }
+  for (const button of document.querySelectorAll("[data-reset-profile]")) {
+    const id = button.dataset.resetProfile;
+    const health = observedHealth.get(id);
+    button.disabled = vaultBusy || vaultState !== "open" || uncertainResets.has(id)
+      || expiredUsage.has(id) || Boolean(usageErrors.get(id))
+      || !Number.isSafeInteger(health?.available_resets) || health.available_resets <= 0;
   }
   byId("accounts-view").setAttribute("aria-busy", String(vaultBusy));
 }
@@ -178,6 +187,14 @@ function renderProfiles(result) {
     const toggle = document.createElement("summary"); toggle.textContent = "⋯"; toggle.setAttribute("aria-label", `Actions for ${profile.label}`);
     const items = document.createElement("div"); items.className = "menu-items";
     const menuAction = (name, callback) => actionButton(name, () => { menu.open = false; callback(); });
+    const redeem = menuAction("Use reset", () => confirmAction(
+      `Use one reset for ${profile.label}?`,
+      "This consumes one banked reset for the selected account if its usage is eligible. It cannot be undone and will not switch the installed Codex account.",
+      "Redeem one reset", "redeem_reset", {profileId: profile.id}
+    ));
+    redeem.dataset.resetProfile = profile.id;
+    redeem.setAttribute("aria-label", `Use banked reset for ${profile.label}`);
+    items.append(redeem);
     items.append(menuAction("Rename", () => confirmAction("Rename account", "Change this account's label in your vault.", "Save label", "rename_profile", {profileId: profile.id}, true, profile.label)));
     items.append(menuAction("Sign in again", () => void vaultCommand("reauthenticate_profile", {profileId: profile.id})));
     items.append(menuAction("Remove account", () => confirmAction(`Remove ${profile.label}?`, "Remove the saved copy from your vault. Active accounts and accounts needed for recovery cannot be removed.", "Remove account", "remove_profile", {profileId: profile.id})));
@@ -274,7 +291,7 @@ function refreshQuotaDisplays() {
   byId("usage-note").textContent = Date.now() < usageBackoffUntil
     ? `Refresh paused for ${shortInterval((usageBackoffUntil - Date.now()) / 1000)}`
     : usageBusy ? "Refreshing usage..." : "Refreshes every minute";
-
+  updateControls();
 }
 
 function pauseUsagePolling() {
@@ -420,6 +437,11 @@ const vaultErrors = Object.freeze({
   E_OBSERVATION_UNAVAILABLE: "The official runtime could not verify the account. Review the recorded result before proceeding.",
   E_VAULT_CORRUPT: "The protected account data could not be authenticated. It has not been replaced.",
   E_CAPTURE_CURRENT_FIRST: "Save your current signed-in account before switching. This keeps your previous account available.",
+  E_RESET_EXPIRED: "The saved account's session has expired. Choose Sign in again before redeeming a reset.",
+  E_RESET_THROTTLED: "The service is temporarily limiting reset checks. Try again later; no redemption request was sent.",
+  E_RESET_NO_CREDIT: "This account has no available banked reset to redeem.",
+  E_RESET_UNAVAILABLE: "Reset details are unavailable or cannot be safely verified. No reset was redeemed.",
+  E_RESET_OUTCOME_UNKNOWN: "The redemption request may have succeeded. Do not attempt another reset yet. Check the account's current usage in Codex before proceeding.",
   E_ALREADY_CURRENT: "This account is already installed. Open Codex and check its account and workspace.",
   E_AUTH_FORMAT_UNSUPPORTED: "The current sign-in format is unsupported. Use an ordinary ChatGPT sign-in through the official Codex app; API-key and agent credentials cannot be saved here.",
   E_STORAGE_UNSAFE: "The account or vault location has unsupported protection or links. It will not be modified.",
@@ -463,8 +485,9 @@ async function vaultCommand(command, args = {}, refreshUsageAfter = false) {
     ? "Keep Codex Accounts open. The fresh sign-in must match the selected account. If that account is currently installed, its sign-in will be repaired; otherwise the fresh session is saved in the vault."
     : "Keep Codex Accounts open. Your current Desktop account stays installed. The new sign-in is saved separately in your protected vault.";
   byId("switch-panel").hidden = !switchPending;
-  const mutating = ["capture_current", "add_account", "reauthenticate_profile", "switch_profile", "recover_switch", "recover_vault", "remove_profile", "rename_profile", "set_vault_passphrase", "remove_vault_passphrase"].includes(command);
+  const mutating = ["capture_current", "add_account", "reauthenticate_profile", "switch_profile", "recover_switch", "recover_vault", "remove_profile", "rename_profile", "set_vault_passphrase", "remove_vault_passphrase", "redeem_reset"].includes(command);
   const message = loginPending ? "Preparing official sign-in. Complete sign-in in your browser when it opens, then wait here while the account is saved."
+    : command === "redeem_reset" ? "Redeeming one banked reset for the selected account..."
     : mutating ? "Applying account changes..." : ({
       open_vault: "Opening vault...", unlock_vault: "Opening vault...", create_vault: "Creating vault...",
       close_vault: "Closing vault...", list_profiles: "Refreshing accounts...",
@@ -490,6 +513,11 @@ async function vaultCommand(command, args = {}, refreshUsageAfter = false) {
     const pending = invoke(command, args);
     if (loginPending || switchPending) setTimeout(() => void updateLoginStatus(currentLogin), 750);
     const result = await pending;
+    if (command === "redeem_reset" && result.redemption?.profile) {
+      observedHealth.delete(result.redemption.profile);
+      usageErrors.delete(result.redemption.profile);
+      expiredUsage.delete(result.redemption.profile);
+    }
     renderProfiles(result);
     if (command === "create_vault" && result.state === "open") {
       byId("vault-message").textContent = "Vault created.";
@@ -508,6 +536,15 @@ async function vaultCommand(command, args = {}, refreshUsageAfter = false) {
           : "Sign-in needs attention. Review the result below.";
     }
     if (command === "remove_profile") byId("vault-message").textContent = "Inactive saved account removed.";
+    if (command === "redeem_reset") {
+      const outcome = result.redemption?.outcome;
+      byId("vault-message").textContent = outcome === "reset"
+        ? "Banked reset redeemed. Updating usage..."
+        : outcome === "already_redeemed" ? "This reset was already redeemed. Updating usage..."
+          : outcome === "nothing_to_reset" ? "No usage window is currently eligible for a reset. No credit was used."
+            : outcome === "no_credit" ? "No banked reset remains available for this account."
+              : "Reset outcome unavailable. Check usage before attempting another.";
+    }
     if (command === "rename_profile") byId("vault-message").textContent = "Account renamed.";
     if (command === "export_sanitized_diagnostics") {
       const exported = result.diagnostics_exported === true;
@@ -522,6 +559,7 @@ async function vaultCommand(command, args = {}, refreshUsageAfter = false) {
     activity.textContent = ["list_profiles", "open_vault", "close_vault"].includes(command) ? "" : byId("vault-message").textContent;
     succeeded = true;
   } catch (error) {
+    if (command === "redeem_reset" && error === "E_RESET_OUTCOME_UNKNOWN") uncertainResets.add(args.profileId);
     if (error === "vault_passphrase_required" || error === "vault_invalid_passphrase") {
       passphraseFollowup = {mode: "unlock", retry: error === "vault_invalid_passphrase"};
     }
@@ -595,7 +633,7 @@ async function vaultCommand(command, args = {}, refreshUsageAfter = false) {
         if (expiredUsage.delete(args.profileId)) observedHealth.delete(args.profileId);
       }
     }
-    scheduleUsagePolling(succeeded && (!previouslyOpen || signInChanged || refreshUsageAfter) ? 0 : 60000);
+    scheduleUsagePolling(succeeded && (!previouslyOpen || signInChanged || refreshUsageAfter || command === "redeem_reset") ? 0 : 60000);
     if (succeeded) {
       const message = activity.textContent;
       setTimeout(() => { if (!vaultBusy && activity.textContent === message) activity.textContent = ""; }, 5000);
