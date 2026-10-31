@@ -32,7 +32,6 @@ fn mark_uncertain(profile: ProfileId) {
     }
 }
 
-
 impl Vault {
     // Bind all outbound requests to the vault's selected profile. An external
     // Desktop sign-in must not redirect a request for a saved inactive account.
