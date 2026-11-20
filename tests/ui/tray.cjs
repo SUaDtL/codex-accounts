@@ -49,11 +49,14 @@ fs.mkdirSync(out, { recursive: true });
           if (command === "refresh_usage") {
             vaultBusy = true;
             const response = { ...fixture, health: { profile: args.profileId, source: "usage", checked_at: now,
-              available_resets: null, primary: { used_percent: args.profileId === "a" ? 18 : 100,
+              available_resets: args.profileId === "b" ? 2 : null, primary: { used_percent: args.profileId === "a" ? 18 : 100,
                 duration_mins: 10080, resets_at: now + (args.profileId === "a" ? 604800 : 518400) }, secondary: null } };
             if (window.holdUsage) return new Promise(resolve => { window.releaseUsage = () => { window.holdUsage = false; vaultBusy = false; resolve(response); }; });
             vaultBusy = false;
             return response;
+          }
+          if (command === "redeem_reset") {
+            return { ...fixture, redemption: { profile: args.profileId, outcome: "reset", windows_reset: 2 } };
           }
           if (command === "switch_profile") {
             const response = { ...fixture, last_known_active_profile: args.profileId };
@@ -91,6 +94,13 @@ fs.mkdirSync(out, { recursive: true });
     assert.equal(await page.evaluate(() => calls.filter(call => call.command === "resize_tray_window").some(call => call.args.rows === 2 && call.args.paged === false)), true);
     assert(await page.evaluate(() => document.documentElement.scrollHeight <= innerHeight && document.documentElement.scrollWidth <= innerWidth));
     await page.screenshot({ path: path.join(out, "tray.png") });
+    await page.getByRole("button", { name: "Use banked reset for Brennon", exact: true }).click();
+    await page.locator("#reset-warning").waitFor({ state: "visible" });
+    assert.equal(await page.evaluate(() => calls.filter(c => c.command === "redeem_reset").length), 0);
+    await page.getByRole("button", { name: "Redeem one reset", exact: true }).click();
+    await page.waitForFunction(() => calls.some(c => c.command === "redeem_reset" && c.args.profileId === "b"));
+    await page.waitForFunction(() => document.querySelector("#account-list").getAttribute("aria-busy") === "false");
+
     await page.evaluate(() => { holdSwitch = true; });
     await page.getByRole("button", { name: "Switch to Brennon", exact: true }).click();
     await page.waitForFunction(() => calls.filter(call => call.command === "switch_profile").length === 1);

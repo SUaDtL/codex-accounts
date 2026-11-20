@@ -63,6 +63,20 @@ the app clears the expired window and checks again instead of assuming a full ba
 A positive available-reset count is shown beside usage when reported by the service.
 Missing values are unknown, not zero.
 
+To use a banked reset in a development build containing this feature, open an
+account's **⋯** menu and choose **Use reset**, or use the action in the unlocked
+tray. Confirm the selected account. The app consumes at most one eligible reset
+and does not change the installed account. No reset occurs automatically.
+
+Before consumption, the native worker verifies individual available credits and
+selects a supported one with the earliest reported expiry. If details are
+unavailable or incompatible, no consumption is attempted. The backend, not the
+usage percentages on screen, determines whether a window is eligible. A timeout
+after the request may mean the credit was consumed. The app will block another
+attempt for that account during the same application session: check the official
+Codex usage before considering another credit. Restarting is not proof that an
+uncertain request failed. The published 1.0.0-rc.1 does not include redemption.
+
 An expired token clears that profile's usage. Use **Sign in again** for an inactive
 account that needs renewal. For the current account, monitoring can pick up credentials
 that Codex itself has renewed. Authentication, offline and service failures do not create

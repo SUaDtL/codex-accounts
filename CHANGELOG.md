@@ -2,6 +2,17 @@
 
 This file records user-visible changes in versioned Codex Accounts releases.
 
+## Unreleased
+
+### Added
+
+- Manual single-credit banked reset redemption in the account menu and
+  unlocked tray, including saved inactive accounts, with explicit confirmation.
+- Account-specific bounded native redemption, deterministic credit-scoped
+  idempotency, and strict handling of missing details and uncertain outcomes.
+- Synthetic protocol parser and UI confirmation tests; Windows/native
+  real-account acceptance remains a separate release gate.
+
 ## [1.0.0-rc.1] - 2026-10-23
 
 ### Added

@@ -1,5 +1,5 @@
-//! A read-only request to the same fixed usage endpoint used by official Codex.
-//! No OAuth exchange, redirects, cookies, file writes or credential maintenance.
+//! Bounded account-specific HTTPS transport for usage and explicitly requested banked resets.
+//! Fixed first-party Codex endpoints only; no OAuth exchange, redirects, cookies or file writes.
 use std::{ffi::c_void, ptr::null, ptr::null_mut, time::Duration, time::Instant};
 use windows_sys::Win32::Networking::WinHttp::*;
 use zeroize::Zeroizing;
@@ -7,6 +7,13 @@ use zeroize::Zeroizing;
 const UNAVAILABLE: &str = "E_USAGE_UNAVAILABLE";
 const MAX_BODY: usize = 1024 * 1024;
 const BUDGET: Duration = Duration::from_secs(20);
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Endpoint {
+    Usage,
+    Credits,
+    Consume,
+}
 
 struct Handle(*mut c_void);
 impl Handle {
@@ -45,7 +52,11 @@ fn success(value: i32) -> Result<(), &'static str> {
     }
 }
 
-fn headers(access_token: &str, account_id: &str) -> Result<Zeroizing<Vec<u16>>, &'static str> {
+fn headers(
+    access_token: &str,
+    account_id: &str,
+    post: bool,
+) -> Result<Zeroizing<Vec<u16>>, &'static str> {
     // Do not permit a captured field to inject headers or an embedded terminator.
     if access_token.is_empty()
         || access_token.len() > 65536
@@ -60,8 +71,13 @@ fn headers(access_token: &str, account_id: &str) -> Result<Zeroizing<Vec<u16>>, 
     {
         return Err(UNAVAILABLE);
     }
+    let content_type = if post {
+        "Content-Type: application/json\r\n"
+    } else {
+        ""
+    };
     let text = Zeroizing::new(format!(
-        "Authorization: Bearer {access_token}\r\nChatGPT-Account-Id: {account_id}\r\nAccept: application/json\r\n"
+        "Authorization: Bearer {access_token}\r\nChatGPT-Account-Id: {account_id}\r\nAccept: application/json\r\n{content_type}"
     ));
     Ok(Zeroizing::new(text.encode_utf16().chain([0]).collect()))
 }
@@ -74,11 +90,16 @@ fn within_budget(started: Instant) -> Result<(), &'static str> {
     }
 }
 
-pub(super) fn fetch(
+fn request(
     access_token: &str,
     account_id: &str,
+    endpoint: Endpoint,
+    body: Option<&[u8]>,
 ) -> Result<Zeroizing<Vec<u8>>, &'static str> {
-    let headers = headers(access_token, account_id)?;
+    if (endpoint == Endpoint::Consume) != body.is_some() || body.is_some_and(|b| b.len() > 4096) {
+        return Err(UNAVAILABLE);
+    }
+    let headers = headers(access_token, account_id, endpoint == Endpoint::Consume)?;
     let started = Instant::now();
     // Default proxy uses Windows' configured static proxy. It performs no PAC
     // discovery; automatic server/proxy authentication is disabled below.
@@ -100,11 +121,25 @@ pub(super) fn fetch(
     // Use OS TLS policy and normal chain/hostname validation, without ignore flags.
     let connection =
         Handle::new(unsafe { WinHttpConnect(session.0, windows_sys::w!("chatgpt.com"), 443, 0) })?;
+    let (verb, path) = match endpoint {
+        Endpoint::Usage => (
+            windows_sys::w!("GET"),
+            windows_sys::w!("/backend-api/wham/usage"),
+        ),
+        Endpoint::Credits => (
+            windows_sys::w!("GET"),
+            windows_sys::w!("/backend-api/wham/rate-limit-reset-credits"),
+        ),
+        Endpoint::Consume => (
+            windows_sys::w!("POST"),
+            windows_sys::w!("/backend-api/wham/rate-limit-reset-credits/consume"),
+        ),
+    };
     let request = Handle::new(unsafe {
         WinHttpOpenRequest(
             connection.0,
-            windows_sys::w!("GET"),
-            windows_sys::w!("/backend-api/wham/usage"),
+            verb,
+            path,
             null(),
             null(),
             null(),
@@ -122,16 +157,22 @@ pub(super) fn fetch(
     request.option(WINHTTP_OPTION_MAX_RESPONSE_HEADER_SIZE, 64 * 1024)?;
     request.option(WINHTTP_OPTION_RECEIVE_RESPONSE_TIMEOUT, 5000)?;
     within_budget(started)?;
-    // SAFETY: bounded terminated headers remain alive for the synchronous call;
-    // an empty GET body, no context or callback. No automatic retry is made here.
+    // The POST body contains only an opaque credit identifier and a stable
+    // idempotency key, never credentials. No automatic retry is made here.
+    let (optional, length) = match body {
+        Some(value) => (value.as_ptr().cast(), value.len() as u32),
+        None => (null(), 0),
+    };
+    // SAFETY: headers and optional body are bounded and retained until the call
+    // returns. Only owned WinHTTP handles participate in this request.
     success(unsafe {
         WinHttpSendRequest(
             request.0,
             headers.as_ptr(),
             (headers.len() - 1) as u32,
-            null(),
-            0,
-            0,
+            optional,
+            length,
+            length,
             0,
         )
     })?;
@@ -186,20 +227,42 @@ pub(super) fn fetch(
     }
 }
 
+pub(super) fn fetch(
+    access_token: &str,
+    account_id: &str,
+) -> Result<Zeroizing<Vec<u8>>, &'static str> {
+    request(access_token, account_id, Endpoint::Usage, None)
+}
+
+pub(super) fn fetch_credits(
+    access_token: &str,
+    account_id: &str,
+) -> Result<Zeroizing<Vec<u8>>, &'static str> {
+    request(access_token, account_id, Endpoint::Credits, None)
+}
+
+pub(super) fn consume_credit(
+    access_token: &str,
+    account_id: &str,
+    body: &[u8],
+) -> Result<Zeroizing<Vec<u8>>, &'static str> {
+    request(access_token, account_id, Endpoint::Consume, Some(body))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
     fn header_fields_cannot_inject_or_overflow() {
-        assert!(headers("synthetic.access.token", "synthetic-account_1").is_ok());
+        assert!(headers("synthetic.access.token", "synthetic-account_1", false).is_ok());
         for token in ["", "a\r\nHost: elsewhere", "a\0b", "a b", "é"] {
-            assert!(headers(token, "synthetic").is_err());
+            assert!(headers(token, "synthetic", false).is_err());
         }
         for id in ["", "synthetic\r\nX: 1", "a:b", "a\0b", "é"] {
-            assert!(headers("synthetic", id).is_err());
+            assert!(headers("synthetic", id, true).is_err());
         }
-        assert!(headers(&"x".repeat(65537), "synthetic").is_err());
-        assert!(headers("synthetic", &"x".repeat(257)).is_err());
+        assert!(headers(&"x".repeat(65537), "synthetic", false).is_err());
+        assert!(headers("synthetic", &"x".repeat(257), true).is_err());
     }
 }

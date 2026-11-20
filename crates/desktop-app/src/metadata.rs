@@ -21,6 +21,7 @@ pub struct ProfileList {
     pub recovery: &'static str,
     pub health: Option<Health>,
     pub reauthentication: Option<Reauthentication>,
+    pub redemption: Option<Redemption>,
     pub diagnostics_exported: Option<bool>,
 }
 
@@ -28,6 +29,13 @@ pub struct ProfileList {
 pub struct Reauthentication {
     pub profile: String,
     pub installation: Option<Operation>,
+}
+
+#[derive(Serialize)]
+pub struct Redemption {
+    pub profile: String,
+    pub outcome: &'static str,
+    pub windows_reset: u32,
 }
 
 #[derive(Clone, Serialize)]
@@ -81,6 +89,7 @@ pub fn unopened_profiles(vault_exists: Option<bool>) -> ProfileList {
         recovery: "none",
         health: None,
         reauthentication: None,
+        redemption: None,
         diagnostics_exported: None,
     }
 }

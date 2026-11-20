@@ -32,6 +32,12 @@ Versioned releases are immutable and keep their corresponding source and verific
 4. Quit Codex clients before saving, signing in, or switching.
 5. Select **Switch** beside the account you want to use.
 
+Development builds also support **Use reset** in the saved account menu and
+unlocked tray. After explicit confirmation, this consumes at most one banked
+reset for that account without switching the installed Codex identity.
+The published 1.0.0-rc.1 predates this capability; see the
+[user guide](docs/user-guide.md) for development-build behavior.
+
 The lit indicator marks the last known active account. Usage refreshes once per minute while the account window is visible. Codex can remain open while usage is monitored. Expired credentials remove live usage values until the account is authenticated again.
 
 Closing the window keeps Codex Accounts in the system tray. Select the tray icon to

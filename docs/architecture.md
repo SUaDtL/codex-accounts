@@ -42,6 +42,19 @@ endpoint with existing credentials. It parses optional windows and available-res
 into non-secret metadata. It does not perform direct OAuth refresh. Observations expire,
 and authentication failure clears visible usage. Polling pauses when the window is hidden
 or the vault is closed. No extra request is made for available resets.
+ 
+## Banked reset redemption
+
+Manual redemption runs through the single native vault worker, but does not
+change the installed Codex sign-in or start an OAuth-refreshing helper. On
+explicit confirmation it reads the selected saved account's detailed credits
+using a fixed authenticated HTTPS GET, selects a supported available credit,
+and sends one bounded POST with a stable per-profile/credit idempotency key.
+Only the non-secret outcome and affected-window count reach the renderer.
+Ambiguous POST outcomes are never retried automatically. Neither the
+desktop nor the tray exposes general HTTP or credential APIs.
+See the [redemption amendment](spec-amendments/banked-reset-redemption-2026-10-31.md).
+
 
 ## Updates and compatibility
 

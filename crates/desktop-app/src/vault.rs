@@ -32,6 +32,7 @@ pub enum Intent {
     Remove(String),
     Rename(String, String),
     RefreshUsage(String),
+    RedeemReset(String),
     ExportDiagnostics,
 }
 
@@ -268,6 +269,7 @@ fn execute(
         return Err("vault_invalid_passphrase");
     }
     let mut reauthentication = None;
+    let mut redemption = None;
     let mut diagnostics_exported = None;
     if !matches!(
         intent,
@@ -407,6 +409,21 @@ fn execute(
                     .and_then(|quotas| quota_window(quotas.secondary)),
             });
         }
+        Intent::RedeemReset(id) => {
+            let result = vault
+                .as_ref()
+                .ok_or("vault_not_open")?
+                .redeem_rate_limit_reset(profile_id(&id)?)
+                .map_err(|error| error.code())?;
+            redemption = Some(metadata::Redemption {
+                profile: hex(result.profile.to_bytes()),
+                outcome: result.outcome,
+                windows_reset: result.windows_reset,
+            });
+            // The previous observation predates this irreversible remote action.
+            // Do not let the snapshot republish stale quota/reset metadata.
+            *health = None;
+        }
         Intent::ExportDiagnostics => {
             diagnostics_exported = Some(
                 vault
@@ -422,6 +439,7 @@ fn execute(
     };
     let mut result = snapshot(vault, health.as_ref()).map_err(error_code)?;
     result.reauthentication = reauthentication;
+    result.redemption = redemption;
     result.diagnostics_exported = diagnostics_exported;
     Ok(result)
 }
@@ -476,6 +494,7 @@ fn snapshot(vault: &Vault, health: Option<&metadata::Health>) -> Result<ProfileL
             recovery: recovery_name,
             health: None,
             reauthentication: None,
+            redemption: None,
             diagnostics_exported: None,
         });
     }
@@ -500,6 +519,7 @@ fn snapshot(vault: &Vault, health: Option<&metadata::Health>) -> Result<ProfileL
         recovery: recovery_name,
         health: health.cloned(),
         reauthentication: None,
+        redemption: None,
         diagnostics_exported: None,
         operations: vault.switch_status()?.into_iter().map(operation).collect(),
         profiles: profiles

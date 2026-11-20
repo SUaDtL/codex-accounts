@@ -75,6 +75,11 @@ h1 { margin:0; font-size:22px; line-height:1; font-weight:650; letter-spacing:-.
 .usage-track { flex:1; height:4px; overflow:hidden; border-radius:999px; background:#2c3732; }
 .usage-fill { display:block; height:100%; border-radius:inherit; background:#59d2aa; }
 .reset-time { color:#91a49a; font-size:10px; white-space:nowrap; }
+.tray-actions { grid-column:3; grid-row:1/4; display:flex; flex-direction:column; gap:5px; align-items:stretch; }
+.tray-actions > button { grid-column:auto; grid-row:auto; min-height:29px; min-width:74px; font-size:11px; }
+.reset-button { border:1px solid #6d806f; border-radius:7px; color:#edf5f0; background:#2a3a31; font-weight:650; cursor:pointer; }
+.reset-button:hover:enabled { background:#34503f; }
+.reset-button:disabled { opacity:.5; cursor:default; }
 .switch-button,.primary {
   grid-column:3;
   grid-row:1/4;

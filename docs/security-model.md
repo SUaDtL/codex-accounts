@@ -31,6 +31,17 @@ key. This protects a copied vault file from offline guessing and still keeps the
 bound to its Windows user. A short interface PIN is only a privacy lock for an open
 application window. It is not encryption and does not defend against same-user malware.
 
+Manual banked reset redemption is a deliberately narrow exception to
+read-only usage monitoring. A native worker obtains only the selected saved
+account's existing access token and directly accesses two fixed first-party
+backend paths for reset details and one explicit consumption. The UI receives
+no tokens, backend credit identifiers or arbitrary request authority. The
+native request carries an account/profile-and-credit-specific deterministic
+idempotency key. Redirects, cookies, automatic HTTP authentication and
+automatic POST retries remain disabled. A lost reply might represent an
+already-consumed reset; the user must verify official usage before another
+attempt. These backend URLs are implementation details, not contractual APIs.
+
 These limits are deliberate. The project does not add cloud sync, an updater, direct
 OAuth refresh, credential export, traffic proxying, forced process termination or an
 exact Codex version allowlist. Each would either expand credential exposure or make the
